@@ -413,6 +413,7 @@ public:
 	// Engine APIs
 	Common::Error init();
 	Common::Error go();
+	void updateIteration();
 	virtual Common::Error run() {
 		Common::Error err;
 		err = init();

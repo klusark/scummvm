@@ -39,9 +39,20 @@
 #include "backends/plugins/sdl/sdl-provider.h"
 #include "base/main.h"
 
+typedef void (*FuncPtr)();
+FuncPtr mainLoopUpdateFunc = 0;
+
+void mainLoop()
+{
+	while(mainLoopUpdateFunc)
+		mainLoopUpdateFunc();
+}
+
 int __stdcall WinMain(HINSTANCE /*hInst*/, HINSTANCE /*hPrevInst*/,  LPSTR /*lpCmdLine*/, int /*iShowCmd*/) {
 	SDL_SetModuleHandle(GetModuleHandle(NULL));
-	return main(__argc, __argv);
+	main(__argc, __argv);
+	mainLoop();
+	return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -59,9 +70,10 @@ int main(int argc, char *argv[]) {
 	// Invoke the actual ScummVM main entry point:
 	int res = scummvm_main(argc, argv);
 
+#if 0 ///\todo
 	// Free OSystem
 	delete (OSystem_Win32 *)g_system;
-
+#endif
 	return res;
 }
 

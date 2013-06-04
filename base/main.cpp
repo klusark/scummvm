@@ -242,6 +242,7 @@ static Common::Error runGame(const EnginePlugin *plugin, OSystem &system, const 
 
 	// Run the engine
 	Common::Error result = engine->run();
+	return result;
 
 	// Inform backend that the engine finished
 	system.engineDone();
@@ -487,6 +488,7 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 #endif
 			// Try to run the game
 			Common::Error result = runGame(plugin, system, specialDebug);
+			return 0;
 
 #ifdef ENABLE_EVENTRECORDER
 			// Flush Event recorder file. The recorder does not get reinitialized for next game
