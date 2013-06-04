@@ -345,6 +345,9 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 	Common::String specialDebug;
 	Common::String command;
 
+	argc = 2;
+	const char * const args[2] = { "", "tentacle-demo" };
+	argv = args;
 	// Verify that the backend has been initialized (i.e. g_system has been set).
 	assert(g_system);
 	OSystem &system = *g_system;
