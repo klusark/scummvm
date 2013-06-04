@@ -39,19 +39,9 @@
 #include "backends/plugins/sdl/sdl-provider.h"
 #include "base/main.h"
 
-typedef void (*FuncPtr)();
-FuncPtr mainLoopUpdateFunc = 0;
-
-void mainLoop()
-{
-	while(mainLoopUpdateFunc)
-		mainLoopUpdateFunc();
-}
-
 int __stdcall WinMain(HINSTANCE /*hInst*/, HINSTANCE /*hPrevInst*/,  LPSTR /*lpCmdLine*/, int /*iShowCmd*/) {
 	SDL_SetModuleHandle(GetModuleHandle(NULL));
 	main(__argc, __argv);
-	mainLoop();
 	return 0;
 }
 
