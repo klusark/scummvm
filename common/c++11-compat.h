@@ -39,6 +39,8 @@
 // Replacement for the override keyword. This allows compilation of code
 // which uses it, but does not feature any semantic.
 //
+#ifndef override
 #define override
+#endif
 
 #endif
