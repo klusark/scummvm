@@ -176,7 +176,7 @@ void Normal1x(const uint8 *srcPtr, uint32 srcPitch, uint8 *dstPtr, uint32 dstPit
 			unsigned short r = (c >> 11) << 3;
 			unsigned short g = ((c >> 5) & 63) << 2;
 			unsigned short b = (c & 31) << 3;
-			unsigned long newcol = 0xFF000000 | (r << 16) | (g << 8) | b;
+			unsigned long newcol = 0xFF000000 | (b << 16) | (g << 8) | r;
 			*(unsigned long *)(dstPtr + y*dstPitch+x*4) = newcol;//src[y*offscreen_16bit->pitch/2+x];
 		}
 }
