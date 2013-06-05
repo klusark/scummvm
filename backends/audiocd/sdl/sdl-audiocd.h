@@ -23,6 +23,8 @@
 #ifndef BACKENDS_AUDIOCD_SDL_H
 #define BACKENDS_AUDIOCD_SDL_H
 
+#ifndef EMSCRIPTEN
+
 #include "backends/audiocd/default/default-audiocd.h"
 
 #include "backends/platform/sdl/sdl-sys.h"
@@ -46,5 +48,7 @@ protected:
 	int _cdTrack, _cdNumLoops, _cdStartFrame, _cdDuration;
 	uint32 _cdEndTime, _cdStopTime;
 };
+
+#endif
 
 #endif

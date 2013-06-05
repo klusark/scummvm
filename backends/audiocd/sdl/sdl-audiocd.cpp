@@ -20,6 +20,8 @@
  *
  */
 
+#ifndef EMSCRIPTEN
+
 #include "common/scummsys.h"
 
 #if defined(SDL_BACKEND)
@@ -134,3 +136,6 @@ void SdlAudioCDManager::updateCD() {
 }
 
 #endif
+
+#endif
+
