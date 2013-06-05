@@ -86,6 +86,7 @@ using Common::File;
 
 typedef void (*FuncPtr)();
 extern FuncPtr mainLoopUpdateFunc;
+extern void emscriptenUpdate(void *);
 
 namespace Scumm {
 
@@ -2026,39 +2027,12 @@ int ScummEngine::getTalkSpeed() {
 namespace
 {
 	int diff = 0;	// Duration of one loop iteration
+	int delta = 1;
 	ScummEngine *e = 0;
 }
 
 void ScummEngine::updateIteration()
 {
-	_debugger->onFrame();
-
-	// Randomize the PRNG by calling it at regular intervals. This ensures
-	// that it will be in a different state each time you run the program.
-	_rnd.getRandomNumber(2);
-
-	// Notify the script about how much time has passed, in ticks (60 ticks per second)
-	if (VAR_TIMER != 0xFF)
-		VAR(VAR_TIMER) = diff * 60 / 1000;
-	if (VAR_TIMER_TOTAL != 0xFF)
-		VAR(VAR_TIMER_TOTAL) += diff * 60 / 1000;
-
-	// Determine how long to wait before the next loop iteration should start
-	int delta = (VAR_TIMER_NEXT != 0xFF) ? VAR(VAR_TIMER_NEXT) : 4;
-	if (delta < 1)	// Ensure we don't get into an endless loop
-		delta = 1;  // by not decreasing sleepers.
-
-	// WORKAROUND: walking speed in the original v0/v1 interpreter
-	// is sometimes slower (e.g. during scrolling) than in ScummVM.
-	// This is important for the door-closing action in the dungeon,
-	// otherwise (delta < 6) a single kid is able to escape.
-	if ((_game.version == 0 && isScriptRunning(132)) ||
-		(_game.version == 1 && isScriptRunning(137)))
-		delta = 6;
-
-	// Wait...
-	waitForTimer(delta * 1000 / 60 - diff);
-
 	// Start the stop watch!
 	diff = _system->getMillis();
 
@@ -2072,6 +2046,34 @@ void ScummEngine::updateIteration()
 	if (shouldQuit()) {
 		// TODO: Maybe perform an autosave on exit?
 	}
+
+	_debugger->onFrame();
+
+	// Randomize the PRNG by calling it at regular intervals. This ensures
+	// that it will be in a different state each time you run the program.
+	_rnd.getRandomNumber(2);
+
+	// Notify the script about how much time has passed, in ticks (60 ticks per second)
+	if (VAR_TIMER != 0xFF)
+		VAR(VAR_TIMER) = diff * 60 / 1000;
+	if (VAR_TIMER_TOTAL != 0xFF)
+		VAR(VAR_TIMER_TOTAL) += diff * 60 / 1000;
+
+	// Determine how long to wait before the next loop iteration should start
+	delta = (VAR_TIMER_NEXT != 0xFF) ? VAR(VAR_TIMER_NEXT) : 4;
+	if (delta < 1)	// Ensure we don't get into an endless loop
+		delta = 1;  // by not decreasing sleepers.
+
+	// WORKAROUND: walking speed in the original v0/v1 interpreter
+	// is sometimes slower (e.g. during scrolling) than in ScummVM.
+	// This is important for the door-closing action in the dungeon,
+	// otherwise (delta < 6) a single kid is able to escape.
+	if ((_game.version == 0 && isScriptRunning(132)) ||
+		(_game.version == 1 && isScriptRunning(137)))
+		delta = 6;
+
+	// Wait...
+	waitForTimer(delta * 1000 / 60 - diff);
 }
 void updateIterationGlobal()
 {
@@ -2100,7 +2102,7 @@ Common::Error ScummEngine::go() {
 
 void ScummEngine::waitForTimer(int msec_delay) {
 	uint32 start_time;
-
+	warning("msec delay: %d", msec_delay);
 	if (_fastMode & 2)
 		msec_delay = 0;
 	else if (_fastMode & 1)
@@ -2118,9 +2120,14 @@ void ScummEngine::waitForTimer(int msec_delay) {
 #endif
 
 		_system->updateScreen();
+#ifdef EMSCRIPTEN
+		emscripten_async_call(emscriptenUpdate, 0, msec_delay);
+		break;
+#else
 		if (_system->getMillis() >= start_time + msec_delay)
 			break;
 		_system->delayMillis(10);
+#endif
 	}
 }
 

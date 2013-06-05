@@ -347,6 +347,11 @@ static void setupKeymapper(OSystem &system) {
 
 typedef void (*FuncPtr)();
 FuncPtr mainLoopUpdateFunc = 0;
+void emscriptenUpdate(void *)
+{
+	if (mainLoopUpdateFunc)
+		mainLoopUpdateFunc();
+}
 
 void mainLoop()
 {
@@ -357,6 +362,7 @@ void mainLoop()
 #else
 	emscripten_set_main_loop(mainLoopUpdateFunc, 0, 0);
 #endif
+		emscriptenUpdate(0);
 }
 
 extern "C" int scummvm_main(int argc, const char * const argv[]) {
