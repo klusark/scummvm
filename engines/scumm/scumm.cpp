@@ -82,6 +82,10 @@
 
 #include "audio/mixer.h"
 
+#ifdef EMSCRIPTEN
+#include "emscripten/emscripten.h"
+#endif
+
 using Common::File;
 
 typedef void (*FuncPtr)();
@@ -2102,7 +2106,7 @@ Common::Error ScummEngine::go() {
 
 void ScummEngine::waitForTimer(int msec_delay) {
 	uint32 start_time;
-	warning("msec delay: %d", msec_delay);
+//	warning("msec delay: %d", msec_delay);
 	if (_fastMode & 2)
 		msec_delay = 0;
 	else if (_fastMode & 1)
@@ -2110,7 +2114,10 @@ void ScummEngine::waitForTimer(int msec_delay) {
 
 	start_time = _system->getMillis();
 
-	while (!shouldQuit()) {
+//#ifndef EMSCRIPTEN
+	while (!shouldQuit())
+//#endif
+{
 		_sound->updateCD(); // Loop CD Audio if needed
 		parseEvents();
 
@@ -2120,14 +2127,19 @@ void ScummEngine::waitForTimer(int msec_delay) {
 #endif
 
 		_system->updateScreen();
-#ifdef EMSCRIPTEN
-		emscripten_async_call(emscriptenUpdate, 0, msec_delay);
-		break;
-#else
+//#ifdef EMSCRIPTEN
+//		msec_delay = 100;
+//		if (msec_delay < 1)
+//			msec_delay = 1;
+//		if (msec_delay > 110)
+//			msec_delay = 110;
+//		emscripten_async_call(emscriptenUpdate, 0, msec_delay);
+//		return;
+//#else
 		if (_system->getMillis() >= start_time + msec_delay)
 			break;
 		_system->delayMillis(10);
-#endif
+//#endif
 	}
 }
 
