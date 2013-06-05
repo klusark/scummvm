@@ -78,6 +78,9 @@ void SdlMixerManager::init() {
 		assert(_mixer);
 		_mixer->setReady(false);
 	} else {
+	        _obtained = fmt;
+	        _obtained.channels = 2;
+
 		debug(1, "Output sample rate: %d Hz", _obtained.freq);
 		if (_obtained.freq != desired.freq)
 			warning("SDL mixer output sample rate: %d differs from desired: %d", _obtained.freq, desired.freq);
