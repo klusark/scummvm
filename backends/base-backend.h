@@ -23,6 +23,10 @@
 #ifndef BACKENDS_BASE_BACKEND_H
 #define BACKENDS_BASE_BACKEND_H
 
+#ifndef USE_RGB_COLOR
+//#define USE_RGB_COLOR
+#endif
+
 #include "common/system.h"
 #include "common/events.h"
 

@@ -28,6 +28,9 @@
 
 int gBitFormat = 565;
 
+extern "C" {
+	uint32 *RGBtoYUV = 0;
+}
 #ifdef USE_HQ_SCALERS
 // RGB-to-YUV lookup table
 extern "C" {
@@ -166,6 +169,20 @@ void DestroyScalers() {
  */
 void Normal1x(const uint8 *srcPtr, uint32 srcPitch, uint8 *dstPtr, uint32 dstPitch,
 							int width, int height) {
+	for(int y = 0; y < height; ++y)
+		for(int x = 0; x < width; ++x)
+		{
+			unsigned short c = *(unsigned short *)(srcPtr + y*srcPitch+x*2);
+			unsigned short r = (c >> 11) << 3;
+			unsigned short g = ((c >> 5) & 63) << 2;
+			unsigned short b = (c & 31) << 3;
+			unsigned long newcol = 0xFF000000 | (r << 16) | (g << 8) | b;
+			*(unsigned long *)(dstPtr + y*dstPitch+x*4) = newcol;//src[y*offscreen_16bit->pitch/2+x];
+		}
+}
+#if 0
+void Normal1x(const uint8 *srcPtr, uint32 srcPitch, uint8 *dstPtr, uint32 dstPitch,
+							int width, int height) {
 	// Spot the case when it can all be done in 1 hit
 	if ((srcPitch == sizeof(uint16) * (uint)width) && (dstPitch == sizeof(uint16) * (uint)width)) {
 		memcpy(dstPtr, srcPtr, sizeof(uint16) * width * height);
@@ -177,7 +194,7 @@ void Normal1x(const uint8 *srcPtr, uint32 srcPitch, uint8 *dstPtr, uint32 dstPit
 		dstPtr += dstPitch;
 	}
 }
-
+#endif
 #ifdef USE_SCALERS
 
 

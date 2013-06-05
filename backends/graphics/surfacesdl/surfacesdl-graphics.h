@@ -72,6 +72,36 @@ public:
 	int kh() const { return _kh; }
 };
 
+typedef struct sSDL_Surface {
+	Uint32 flags;				/**< Read-only */
+	SDL_PixelFormat *format;		/**< Read-only */
+	int w, h;				/**< Read-only */
+	Uint16 pitch;				/**< Read-only */
+	void *pixels;				/**< Read-write */
+	int offset;				/**< Private */
+
+	/** Hardware-specific surface info */
+	struct private_hwdata *hwdata;
+
+	SDL_Color palette[256];
+
+	/** clipping information */
+	SDL_Rect clip_rect;			/**< Read-only */
+	Uint32 unused1;				/**< for binary compatibility */
+
+	/** Allow recursive locks */
+	Uint32 locked;				/**< Private */
+
+	/** info for fast blit mapping to other surfaces */
+	struct SDL_BlitMap *map;		/**< Private */
+
+	/** format version, bumped at every change to invalidate blit maps */
+	unsigned int format_version;		/**< Private */
+
+	/** Reference count -- used when freeing surface */
+	int refcount;				/**< Read-mostly */
+} sSDL_Surface;
+
 /**
  * SDL graphics manager
  */
@@ -167,7 +197,7 @@ protected:
 	SDL_Surface *_hwscreen;
 
 	/** Unseen game screen */
-	SDL_Surface *_screen;
+	sSDL_Surface *_screen;
 #ifdef USE_RGB_COLOR
 	Graphics::PixelFormat _screenFormat;
 	Graphics::PixelFormat _cursorFormat;
@@ -181,7 +211,7 @@ protected:
 #endif
 
 	/** Temporary screen (for scalers) */
-	SDL_Surface *_tmpscreen;
+	sSDL_Surface *_tmpscreen;
 	/** Temporary screen (for scalers) */
 	SDL_Surface *_tmpscreen2;
 

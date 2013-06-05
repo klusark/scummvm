@@ -23,6 +23,8 @@
 #ifndef BACKENDS_GRAPHICS_ABSTRACT_H
 #define BACKENDS_GRAPHICS_ABSTRACT_H
 
+//#define USE_RGB_COLOR
+
 #include "common/system.h"
 #include "common/noncopyable.h"
 #include "common/keyboard.h"

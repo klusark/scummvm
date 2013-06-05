@@ -42,6 +42,60 @@
 #include "graphics/surface.h"
 #include "gui/EventRecorder.h"
 
+sSDL_Surface * sSDL_CreateRGBSurface (Uint32 flags,
+			int width, int height, int depth,
+			Uint32 Rmask, Uint32 Gmask, Uint32 Bmask, Uint32 Amask)
+{
+	/* Allocate the surface */
+	sSDL_Surface *surface = (sSDL_Surface *)malloc(sizeof(sSDL_Surface));
+	surface->flags = SDL_SWSURFACE;
+	surface->format = 0;//SDL_AllocFormat(depth, Rmask, Gmask, Bmask, Amask);
+	surface->w = width;
+	surface->h = height;
+	surface->pitch = depth/8*width;
+	surface->pixels = NULL;
+	surface->offset = 0;
+	surface->hwdata = NULL;
+	surface->locked = 0;
+	surface->map = NULL;
+	surface->unused1 = 0;
+
+	surface->pixels = malloc(surface->h*surface->pitch);
+	memset(surface->pixels, 0, surface->h*surface->pitch);
+
+	/* The surface is ready to go */
+	surface->refcount = 1;
+	return(surface);
+}
+
+int sSDL_SetColors(sSDL_Surface *screen, SDL_Color *colors, int firstcolor, int ncolors)
+{
+	memcpy(screen->palette, colors+firstcolor, sizeof(SDL_Color)*ncolors);
+	return 0;
+}
+
+#define Min(a,b) ((a) < (b) ? (a) : (b))
+
+int sSDL_BlitSurface (sSDL_Surface *src, SDL_Rect *srcrect, sSDL_Surface *dst, SDL_Rect *dstrect)
+{
+	int bWidth = Min(srcrect->w, dstrect->w);
+	int bHeight = Min(srcrect->h, dstrect->h);
+
+	assert(src->pitch == src->w);
+	assert(dst->pitch == 2*dst->w);
+	for(int y = 0; y < bHeight; ++y)
+		for(int x = 0; x < bWidth; ++x)
+		{
+			unsigned char c = ((unsigned char *)src->pixels)[(y+srcrect->y)*src->pitch+x+srcrect->x];
+			SDL_Color &col = src->palette[c];
+			unsigned short real_color = (((col.r) >> 3) << 11) |
+									(((col.g) >> 2) << 5) |
+									(((col.b) >> 3));
+			((unsigned short *)dst->pixels)[(y+dstrect->y)*dst->w+x+dstrect->x] = real_color;
+		}
+	return 0;
+}
+
 static const OSystem::GraphicsMode s_supportedGraphicsModes[] = {
 	{"1x", _s("Normal (no scaling)"), GFX_NORMAL},
 #ifdef USE_SCALERS
@@ -747,7 +801,7 @@ bool SurfaceSdlGraphicsManager::loadGFXMode() {
 	// Avoid having SDL_SRCALPHA set even if we supplied an alpha-channel in the format.
 	SDL_SetAlpha(_screen, 0, 255);
 #else
-	_screen = SDL_CreateRGBSurface(SDL_SWSURFACE, _videoMode.screenWidth, _videoMode.screenHeight, 8, 0, 0, 0, 0);
+	_screen = sSDL_CreateRGBSurface(SDL_SWSURFACE, _videoMode.screenWidth, _videoMode.screenHeight, 8, 0, 0, 0, 0);
 	if (_screen == NULL)
 		error("allocating _screen failed");
 #endif
@@ -756,7 +810,7 @@ bool SurfaceSdlGraphicsManager::loadGFXMode() {
 	// SDL 1.3 palettes default to all white,
 	// Thus set our own default palette to all black.
 	// SDL_SetColors does nothing for non indexed surfaces.
-	SDL_SetColors(_screen, _currentPalette, 0, 256);
+	sSDL_SetColors(_screen, _currentPalette, 0, 256);
 
 	//
 	// Create the surface that contains the scaled graphics in 16 bit mode
@@ -775,11 +829,12 @@ bool SurfaceSdlGraphicsManager::loadGFXMode() {
 	} else
 #endif
 		{
-		_hwscreen = SDL_SetVideoMode(_videoMode.hardwareWidth, _videoMode.hardwareHeight, 16,
+		_hwscreen = SDL_SetVideoMode(_videoMode.hardwareWidth, _videoMode.hardwareHeight, 32,
 			_videoMode.fullscreen ? (SDL_FULLSCREEN|SDL_SWSURFACE) : SDL_SWSURFACE
-			);
+		);
 	}
 
+=======
 #ifdef USE_RGB_COLOR
 	detectSupportedFormats();
 #endif
@@ -801,7 +856,7 @@ bool SurfaceSdlGraphicsManager::loadGFXMode() {
 	//
 
 	// Need some extra bytes around when using 2xSaI
-	_tmpscreen = SDL_CreateRGBSurface(SDL_SWSURFACE, _videoMode.screenWidth + 3, _videoMode.screenHeight + 3,
+	_tmpscreen = sSDL_CreateRGBSurface(SDL_SWSURFACE, _videoMode.screenWidth + 3, _videoMode.screenHeight + 3,
 						16,
 						_hwscreen->format->Rmask,
 						_hwscreen->format->Gmask,
@@ -872,7 +927,7 @@ bool SurfaceSdlGraphicsManager::loadGFXMode() {
 
 void SurfaceSdlGraphicsManager::unloadGFXMode() {
 	if (_screen) {
-		SDL_FreeSurface(_screen);
+//		SDL_FreeSurface(_screen);
 		_screen = NULL;
 	}
 
@@ -882,7 +937,7 @@ void SurfaceSdlGraphicsManager::unloadGFXMode() {
 	}
 
 	if (_tmpscreen) {
-		SDL_FreeSurface(_tmpscreen);
+//		SDL_FreeSurface(_tmpscreen);
 		_tmpscreen = NULL;
 	}
 
@@ -911,7 +966,7 @@ bool SurfaceSdlGraphicsManager::hotswapGFXMode() {
 
 	// Keep around the old _screen & _overlayscreen so we can restore the screen data
 	// after the mode switch.
-	SDL_Surface *old_screen = _screen;
+	sSDL_Surface *old_screen = _screen;
 	_screen = NULL;
 	SDL_Surface *old_overlayscreen = _overlayscreen;
 	_overlayscreen = NULL;
@@ -919,7 +974,7 @@ bool SurfaceSdlGraphicsManager::hotswapGFXMode() {
 	// Release the HW screen surface
 	SDL_FreeSurface(_hwscreen); _hwscreen = NULL;
 
-	SDL_FreeSurface(_tmpscreen); _tmpscreen = NULL;
+	//SDL_FreeSurface(_tmpscreen); _tmpscreen = NULL;
 	SDL_FreeSurface(_tmpscreen2); _tmpscreen2 = NULL;
 
 #ifdef USE_OSD
@@ -938,14 +993,14 @@ bool SurfaceSdlGraphicsManager::hotswapGFXMode() {
 	}
 
 	// reset palette
-	SDL_SetColors(_screen, _currentPalette, 0, 256);
+	sSDL_SetColors(_screen, _currentPalette, 0, 256);
 
 	// Restore old screen content
-	SDL_BlitSurface(old_screen, NULL, _screen, NULL);
+//	SDL_BlitSurface(old_screen, NULL, _screen, NULL);
 	SDL_BlitSurface(old_overlayscreen, NULL, _overlayscreen, NULL);
 
 	// Free the old surfaces
-	SDL_FreeSurface(old_screen);
+//	SDL_FreeSurface(old_screen);
 	SDL_FreeSurface(old_overlayscreen);
 
 	// Update cursor to new scale
@@ -966,7 +1021,7 @@ void SurfaceSdlGraphicsManager::updateScreen() {
 }
 
 void SurfaceSdlGraphicsManager::internUpdateScreen() {
-	SDL_Surface *srcSurf, *origSurf;
+	sSDL_Surface *srcSurf, *origSurf;
 	int height, width;
 	ScalerProc *scalerProc;
 	int scale1;
@@ -995,7 +1050,7 @@ void SurfaceSdlGraphicsManager::internUpdateScreen() {
 	// Check whether the palette was changed in the meantime and update the
 	// screen surface accordingly.
 	if (_screen && _paletteDirtyEnd != 0) {
-		SDL_SetColors(_screen, _currentPalette + _paletteDirtyStart,
+		sSDL_SetColors(_screen, _currentPalette + _paletteDirtyStart,
 			_paletteDirtyStart,
 			_paletteDirtyEnd - _paletteDirtyStart);
 
@@ -1024,13 +1079,14 @@ void SurfaceSdlGraphicsManager::internUpdateScreen() {
 	}
 #endif
 
-	if (!_overlayVisible) {
+//	if (!_overlayVisible) {
 		origSurf = _screen;
 		srcSurf = _tmpscreen;
 		width = _videoMode.screenWidth;
 		height = _videoMode.screenHeight;
 		scalerProc = _scalerProc;
 		scale1 = _videoMode.scaleFactor;
+		/*
 	} else {
 		origSurf = _overlayscreen;
 		srcSurf = _tmpscreen2;
@@ -1039,7 +1095,7 @@ void SurfaceSdlGraphicsManager::internUpdateScreen() {
 		scalerProc = Normal1x;
 
 		scale1 = 1;
-	}
+	}*/
 
 	// Add the area covered by the mouse cursor to the list of dirty rects if
 	// we have to redraw the mouse.
@@ -1067,11 +1123,12 @@ void SurfaceSdlGraphicsManager::internUpdateScreen() {
 			dst.x++;	// Shift rect by one since 2xSai needs to access the data around
 			dst.y++;	// any pixel to scale it, and we want to avoid mem access crashes.
 
-			if (SDL_BlitSurface(origSurf, r, srcSurf, &dst) != 0)
+//			warning("src rect: %d,%d,%d,%d, dst rect: %d,%d,%d,%d\n", r->x, r->y, r->w, r->h, dst.x, dst.y, dst.w, dst.h);
+			if (sSDL_BlitSurface(origSurf, r, srcSurf, &dst) != 0)
 				error("SDL_BlitSurface failed: %s", SDL_GetError());
 		}
 
-		SDL_LockSurface(srcSurf);
+//		SDL_LockSurface(srcSurf);
 		SDL_LockSurface(_hwscreen);
 
 		srcPitch = srcSurf->pitch;
@@ -1099,8 +1156,10 @@ void SurfaceSdlGraphicsManager::internUpdateScreen() {
 					dst_y = real2Aspect(dst_y);
 
 				assert(scalerProc != NULL);
+				//scalerProc((byte *)srcSurf->pixels + (r->x * 2 + 2) + (r->y + 1) * srcPitch, srcPitch,
+				//	(byte *)_hwscreen->pixels + rx1 * 2 + dst_y * dstPitch, dstPitch, r->w, dst_h);
 				scalerProc((byte *)srcSurf->pixels + (r->x * 2 + 2) + (r->y + 1) * srcPitch, srcPitch,
-					(byte *)_hwscreen->pixels + rx1 * 2 + dst_y * dstPitch, dstPitch, r->w, dst_h);
+					(byte *)_hwscreen->pixels + rx1 * 4 + dst_y * dstPitch, dstPitch, r->w, dst_h);
 			}
 
 			r->x = rx1;
@@ -1113,7 +1172,7 @@ void SurfaceSdlGraphicsManager::internUpdateScreen() {
 				r->h = stretch200To240((uint8 *) _hwscreen->pixels, dstPitch, r->w, r->h, r->x, r->y, orig_dst_y * scale1);
 #endif
 		}
-		SDL_UnlockSurface(srcSurf);
+//		SDL_UnlockSurface(srcSurf);
 		SDL_UnlockSurface(_hwscreen);
 
 		// Readjust the dirty rect list in case we are doing a full update.
@@ -1250,7 +1309,7 @@ void SurfaceSdlGraphicsManager::copyRectToScreen(const void *buf, int pitch, int
 	assert(buf);
 
 	if (_screen == NULL) {
-		warning("SurfaceSdlGraphicsManager::copyRectToScreen: _screen == NULL");
+		warning("5SurfaceSdlGraphicsManager::copyRectToScreen: _screen == NULL");
 		return;
 	}
 
@@ -1264,20 +1323,30 @@ void SurfaceSdlGraphicsManager::copyRectToScreen(const void *buf, int pitch, int
 	addDirtyRect(x, y, w, h);
 
 	// Try to lock the screen surface
-	if (SDL_LockSurface(_screen) == -1)
-		error("SDL_LockSurface failed: %s", SDL_GetError());
+//	if (SDL_LockSurface(_screen) == -1)
+//		error("SDL_LockSurface failed: %s", SDL_GetError());
 
 #ifdef USE_RGB_COLOR
 	byte *dst = (byte *)_screen->pixels + y * _screen->pitch + x * _screenFormat.bytesPerPixel;
 	if (_videoMode.screenWidth == w && pitch == _screen->pitch) {
+		unsigned int data = 0;
+		unsigned int *s = (unsigned int *)buf;
+		for(int i = 0; i+4 <= w * _screenFormat.bytesPerPixel; i += 4)
+			data ^= *s++;
+		warning("Data: %x", data);
 		memcpy(dst, buf, h*pitch);
 	} else {
 		const byte *src = (const byte *)buf;
+		unsigned int data = 0;
 		do {
+			unsigned int *s = (unsigned int *)src;
+			for(int i = 0; i+4 <= w * _screenFormat.bytesPerPixel; i += 4)
+				data ^= *s++;
 			memcpy(dst, src, w * _screenFormat.bytesPerPixel);
 			src += pitch;
 			dst += _screen->pitch;
 		} while (--h);
+		warning("Data: %x", data);
 	}
 #else
 	byte *dst = (byte *)_screen->pixels + y * _screen->pitch + x;
@@ -1294,7 +1363,7 @@ void SurfaceSdlGraphicsManager::copyRectToScreen(const void *buf, int pitch, int
 #endif
 
 	// Unlock the screen surface
-	SDL_UnlockSurface(_screen);
+//	SDL_UnlockSurface(_screen);
 }
 
 Graphics::Surface *SurfaceSdlGraphicsManager::lockScreen() {
@@ -1308,8 +1377,8 @@ Graphics::Surface *SurfaceSdlGraphicsManager::lockScreen() {
 	_screenIsLocked = true;
 
 	// Try to lock the screen surface
-	if (SDL_LockSurface(_screen) == -1)
-		error("SDL_LockSurface failed: %s", SDL_GetError());
+//	if (SDL_LockSurface(_screen) == -1)
+//		error("SDL_LockSurface failed: %s", SDL_GetError());
 
 	_framebuffer.init(_screen->w, _screen->h, _screen->pitch, _screen->pixels,
 #ifdef USE_RGB_COLOR
@@ -1330,7 +1399,7 @@ void SurfaceSdlGraphicsManager::unlockScreen() {
 	_screenIsLocked = false;
 
 	// Unlock the screen surface
-	SDL_UnlockSurface(_screen);
+//	SDL_UnlockSurface(_screen);
 
 	// Trigger a full screen update
 	_forceFull = true;
@@ -1594,10 +1663,10 @@ void SurfaceSdlGraphicsManager::clearOverlay() {
 	dst.x = dst.y = 1;
 	src.w = dst.w = _videoMode.screenWidth;
 	src.h = dst.h = _videoMode.screenHeight;
-	if (SDL_BlitSurface(_screen, &src, _tmpscreen, &dst) != 0)
-		error("SDL_BlitSurface failed: %s", SDL_GetError());
+//	if (SDL_BlitSurface(_screen, &src, _tmpscreen, &dst) != 0)
+//		error("SDL_BlitSurface failed: %s", SDL_GetError());
 
-	SDL_LockSurface(_tmpscreen);
+//	SDL_LockSurface(_tmpscreen);
 	SDL_LockSurface(_overlayscreen);
 	_scalerProc((byte *)(_tmpscreen->pixels) + _tmpscreen->pitch + 2, _tmpscreen->pitch,
 	(byte *)_overlayscreen->pixels, _overlayscreen->pitch, _videoMode.screenWidth, _videoMode.screenHeight);
@@ -1607,7 +1676,7 @@ void SurfaceSdlGraphicsManager::clearOverlay() {
 		stretch200To240((uint8 *)_overlayscreen->pixels, _overlayscreen->pitch,
 						_videoMode.overlayWidth, _videoMode.screenHeight * _videoMode.scaleFactor, 0, 0, 0);
 #endif
-	SDL_UnlockSurface(_tmpscreen);
+//	SDL_UnlockSurface(_tmpscreen);
 	SDL_UnlockSurface(_overlayscreen);
 
 	_forceFull = true;
