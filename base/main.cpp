@@ -1,4 +1,4 @@
-/* ScummVM - Graphic Adventure Engine
+/* S cummVM - Graphic Adventure Engine
  *
  * ScummVM is the legal property of its developers, whose names
  * are too numerous to list here. Please refer to the COPYRIGHT
@@ -341,6 +341,10 @@ static void setupKeymapper(OSystem &system) {
 
 }
 
+#ifdef EMSCRIPTEN
+#include "emscripten/emscripten.h"
+#endif
+
 typedef void (*FuncPtr)();
 FuncPtr mainLoopUpdateFunc = 0;
 
@@ -350,6 +354,8 @@ void mainLoop()
 #ifndef EMSCRIPTEN
 	while(mainLoopUpdateFunc)
 		mainLoopUpdateFunc();
+#else
+	emscripten_set_main_loop(mainLoopUpdateFunc, 0, 0);
 #endif
 }
 
@@ -357,9 +363,9 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 	Common::String specialDebug;
 	Common::String command;
 
-//	argc = 2;
+	argc = 3;
 	const char * const args[3] = { "scummvm", "-p/dott", "tentacle" };
-//	argv = args;
+	argv = args;
 	// Verify that the backend has been initialized (i.e. g_system has been set).
 	assert(g_system);
 	OSystem &system = *g_system;
