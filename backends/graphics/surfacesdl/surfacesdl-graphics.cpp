@@ -945,7 +945,9 @@ bool SurfaceSdlGraphicsManager::loadGFXMode() {
 						_hwscreen->format->Amask);
 	if (_osdSurface == NULL)
 		error("allocating _osdSurface failed");
+#ifndef EMSCRIPTEN
 	SDL_SetColorKey(_osdSurface, SDL_RLEACCEL | SDL_SRCCOLORKEY | SDL_SRCALPHA, kOSDColorKey);
+#endif
 #endif
 
 	_eventSource->resetKeyboadEmulation(
@@ -1882,7 +1884,9 @@ void SurfaceSdlGraphicsManager::setMouseCursor(const void *buf, uint w, uint h, 
 
 		if (_mouseOrigSurface == NULL)
 			error("allocating _mouseOrigSurface failed");
+#ifndef EMSCRIPTEN
 		SDL_SetColorKey(_mouseOrigSurface, SDL_RLEACCEL | SDL_SRCCOLORKEY | SDL_SRCALPHA, kMouseColorKey);
+#endif
 	}
 
 	free(_mouseData);
@@ -2020,7 +2024,9 @@ void SurfaceSdlGraphicsManager::blitCursor() {
 		if (_mouseSurface == NULL)
 			error("allocating _mouseSurface failed");
 
+#ifndef EMSCRIPTEN
 		SDL_SetColorKey(_mouseSurface, SDL_RLEACCEL | SDL_SRCCOLORKEY | SDL_SRCALPHA, kMouseColorKey);
+#endif
 	}
 
 	SDL_LockSurface(_mouseSurface);
