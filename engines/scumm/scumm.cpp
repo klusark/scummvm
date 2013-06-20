@@ -2104,6 +2104,36 @@ Common::Error ScummEngine::go() {
 	return Common::kNoError;
 }
 
+uint32 nextUpdateTime = 0;
+
+void emscriptenWaitForUpdate(void *)
+{
+	if (e)
+		e->waitForNextUpdate();
+}
+
+void ScummEngine::waitForNextUpdate() {
+	_sound->updateCD();
+	parseEvents();
+
+#ifndef DISABLE_TOWNS_DUAL_LAYER_MODE
+                if (_townsScreen)
+                        _townsScreen->update();
+#endif
+
+                _system->updateScreen();
+
+	uint32 t = _system->getMillis();
+	if (t >= nextUpdateTime || (t < nextUpdateTime && nextUpdateTime - t > 1000))
+	{
+		emscriptenUpdate(0);
+		return;
+	}
+	else {
+                emscripten_async_call(emscriptenWaitForUpdate, 0, 5);
+	}
+}
+
 void ScummEngine::waitForTimer(int msec_delay) {
 	uint32 start_time;
 //	warning("msec delay: %d", msec_delay);
@@ -2114,9 +2144,9 @@ void ScummEngine::waitForTimer(int msec_delay) {
 
 	start_time = _system->getMillis();
 
-//#ifndef EMSCRIPTEN
+#ifndef EMSCRIPTEN
 	while (!shouldQuit())
-//#endif
+#endif
 {
 		_sound->updateCD(); // Loop CD Audio if needed
 		parseEvents();
@@ -2127,19 +2157,20 @@ void ScummEngine::waitForTimer(int msec_delay) {
 #endif
 
 		_system->updateScreen();
-//#ifdef EMSCRIPTEN
+#ifdef EMSCRIPTEN
 //		msec_delay = 100;
-//		if (msec_delay < 1)
-//			msec_delay = 1;
-//		if (msec_delay > 110)
-//			msec_delay = 110;
-//		emscripten_async_call(emscriptenUpdate, 0, msec_delay);
-//		return;
-//#else
+		if (msec_delay < 1)
+			msec_delay = 1;
+		if (msec_delay > 110)
+			msec_delay = 110;
+		nextUpdateTime = start_time + msec_delay;
+		emscripten_async_call(emscriptenWaitForUpdate, 0, 1);
+		return;
+#else
 		if (_system->getMillis() >= start_time + msec_delay)
 			break;
 		_system->delayMillis(10);
-//#endif
+#endif
 	}
 }
 

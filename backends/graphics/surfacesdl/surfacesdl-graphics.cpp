@@ -75,11 +75,16 @@ int sSDL_SetColors(sSDL_Surface *screen, SDL_Color *colors, int firstcolor, int 
 }
 
 #define Min(a,b) ((a) < (b) ? (a) : (b))
+#define Max(a,b) ((a) > (b) ? (a) : (b))
 
 int sSDL_BlitSurface (sSDL_Surface *src, SDL_Rect *srcrect, sSDL_Surface *dst, SDL_Rect *dstrect)
 {
 	int bWidth = Min(srcrect->w, dstrect->w);
 	int bHeight = Min(srcrect->h, dstrect->h);
+        dstrect->x = Max(0, dstrect->x);
+        dstrect->y = Max(0, dstrect->y);
+        bWidth = Min(bWidth, dst->w - dstrect->x);
+        bHeight = Min(bHeight, dst->h - dstrect->y);
 
 	assert(src->pitch == src->w);
 	assert(dst->pitch == 2*dst->w);
@@ -95,6 +100,37 @@ int sSDL_BlitSurface (sSDL_Surface *src, SDL_Rect *srcrect, sSDL_Surface *dst, S
 		}
 	return 0;
 }
+
+int sSDL_BlitSurface_Alphakey (SDL_Surface *src, SDL_Rect *srcrect, SDL_Surface *dst, SDL_Rect *dstrect)
+{
+	SDL_Rect rs;
+	if (!srcrect)
+	{
+		rs.x = rs.y = 0;
+		rs.w = src->w;
+		rs.h = src->h;
+		srcrect = &rs;
+	}
+
+	int bWidth = Min(srcrect->w, dstrect->w);
+	int bHeight = Min(srcrect->h, dstrect->h);
+	dstrect->x = Max(0, dstrect->x);
+	dstrect->y = Max(0, dstrect->y);
+	bWidth = Min(bWidth, dst->w - dstrect->x);
+	bHeight = Min(bHeight, dst->h - dstrect->y);
+
+	unsigned char *s = (unsigned char *)src->pixels;
+	unsigned char *d = (unsigned char *)dst->pixels;
+	for(int y = 0; y < bHeight; ++y)
+		for(int x = 0; x < bWidth; ++x)
+		{
+			unsigned long c = *(unsigned long *)(s + (y+srcrect->y)*src->w*4+(x+srcrect->x)*4);
+			//if (c != 1/*src->format->colorkey*/)
+				*(unsigned long *)(d + (y+dstrect->y)*dst->w*4+(x+dstrect->x)*4) = 0xFFFF0000 | (unsigned long)c;
+		}
+	return 0;
+}
+
 
 static const OSystem::GraphicsMode s_supportedGraphicsModes[] = {
 	{"1x", _s("Normal (no scaling)"), GFX_NORMAL},
@@ -2104,10 +2140,15 @@ void SurfaceSdlGraphicsManager::drawMouse() {
 
 	// Note that SDL_BlitSurface() and addDirtyRect() will both perform any
 	// clipping necessary
-
+#ifdef EMSCRIPTEN
+//	SDL_LockSurface(_mouseSurface);
+#endif
+	//if (sSDL_BlitSurface_Alphakey(_mouseSurface, NULL, _hwscreen, &dst) != 0)
 	if (SDL_BlitSurface(_mouseSurface, NULL, _hwscreen, &dst) != 0)
 		error("SDL_BlitSurface failed: %s", SDL_GetError());
-
+#ifdef EMSCRIPTEN
+//	SDL_UnlockSurface(_mouseSurface);
+#endif
 	// The screen will be updated using real surface coordinates, i.e.
 	// they will not be scaled or aspect-ratio corrected.
 

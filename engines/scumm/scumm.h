@@ -463,6 +463,7 @@ protected:
 	// Event handling
 public:
 	void parseEvents();	// Used by IMuseDigital::startSound
+	void waitForNextUpdate();
 protected:
 	virtual void parseEvent(Common::Event event);
 

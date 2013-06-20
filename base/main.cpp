@@ -28,6 +28,11 @@
  * of almost all the classes, methods and variables, and how they interact.
  */
 
+#ifdef EMSCRIPTEN
+#include <libc/sys/stat.h>
+#include <unistd.h>
+#endif
+
 // FIXME: Avoid using printf
 #define FORBIDDEN_SYMBOL_EXCEPTION_printf
 
@@ -352,8 +357,19 @@ void emscriptenUpdate(void *)
 	if (mainLoopUpdateFunc)
 		mainLoopUpdateFunc();
 //	warning("Update at %f", (float)emscripten_get_now());
-        emscripten_async_call(emscriptenUpdate, 0, 1);
+//        emscripten_async_call(emscriptenUpdate, 0, 1);
 }
+
+#ifdef EMSCRIPTEN
+bool directoryExists(const char *path)
+{
+	if (access(path, 0) != 0)
+		return false;
+	struct stat status;
+	stat(path, &status);
+	return (status.st_mode & S_IFDIR) != 0;
+}
+#endif
 
 void mainLoop()
 {
@@ -374,7 +390,16 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 	Common::String command;
 
 	argc = 3;
-	const char * const args[3] = { "scummvm", "-p/dott", "tentacle" };
+	const char * args[3] = { "scummvm", "", "" };
+	if (directoryExists("/dott")) { args[1] = "-p/dott"; args[2] = "tentacle"; }
+        if (directoryExists("/monkey")) { args[1] = "-p/monkey"; args[2] = "monkey"; }
+        if (directoryExists("/samnmax")) { args[1] = "-p/samnmax"; args[2] = "samnmax"; }
+        if (directoryExists("/atlantis")) { args[1] = "-p/atlantis"; args[2] = "atlantis"; }
+        if (directoryExists("/indy3")) { args[1] = "-p/indy3"; args[2] = "indy3"; }
+        if (directoryExists("/comi")) { args[1] = "-p/comi"; args[2] = "comi"; }
+	if (directoryExists("/loom")) { args[1] = "-p/loom"; args[2] = "loom"; }
+	if (directoryExists("/maniac")) { args[1] = "-p/maniac"; args[2] = "maniac"; }
+
 	argv = args;
 	// Verify that the backend has been initialized (i.e. g_system has been set).
 	assert(g_system);
