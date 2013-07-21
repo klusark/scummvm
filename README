@@ -17,9 +17,9 @@ Build Instructions
 
 export PATH=$PATH:~/emscripten
 export CXX=~/emscripten/em++
-export LDFLAGS="-O2 --preload-file ~/path/to/monkey1-amiga-demo-en/@/monkey/"
+export LDFLAGS="-O2 -s TOTAL_MEMORY=268435456 --preload-file ~/path/to/monkey1-amiga-demo-en/@/monkey/"
 
-Change the path above to point to where you downloaded the game to. Note that the destination path is important and depends on the ScummVM game you are running.
+Change the path above to point to where you downloaded the game to. Note that the destination path is important and depends on the ScummVM game you are running. The TOTAL_MEMORY statement specifices how much of HEAP space to allocate in the generated emscripten application at startup.
 
 5. Copy /usr/bin/sdl-config to emscripten root directory. (find the location of sdl and sdl-config on your system if it doesn't exist in that place)
 
