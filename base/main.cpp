@@ -31,6 +31,7 @@
 #ifdef EMSCRIPTEN
 #include <libc/sys/stat.h>
 #include <unistd.h>
+#include "emscripten/emscripten.h"
 #endif
 
 // FIXME: Avoid using printf
@@ -346,9 +347,6 @@ static void setupKeymapper(OSystem &system) {
 
 }
 
-#ifdef EMSCRIPTEN
-#include "emscripten/emscripten.h"
-#endif
 
 typedef void (*FuncPtr)();
 FuncPtr mainLoopUpdateFunc = 0;
@@ -379,10 +377,9 @@ void mainLoop()
 		mainLoopUpdateFunc();
 #else
 	//emscripten_set_main_loop(mainLoopUpdateFunc, 20, 0);
-	update(0);
-#endif
 		emscriptenUpdate(0);
 	emscripten_async_call(emscriptenUpdate, 0, 1);
+#endif
 }
 
 extern "C" int scummvm_main(int argc, const char * const argv[]) {
@@ -392,7 +389,7 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 	argc = 3;
 	const char * args[3] = { "scummvm", "", "" };
 	if (directoryExists("/dott")) { args[1] = "-p/dott"; args[2] = "tentacle"; }
-        if (directoryExists("/monkey")) { args[1] = "-p/monkey"; args[2] = "monkey"; }
+        args[1] = "-p/monkey"; args[2] = "monkey"; 
         if (directoryExists("/samnmax")) { args[1] = "-p/samnmax"; args[2] = "samnmax"; }
         if (directoryExists("/atlantis")) { args[1] = "-p/atlantis"; args[2] = "atlantis"; }
         if (directoryExists("/indy3")) { args[1] = "-p/indy3"; args[2] = "indy3"; }

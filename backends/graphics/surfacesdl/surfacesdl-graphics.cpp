@@ -870,7 +870,6 @@ bool SurfaceSdlGraphicsManager::loadGFXMode() {
 		);
 	}
 
-=======
 #ifdef USE_RGB_COLOR
 	detectSupportedFormats();
 #endif

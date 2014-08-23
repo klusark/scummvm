@@ -20,6 +20,10 @@
  *
  */
 
+#ifdef EMSCRIPTEN
+#include "emscripten/emscripten.h"
+#endif
+
 #include "common/config-manager.h"
 #include "common/debug-channels.h"
 #include "common/md5.h"
@@ -82,9 +86,6 @@
 
 #include "audio/mixer.h"
 
-#ifdef EMSCRIPTEN
-#include "emscripten/emscripten.h"
-#endif
 
 using Common::File;
 

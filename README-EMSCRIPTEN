@@ -1,0 +1,45 @@
+Emscripten-ScummVM README
+------------------------------------------------------------------------
+
+This is a fork of the upstream ScummVM repository at https://github.com/scummvm/scummvm 
+focused on building ScummVM as HTML5.
+
+Build Instructions
+------------------
+
+1. Clone emscripten. Check out the branch incoming. The guide assumes emscripten is checked out to ~/emscripten.
+
+2. Clone emscripten-scummvm. Check out the branch emscripten.
+
+3. Download a ScummVM game demo, e.g. one of http://scummvm.org/demos/ and unzip it to the local filesystem.
+
+4. Configure build with the game data.
+
+export PATH=$PATH:~/emscripten
+export CXX=~/emscripten/em++
+export LDFLAGS="-O2 -s TOTAL_MEMORY=268435456 --preload-file ~/path/to/monkey1-amiga-demo-en/@/monkey/"
+
+Change the path above to point to where you downloaded the game to. Note that the destination path is important and depends on the ScummVM game you are running. The TOTAL_MEMORY statement specifices how much of HEAP space to allocate in the generated emscripten application at startup.
+
+5. Copy /usr/bin/sdl-config to emscripten root directory. (find the location of sdl and sdl-config on your system if it doesn't exist in that place)
+
+6. Edit the sdl-config file you copied, and replace the line
+
+prefix=/usr
+
+with the line
+
+prefix=~/emscripten/system
+
+This will configure the build to use the emscripten version of SDL, and not the one installed to the system.
+
+7. Configure the build by invoking in the emscripten-scummvm root directory:
+
+   emconfigure ./configure --with-sdl-prefix=~/emscripten --disable-all-engines --enable-engine-static=scumm --backend=sdl --disable-bink --disable-mt32emu --disable-16bit --disable-scalers --disable-hq-scalers --disable-alsa --disable-vorbis --disable-tremor --disable-mad --disable-flac --disable-zlib --disable-opengl --disable-png --disable-theoradec --disable-faad --disable-fluidsynth --disable-nasm --disable-readline --disable-libunity --disable-sndio --disable-timidity
+   
+8. Run the build by invoking in the emscripten-scummvm root directory:
+
+   emmake make
+
+After the build finishes, two files 'scummvm.html' and 'scummvm.data' should have appeared. They are the two required files that need to be hosted by a web server for the game to run.
+
