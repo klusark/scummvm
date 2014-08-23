@@ -161,9 +161,9 @@ _nasm=auto
 _optimization_level=
 _default_optimization_level=-O2
 # Default commands
-_ranlib=ranlib
+_ranlib=emranlib
 _strip=strip
-_ar="ar cru"
+_ar="emar cru"
 _as="as"
 _windres=windres
 _stagingpath="staging"
