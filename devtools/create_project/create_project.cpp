@@ -31,6 +31,7 @@
 #include "config.h"
 #include "create_project.h"
 
+#include "cmake.h"
 #include "codeblocks.h"
 #include "msvc.h"
 #include "visualstudio.h"
@@ -49,7 +50,7 @@
 #include <cstdlib>
 #include <ctime>
 
-#if (defined(_WIN32) || defined(WIN32)) && !defined(__GNUC__)
+#if (defined(_WIN32) || defined(WIN32))
 #define USE_WIN32_API
 #endif
 
@@ -61,6 +62,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <errno.h>
+
 #endif
 
 namespace {
@@ -87,6 +89,7 @@ void displayHelp(const char *exe);
 
 enum ProjectType {
 	kProjectNone,
+	kProjectCMake,
 	kProjectCodeBlocks,
 	kProjectMSVC,
 	kProjectXcode
@@ -95,7 +98,7 @@ enum ProjectType {
 int main(int argc, char *argv[]) {
 #ifndef USE_WIN32_API
 	// Initialize random number generator for UUID creation
-	std::srand((unsigned int)std::time(0));
+	std::srand((unsigned int) std::time(0));
 #endif
 
 	if (argc < 2) {
@@ -117,7 +120,8 @@ int main(int argc, char *argv[]) {
 	setup.engines = parseEngines(setup.srcDir);
 
 	if (setup.engines.empty()) {
-		std::cout << "WARNING: No engines found in configure file or configure file missing in \"" << setup.srcDir << "\"\n";
+		std::cout << "WARNING: No engines found in configure file or configure file missing in \"" << setup.srcDir <<
+		"\"\n";
 		return 0;
 	}
 
@@ -132,15 +136,24 @@ int main(int argc, char *argv[]) {
 	for (int i = 2; i < argc; ++i) {
 		if (!std::strcmp(argv[i], "--list-engines")) {
 			cout << " The following enables are available in the " PROJECT_DESCRIPTION " source distribution\n"
-			        " located at \"" << srcDir << "\":\n";
+					" located at \"" << srcDir << "\":\n";
 
 			cout << "   state  |       name      |     description\n\n";
 			cout.setf(std::ios_base::left, std::ios_base::adjustfield);
 			for (EngineDescList::const_iterator j = setup.engines.begin(); j != setup.engines.end(); ++j)
-				cout << ' ' << (j->enable ? " enabled" : "disabled") << " | " << std::setw((std::streamsize)15) << j->name << std::setw((std::streamsize)0) << " | " << j->desc << "\n";
+				cout << ' ' << (j->enable ? " enabled" : "disabled") << " | " << std::setw((std::streamsize) 15) <<
+				j->name << std::setw((std::streamsize) 0) << " | " << j->desc << "\n";
 			cout.setf(std::ios_base::right, std::ios_base::adjustfield);
 
 			return 0;
+
+		} else if (!std::strcmp(argv[i], "--cmake")) {
+			if (projectType != kProjectNone) {
+				std::cerr << "ERROR: You cannot pass more than one project type!\n";
+				return -1;
+			}
+
+			projectType = kProjectCMake;
 
 		} else if (!std::strcmp(argv[i], "--codeblocks")) {
 			if (projectType != kProjectNone) {
@@ -262,7 +275,7 @@ int main(int argc, char *argv[]) {
 		} else if (!std::strcmp(argv[i], "--build-events")) {
 			setup.runBuildEvents = true;
 		} else if (!std::strcmp(argv[i], "--installer")) {
-			setup.runBuildEvents  = true;
+			setup.runBuildEvents = true;
 			setup.createInstaller = true;
 		} else if (!std::strcmp(argv[i], "--tools")) {
 			setup.devTools = true;
@@ -316,7 +329,8 @@ int main(int argc, char *argv[]) {
 		if (i->enable && !strcmp(i->name, "keymapper"))
 			keymapperEnabled = true;
 		if (i->enable && !strcmp(i->name, "eventrecorder") && keymapperEnabled) {
-			std::cerr << "ERROR: The keymapper and the event recorder cannot be enabled simultaneously currently, please disable one of the two\n";
+			std::cerr <<
+			"ERROR: The keymapper and the event recorder cannot be enabled simultaneously currently, please disable one of the two\n";
 			return -1;
 		}
 	}
@@ -336,11 +350,13 @@ int main(int argc, char *argv[]) {
 	setup.defines.splice(setup.defines.begin(), featureDefines);
 
 	// Windows only has support for the SDL backend, so we hardcode it here (along with winmm)
-	if (projectType != kProjectXcode) {
-		setup.defines.push_back("WIN32");
-	} else {
-		setup.defines.push_back("POSIX");
-		setup.defines.push_back("MACOSX"); // This will break iOS, but allows OS X to catch up on browser_osx.
+	if (projectType != kProjectCMake) {
+		if (projectType != kProjectXcode) {
+			setup.defines.push_back("WIN32");
+		} else {
+			setup.defines.push_back("POSIX");
+			setup.defines.push_back("MACOSX"); // This will break iOS, but allows OS X to catch up on browser_osx.
+		}
 	}
 	setup.defines.push_back("SDL_BACKEND");
 	if (!useSDL2) {
@@ -373,6 +389,60 @@ int main(int argc, char *argv[]) {
 	case kProjectNone:
 		std::cerr << "ERROR: No project type has been specified!\n";
 		return -1;
+
+	case kProjectCMake:
+		if (setup.devTools || setup.tests) {
+			std::cerr << "ERROR: Building tools or tests is not supported for the CMake project type!\n";
+			return -1;
+		}
+
+		////////////////////////////////////////////////////////////////////////////
+		// Code::Blocks is using GCC behind the scenes, so we need to pass a list
+		// of options to enable or disable warnings
+		////////////////////////////////////////////////////////////////////////////
+		//
+		// -Wall
+		//   enable all warnings
+		//
+		// -Wno-long-long -Wno-multichar -Wno-unknown-pragmas -Wno-reorder
+		//   disable annoying and not-so-useful warnings
+		//
+		// -Wpointer-arith -Wcast-qual -Wcast-align
+		// -Wshadow -Wimplicit -Wnon-virtual-dtor -Wwrite-strings
+		//   enable even more warnings...
+		//
+		// -fno-rtti -fno-exceptions -fcheck-new
+		//   disable RTTI and exceptions, and enable checking of pointers returned
+		//   by "new"
+		//
+		////////////////////////////////////////////////////////////////////////////
+
+		globalWarnings.push_back("-Wall");
+		globalWarnings.push_back("-Wno-long-long");
+		globalWarnings.push_back("-Wno-multichar");
+		globalWarnings.push_back("-Wno-unknown-pragmas");
+		globalWarnings.push_back("-Wno-reorder");
+		globalWarnings.push_back("-Wpointer-arith");
+		globalWarnings.push_back("-Wcast-qual");
+		globalWarnings.push_back("-Wcast-align");
+		globalWarnings.push_back("-Wshadow");
+		//globalWarnings.push_back("-Wimplicit");
+		globalWarnings.push_back("-Wnon-virtual-dtor");
+		globalWarnings.push_back("-Wwrite-strings");
+		// The following are not warnings at all... We should consider adding them to
+		// a different list of parameters.
+		//globalWarnings.push_back("-fno-rtti");
+		globalWarnings.push_back("-fno-exceptions");
+		globalWarnings.push_back("-fcheck-new");
+
+		provider = new CreateProjectTool::CMakeProvider(globalWarnings, projectWarnings);
+
+
+		// Those libraries are automatically added by MSVC, but we need to add them manually with mingw
+		setup.libraries.push_back("ole32");
+		setup.libraries.push_back("uuid");
+
+		break;
 
 	case kProjectCodeBlocks:
 		if (setup.devTools || setup.tests) {
@@ -630,6 +700,7 @@ void displayHelp(const char *exe) {
 	        " Additionally there are the following switches for changing various settings:\n"
 	        "\n"
 	        "Project specific settings:\n"
+	        " --cmake                  build CMake project files\n"
 	        " --codeblocks             build Code::Blocks project files\n"
 	        " --msvc                   build Visual Studio project files\n"
 	        " --xcode                  build XCode project files\n"

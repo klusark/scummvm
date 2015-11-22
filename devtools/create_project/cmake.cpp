@@ -39,12 +39,7 @@ void CMakeProvider::createWorkspace(const BuildSetup &setup) {
 
 	workspace << "cmake_minimum_required(VERSION 3.2)\n"
 			"project(" << setup.projectDescription << ")\n\n"
-			"Include(FindSDL)\n"
-			"Include(FindFreetype)\n"
-			"Include(FindZLIB)\n"
-			"Find_Package(SDL REQUIRED)\n"
-			"Find_Package(Freetype REQUIRED)\n"
-			"Find_Package(ZLIB REQUIRED)\n"
+			"Include(devtools/create_project/cmake/FindLibs.cmake)\n"
 			"include_directories(${" << setup.projectDescription << "_SOURCE_DIR} ${" << setup.projectDescription << "_SOURCE_DIR}/engines\n"
 			"$ENV{"<<LIBS_DEFINE<<"}/include\n"
 			"${SDL_INCLUDE_DIR}\n"
