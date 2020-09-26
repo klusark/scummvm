@@ -1,0 +1,7 @@
+icons/residualvm.svg usr/share/pixmaps
+icons/residualvm.xpm usr/share/pixmaps
+dists/residualvm.desktop usr/share/applications
+dists/engine-data/*.lab usr/share/residualvm
+dists/engine-data/*.m4b usr/share/residualvm
+gui/themes/residualvm.zip usr/share/residualvm
+residualvm usr/games

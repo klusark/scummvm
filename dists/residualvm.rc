@@ -1,0 +1,214 @@
+#include "winresrc.h"
+
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#include "base/internal_plugins.h" // for PLUGIN_ENABLED_STATIC
+#include "base/internal_version.h"
+
+#define FILE 256
+#define IDI_ICON  1001
+#define IDI_COUNT 1002
+#define ID_GDF_XML __GDF_XML
+
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "dists/win32/residualvm.exe.manifest"
+IDI_ICON               ICON    "icons/residualvm.ico"
+IDI_COUNT              ICON    "icons/count.ico"
+
+#if 0 // ResidualVM - not used
+ID_GDF_XML             DATA    "dists/win32/scummvm.gdf.xml"
+
+scummclassic.zip       FILE    "gui/themes/scummclassic.zip"
+scummmodern.zip        FILE    "gui/themes/scummmodern.zip"
+scummremastered.zip    FILE    "gui/themes/scummremastered.zip"
+#endif
+// ResidualVM specific START
+residualvm.zip             FILE    "gui/themes/residualvm.zip"
+
+#ifdef BUILTIN_RESOURCES
+#if PLUGIN_ENABLED_STATIC(GRIM)
+residualvm-grim-patch.lab       FILE    "dists/engine-data/residualvm-grim-patch.lab"
+residualvm-emi-patch.m4b        FILE    "dists/engine-data/residualvm-emi-patch.m4b"
+#endif
+#if PLUGIN_ENABLED_STATIC(MYST3)
+myst3.dat                       FILE    "dists/engine-data/myst3.dat"
+#endif
+// ResidualVM specific END
+
+#ifdef USE_TRANSLATION
+translations.dat       FILE    "gui/themes/translations.dat"
+#endif
+#ifdef USE_SDL_NET
+wwwroot.zip            FILE    "dists/networking/wwwroot.zip"
+#endif
+#ifdef USE_FREETYPE2
+fonts.dat              FILE    "dists/engine-data/fonts.dat"
+#endif
+
+#if PLUGIN_ENABLED_STATIC(ACCESS)
+access.dat             FILE    "dists/engine-data/access.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(CRYO)
+cryo.dat               FILE    "dists/engine-data/cryo.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(CRYOMNI3D)
+cryomni3d.dat          FILE    "dists/engine-data/cryomni3d.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(DRASCULA)
+drascula.dat           FILE    "dists/engine-data/drascula.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(HUGO)
+hugo.dat               FILE    "dists/engine-data/hugo.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(KYRA)
+kyra.dat               FILE    "dists/engine-data/kyra.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(LURE)
+lure.dat               FILE    "dists/engine-data/lure.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(MACVENTURE)
+macventure.dat         FILE    "dists/engine-data/macventure.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(MORTEVIELLE)
+mort.dat               FILE    "dists/engine-data/mort.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(NEVERHOOD)
+neverhood.dat          FILE    "dists/engine-data/neverhood.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(QUEEN)
+queen.tbl              FILE    "dists/engine-data/queen.tbl"
+#endif
+#if PLUGIN_ENABLED_STATIC(SKY)
+sky.cpt                FILE    "dists/engine-data/sky.cpt"
+#endif
+#if PLUGIN_ENABLED_STATIC(SUPERNOVA)
+supernova.dat          FILE    "dists/engine-data/supernova.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(TEENAGENT)
+teenagent.dat          FILE    "dists/engine-data/teenagent.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(TITANIC)
+titanic.dat            FILE    "dists/engine-data/titanic.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(TONY)
+tony.dat               FILE    "dists/engine-data/tony.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(TOON)
+toon.dat               FILE    "dists/engine-data/toon.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(ULTIMA)
+ultima.dat             FILE    "dists/engine-data/ultima.dat"
+#endif
+#if PLUGIN_ENABLED_STATIC(WINTERMUTE)
+wintermute.zip         FILE    "dists/engine-data/wintermute.zip"
+#endif
+#if PLUGIN_ENABLED_STATIC(XEEN)
+xeen.ccs               FILE    "dists/engine-data/xeen.ccs"
+#endif
+#if PLUGIN_ENABLED_STATIC(AGI)
+pred.dic               FILE    "dists/pred.dic"
+#endif
+
+// ResidualVM specific START
+#ifdef USE_OPENGL_SHADERS
+#if PLUGIN_ENABLED_STATIC(GRIM)
+shaders/dim.fragment             FILE    "engines/grim/shaders/dim.fragment"
+shaders/dim.vertex               FILE    "engines/grim/shaders/dim.vertex"
+shaders/emerg.fragment           FILE    "engines/grim/shaders/emerg.fragment"
+shaders/emerg.vertex             FILE    "engines/grim/shaders/emerg.vertex"
+shaders/emi_actor.fragment       FILE    "engines/grim/shaders/emi_actor.fragment"
+shaders/emi_actor.vertex         FILE    "engines/grim/shaders/emi_actor.vertex"
+shaders/emi_background.fragment  FILE    "engines/grim/shaders/emi_background.fragment"
+shaders/emi_background.vertex    FILE    "engines/grim/shaders/emi_background.vertex"
+shaders/emi_dimplane.fragment    FILE    "engines/grim/shaders/emi_dimplane.fragment"
+shaders/emi_dimplane.vertex      FILE    "engines/grim/shaders/emi_dimplane.vertex"
+shaders/grim_actor.fragment      FILE    "engines/grim/shaders/grim_actor.fragment"
+shaders/grim_actor.vertex        FILE    "engines/grim/shaders/grim_actor.vertex"
+shaders/grim_background.fragment FILE    "engines/grim/shaders/grim_background.fragment"
+shaders/grim_background.vertex   FILE    "engines/grim/shaders/grim_background.vertex"
+shaders/grim_primitive.fragment  FILE    "engines/grim/shaders/grim_primitive.fragment"
+shaders/grim_primitive.vertex    FILE    "engines/grim/shaders/grim_primitive.vertex"
+shaders/shadowplane.fragment     FILE    "engines/grim/shaders/shadowplane.fragment"
+shaders/shadowplane.vertex       FILE    "engines/grim/shaders/shadowplane.vertex"
+shaders/smush.fragment           FILE    "engines/grim/shaders/smush.fragment"
+shaders/smush.vertex             FILE    "engines/grim/shaders/smush.vertex"
+shaders/text.fragment            FILE    "engines/grim/shaders/text.fragment"
+shaders/text.vertex              FILE    "engines/grim/shaders/text.vertex"
+#endif
+#if PLUGIN_ENABLED_STATIC(MYST3)
+shaders/myst3_box.fragment       FILE    "engines/myst3/shaders/myst3_box.fragment"
+shaders/myst3_box.vertex         FILE    "engines/myst3/shaders/myst3_box.vertex"
+shaders/myst3_cube.fragment      FILE    "engines/myst3/shaders/myst3_cube.fragment"
+shaders/myst3_cube.vertex        FILE    "engines/myst3/shaders/myst3_cube.vertex"
+shaders/myst3_text.fragment      FILE    "engines/myst3/shaders/myst3_text.fragment"
+shaders/myst3_text.vertex        FILE    "engines/myst3/shaders/myst3_text.vertex"
+#endif
+#if PLUGIN_ENABLED_STATIC(STARK)
+shaders/stark_actor.fragment     FILE    "engines/stark/shaders/stark_actor.fragment"
+shaders/stark_actor.vertex       FILE    "engines/stark/shaders/stark_actor.vertex"
+shaders/stark_prop.fragment      FILE    "engines/stark/shaders/stark_prop.fragment"
+shaders/stark_prop.vertex        FILE    "engines/stark/shaders/stark_prop.vertex"
+shaders/stark_surface.fragment   FILE    "engines/stark/shaders/stark_surface.fragment"
+shaders/stark_surface.vertex     FILE    "engines/stark/shaders/stark_surface.vertex"
+shaders/stark_fade.fragment      FILE    "engines/stark/shaders/stark_fade.fragment"
+shaders/stark_fade.vertex        FILE    "engines/stark/shaders/stark_fade.vertex"
+shaders/stark_shadow.fragment    FILE    "engines/stark/shaders/stark_shadow.fragment"
+shaders/stark_shadow.vertex      FILE    "engines/stark/shaders/stark_shadow.vertex"
+#endif
+#if PLUGIN_ENABLED_STATIC(WINTERMUTE)
+shaders/fade.fragment            FILE    "engines/wintermute/base/gfx/opengl/fade.fragment"
+shaders/fade.vertex              FILE    "engines/wintermute/base/gfx/opengl/fade.vertex"
+shaders/geometry.fragment        FILE    "engines/wintermute/base/gfx/opengl/geometry.fragment"
+shaders/geometry.vertex          FILE    "engines/wintermute/base/gfx/opengl/geometry.vertex"
+shaders/line.fragment            FILE    "engines/wintermute/base/gfx/opengl/line.fragment"
+shaders/line.vertex              FILE    "engines/wintermute/base/gfx/opengl/line.vertex"
+shaders/fade.fragment            FILE    "engines/wintermute/base/gfx/opengl/fade.fragment"
+shaders/fade.vertex              FILE    "engines/wintermute/base/gfx/opengl/fade.vertex"
+shaders/modelx.fragment          FILE    "engines/wintermute/base/gfx/opengl/modelx.fragment"
+shaders/modelx.vertex            FILE    "engines/wintermute/base/gfx/opengl/modelx.vertex"
+shaders/shadow_mask.fragment     FILE    "engines/wintermute/base/gfx/opengl/shadow_mask.fragment"
+shaders/shadow_mask.vertex       FILE    "engines/wintermute/base/gfx/opengl/shadow_mask.vertex"
+shaders/shadow_volume.fragment   FILE    "engines/wintermute/base/gfx/opengl/shadow_volume.fragment"
+shaders/shadow_volume.vertex     FILE    "engines/wintermute/base/gfx/opengl/shadow_volume.vertex"
+shaders/sprite.fragment          FILE    "engines/wintermute/base/gfx/opengl/sprite.fragment"
+shaders/sprite.vertex            FILE    "engines/wintermute/base/gfx/opengl/sprite.vertex"
+#endif
+#endif
+// ResidualVM specific END
+#endif
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION     SCUMMVM_VER_MAJOR,SCUMMVM_VER_MINOR,SCUMMVM_VER_PATCH,0
+ PRODUCTVERSION  SCUMMVM_VER_MAJOR,SCUMMVM_VER_MINOR,SCUMMVM_VER_PATCH,0
+ FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+#ifdef _DEBUG
+ FILEFLAGS       VS_FF_DEBUG
+#else
+ FILEFLAGS       0
+#endif
+ FILEOS          VOS_NT_WINDOWS32
+ FILETYPE        VFT_APP
+ FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0" // US English, Unicode
+        BEGIN
+            VALUE "Comments", "\0"
+            VALUE "CompanyName", "residualvm.org\0"
+            VALUE "FileDescription", "ResidualVM: A free 3D game interpreter\0"
+            VALUE "FileVersion", SCUMMVM_VERSION "\0"
+            VALUE "InternalName", "residualvm\0"
+            VALUE "LegalCopyright", "Copyright \xA9 2003-2020 The ResidualVM Team\nCopyright \xA9 2001-2020 The ScummVM Team\0"
+            VALUE "OriginalFilename", "residualvm.exe\0"
+            VALUE "ProductName", "ResidualVM\0"
+            VALUE "ProductVersion", SCUMMVM_VERSION "\0"
+        END
+    END
+
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200 // US English, Unicode
+    END
+END
