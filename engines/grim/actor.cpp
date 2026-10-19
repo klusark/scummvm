@@ -103,7 +103,7 @@ Actor::Actor() :
 		_talkColor(255, 255, 255), _pos(0, 0, 0),
 		_lookingMode(false), _followBoxes(false), _running(false),
 		_pitch(0), _yaw(0), _roll(0), _walkRate(0.3f),
-		_turnRateMultiplier(0.f), _talkAnim(0),
+		_talkAnim(0),
 		_reflectionAngle(80), _scale(1.f), _timeScale(1.f),
 		_visible(true), _lipSync(nullptr), _turning(false), _singleTurning(false), _walking(false),
 		_walkedLast(false), _walkedCur(false),
@@ -155,7 +155,6 @@ void Actor::saveState(SaveGame *savedState) const {
 	savedState->writeFloat(_roll.getDegrees());
 	savedState->writeFloat(_walkRate);
 	savedState->writeFloat(_turnRate);
-	savedState->writeFloat(_turnRateMultiplier);
 	savedState->writeBool(_followBoxes);
 	savedState->writeFloat(_reflectionAngle);
 	savedState->writeBool(_visible);
@@ -309,10 +308,9 @@ bool Actor::restoreState(SaveGame *savedState) {
 	_roll               = savedState->readFloat();
 	_walkRate           = savedState->readFloat();
 	_turnRate           = savedState->readFloat();
-	if (savedState->saveMinorVersion() > 6) {
-		_turnRateMultiplier = savedState->readFloat();
-	} else {
-		_turnRateMultiplier = 1.f;
+	if (savedState->saveMinorVersion() > 6 && savedState->saveMinorVersion() < 30) {
+		// Removed turn rate multiplier
+		savedState->readFloat();
 	}
 	_followBoxes        = savedState->readBool();
 	_reflectionAngle    = savedState->readFloat();
@@ -577,10 +575,10 @@ void Actor::calculateOrientation(const Math::Vector3d &pos, Math::Angle *pitch, 
 	}
 }
 
-void Actor::turnTo(const Math::Vector3d &pos, bool snap) {
+void Actor::turnTo(const Math::Vector3d &pos) {
 	Math::Angle y, p, r;
 	calculateOrientation(pos, &p, &y, &r);
-	turnTo(p, y, r, snap);
+	turnTo(p, y, r);
 }
 
 bool Actor::singleTurnTo(const Math::Vector3d &pos) {
@@ -599,11 +597,10 @@ bool Actor::singleTurnTo(const Math::Vector3d &pos) {
 	return done;
 }
 
-void Actor::turnTo(const Math::Angle &pitchParam, const Math::Angle &yawParam, const Math::Angle &rollParam, bool snap) {
+void Actor::turnTo(const Math::Angle &pitchParam, const Math::Angle &yawParam, const Math::Angle &rollParam) {
 	_movePitch = pitchParam;
 	_moveRoll = rollParam;
 	_moveYaw = yawParam;
-	_turnRateMultiplier = (snap ? 5.f : 1.f);
 	if (_yaw != yawParam || _pitch != pitchParam || _roll != rollParam) {
 		_turning = true;
 	} else
@@ -962,7 +959,7 @@ void Actor::walkForward() {
 		if (g_grim->getGameType() == GType_MONKEY4) {
 			ei.angleWithEdge = -ei.angleWithEdge;
 		}
-		turnTo(0, _moveYaw + ei.angleWithEdge * turnDir, 0, true);
+		turnTo(0, _moveYaw + ei.angleWithEdge * turnDir, 0);
 
 		if (oldDist <= dist + 0.001f) {
 			// If we didn't move at all, keep trying a couple more times
@@ -1139,7 +1136,6 @@ void Actor::turn(int dir) {
 	}
 	_moveYaw = _moveYaw + delta;
 	_turning = true;
-	_turnRateMultiplier = 5.f;
 	_currTurnDir = dir;
 }
 
@@ -1549,7 +1545,7 @@ void Actor::updateWalk() {
 		}
 	}
 
-	turnTo(destPos, true);
+	turnTo(destPos);
 
 	// The EMI original only moves the actor while the body is within 80 degrees
 	// of the walking direction, otherwise it turns on the spot first.
@@ -1592,7 +1588,6 @@ void Actor::update(uint frameTime) {
 		int r = animTurn(turnAmt, _moveRoll, &_roll);
 		if (_currTurnDir == 0 && p == 0 && r == 0) {
 			_turning = false;
-			_turnRateMultiplier = 1.f;
 		}
 	}
 
