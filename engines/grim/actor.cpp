@@ -805,11 +805,12 @@ void Actor::moveTo(const Math::Vector3d &pos) {
 }
 
 void Actor::walkForward() {
-	float dist = g_grim->getPerSecond(_walkRate);
+	float dist = g_grim->getPerSecond(_walkRate) * _timeScale;
 	// Limit the amount of the movement per frame, otherwise with low fps
 	// scripts that use WalkActorForward and proximity may break.
-	if ((dist > 0 && dist > _walkRate / 5.f) || (dist < 0 && dist < _walkRate / 5.f))
-		dist = _walkRate / 5.f;
+	const float maxDist = _walkRate / 5.f * _timeScale;
+	if ((dist > 0 && dist > maxDist) || (dist < 0 && dist < maxDist))
+		dist = maxDist;
 
 	// Handle special case where actor is trying to walk but _walkRate is
 	// currently set to 0.0f by _walkChore to simulate roboter-like walk style:
@@ -1512,7 +1513,7 @@ void Actor::updateWalk() {
 	float dist = dir.getMagnitude();
 
 	_walkedCur = true;
-	float walkAmt = g_grim->getPerSecond(_walkRate);
+	float walkAmt = g_grim->getPerSecond(_walkRate) * _timeScale;
 	if (walkAmt >= dist) {
 		walkAmt = dist;
 		_path.pop_back();
