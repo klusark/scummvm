@@ -1551,6 +1551,15 @@ void Actor::updateWalk() {
 
 	turnTo(destPos, true);
 
+	// The EMI original only moves the actor while the body is within 80 degrees
+	// of the walking direction, otherwise it turns on the spot first.
+	if (g_grim->getGameType() == GType_MONKEY4) {
+		Math::Angle remaining = _moveYaw - _yaw;
+		remaining.normalize(-180);
+		if (fabsf(remaining.getDegrees()) >= 80.f)
+			return;
+	}
+
 	dir = destPos - _pos;
 	dir.normalize();
 	_pos += dir * walkAmt;
