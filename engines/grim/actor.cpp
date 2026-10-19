@@ -589,6 +589,14 @@ void Actor::turnTo(const Math::Angle &pitchParam, const Math::Angle &yawParam, c
 }
 
 void Actor::walkTo(const Math::Vector3d &p) {
+	// The original ignores walk requests while an inventory set is current, so
+	// scripts that wait for a walk do not block until the inventory is closed.
+	const Set *activeSet = g_grim->getCurrSet();
+	if (g_grim->getGameType() == GType_GRIM && activeSet && activeSet->getName().hasSuffix("_inv.set")) {
+		_walking = false;
+		return;
+	}
+
 	if (p == _pos)
 		_walking = false;
 	else {
