@@ -1537,12 +1537,6 @@ void Actor::updateWalk() {
 
 void Actor::update(uint frameTime) {
 	Set *set = g_grim->getCurrSet();
-	// Snap actor to walkboxes if following them.  This might be
-	// necessary for example after activating/deactivating
-	// walkboxes, etc.
-	if (_followBoxes && !_walking) {
-		set->findClosestSector(_pos, nullptr, &_pos);
-	}
 
 	if (g_grim->getGameType() == GType_MONKEY4) {
 		if (_followBoxes) {
