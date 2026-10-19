@@ -1062,7 +1062,7 @@ void Lua_V2::WalkActorVector() {
 
 	// set the new direction or walk forward
 	if (actor2->getYaw() != yaw)
-		actor2->turnTo(0, yaw, 0, true);
+		actor2->turnTo(0, yaw, 0);
 	actor2->walkForward();
 }
 
