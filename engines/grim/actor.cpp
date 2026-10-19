@@ -67,6 +67,28 @@ static int animTurn(float turnAmt, const Math::Angle &dest, Math::Angle *cur) {
 	return 0;
 }
 
+// The original Grim engine turns by the turn rate plus a tenth of the angle
+// that is left, so the turn eases out, and it stops once the actor is within
+// half a degree of the target.
+static int animTurnEased(float turnAmt, const Math::Angle &dest, Math::Angle *cur) {
+	Math::Angle d = dest - *cur;
+	d.normalize(-180);
+	float remaining = fabsf(d.getDegrees());
+	if (remaining < 0.5f)
+		return 0;
+
+	float step = remaining;
+	if (turnAmt > 0.f && turnAmt < remaining)
+		step = (remaining - turnAmt) * 0.1f + turnAmt;
+
+	if (d > 0) {
+		*cur += step;
+		return 1;
+	}
+	*cur -= step;
+	return -1;
+}
+
 bool Actor::_isTalkingBackground = false;
 
 void Actor::saveStaticState(SaveGame *state) {
@@ -1556,8 +1578,8 @@ void Actor::update(uint frameTime) {
 	}
 
 	if (_turning) {
-		float turnAmt = g_grim->getPerSecond(_turnRate) * _turnRateMultiplier * _timeScale;
-		_currTurnDir = animTurn(turnAmt, _moveYaw, &_yaw);
+		float turnAmt = g_grim->getPerSecond(_turnRate) * _timeScale;
+		_currTurnDir = animTurnEased(turnAmt, _moveYaw, &_yaw);
 		if (g_grim->getGameType() == GType_MONKEY4) {
 			_currTurnDir = -_currTurnDir;
 		}
