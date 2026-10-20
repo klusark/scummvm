@@ -204,6 +204,14 @@ public:
 	virtual void setDimLevel(float dimLevel) { _dimLevel = dimLevel; }
 
 	/**
+	 * Sets the gamma applied to everything that is drawn, as the original did
+	 * with its color table. Each color component c becomes c^gamma, so 1 leaves
+	 * the colors unchanged and a lower value gives a brighter picture.
+	 */
+	virtual void setGamma(float gamma) { _gamma = gamma; }
+	float getGamma() const { return _gamma; }
+
+	/**
 	 * Draw a completely opaque Iris around the specified rectangle.
 	 * the arguments specify the distance from the screen-edge to the first
 	 * non-iris pixel.
@@ -293,6 +301,10 @@ protected:
 	Math::Vector3d _currentPos;
 	Math::Matrix4 _currentRot;
 	float _dimLevel;
+	float _gamma;
+
+	/** Fills a table that maps a color component to its value with the gamma applied */
+	static void buildGammaTable(float gamma, byte *table);
 };
 
 // Factory-like functions:
