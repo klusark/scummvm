@@ -206,6 +206,7 @@ public:
 	void destroyEMIModel(EMIModel *model) override;
 
 	void setBlendMode(bool additive) override;
+	void setGamma(float gamma) override;
 
 protected:
 	void setupShaders();
@@ -283,11 +284,6 @@ private:
 	GLuint _blastVBO;
 	int _blastVBOCapacity;
 	GLuint _storedDisplay;
-
-	void applyGamma();
-	void drawGammaPass(float gamma);
-	OpenGL::Shader *_gammaProgram;
-	GLuint _gammaTex;
 };
 
 }
