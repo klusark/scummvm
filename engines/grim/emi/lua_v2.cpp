@@ -246,6 +246,20 @@ void Lua_V2::GetTextCharPosition() {
 	}
 }
 
+void Lua_V2::SetOffscreenTextPos() {
+	// Unlike in Grim the coordinates are normalized, from -1 to 1 with y going up
+	// from the bottom, that is 0, 0 is the center. Anything that is not a number
+	// selects the default, 0 for x and 0.875 for y.
+	lua_Object xObj = lua_getparam(1);
+	lua_Object yObj = lua_getparam(2);
+
+	float x = lua_isnumber(xObj) ? lua_getnumber(xObj) : 0.f;
+	float y = lua_isnumber(yObj) ? lua_getnumber(yObj) : 0.875f;
+
+	g_grim->_offscreenTextX = (int)(320.f * (1.f + x));
+	g_grim->_offscreenTextY = (int)(240.f * (1.f - y));
+}
+
 void Lua_V2::GetTextObjectDimensions() {
 	lua_Object textObj = lua_getparam(1);
 
