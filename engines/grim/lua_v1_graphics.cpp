@@ -501,8 +501,12 @@ void Lua_V1::SetGamma() {
 		return;
 	double level = lua_getnumber(levelObj);
 
-	// FIXME: func(level)
-	warning("Lua_V1::SetGamma, implement opcode, level: %f", level);
+	// The original builds a color table from the gamma for its renderer. The default
+	// of 1 doesn't change any color, the scripts set it on startup, so only complain
+	// when the brightness option has actually been changed.
+	// FIXME: apply the gamma to the output
+	if (level != 1.0)
+		warning("Lua_V1::SetGamma, implement opcode, level: %f", level);
 }
 
 void Lua_V1::Display() {
