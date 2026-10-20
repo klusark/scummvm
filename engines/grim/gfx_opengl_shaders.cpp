@@ -554,6 +554,10 @@ void GfxOpenGLS::applyGamma() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	// The frame is drawn on a multisampled framebuffer, it has to be resolved to
+	// be read.
+	g_system->presentBuffer();
 	glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, _screenWidth, _screenHeight, 0);
 
 	drawGammaPass(_gamma);
@@ -569,7 +573,9 @@ void GfxOpenGLS::drawGammaPass(float gamma) {
 	glDisable(GL_DEPTH_TEST);
 	glDepthMask(GL_FALSE);
 
-	_gammaProgram->use();
+	// The backend uses its own shaders when the frame is presented, so the program
+	// has to be selected again even when it is the last one that was used here.
+	_gammaProgram->use(true);
 	_gammaProgram->setUniform("tex", 0);
 	_gammaProgram->setUniform1f("gamma", gamma);
 
