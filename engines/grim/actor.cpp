@@ -764,11 +764,11 @@ void Actor::walkTo(const Math::Vector3d &p) {
 			}
 
 			if (!pathFound) {
+				// The original does not walk when the destination is unreachable,
+				// scripts rely on that when a sector has been disabled.
 				warning("Actor::walkTo(): No path found for %s", _name.c_str());
-				if (g_grim->getGameType() == GType_MONKEY4) {
-					_walking = false;
-					return;
-				}
+				_walking = false;
+				return;
 			}
 		}
 
