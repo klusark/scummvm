@@ -113,7 +113,12 @@ Registry::Registry() :
 	_sfxVolume.setInt(convertVolumeFromMixer(ConfMan.getInt("sfx_volume")));
 	_voiceVolume.setInt(convertVolumeFromMixer(ConfMan.getInt("speech_volume")));
 	_lastSavedGame.setString(ConfMan.get("last_saved_game"));
-	_gamma.setInt(ConfMan.getInt("gamma"));
+	// The gamma is a fraction, so it is kept as a string. Older versions stored an
+	// integer, and 0 is what is read when it was never set.
+	Common::String gamma = ConfMan.get("gamma");
+	if (gamma.empty() || atof(gamma.c_str()) <= 0.0)
+		gamma = "1";
+	_gamma.setString(gamma);
 	_textSpeed.setInt(convertTalkSpeedFromGUI(ConfMan.getInt("talkspeed")));
 	_speechMode.setInt(convertSpeechModeFromGUI(ConfMan.getBool("subtitles"), ConfMan.getBool("speech_mute")));
 
@@ -302,7 +307,10 @@ void Registry::save() {
 	ConfMan.setInt("sfx_volume", convertVolumeToMixer(_sfxVolume.getInt()));
 	ConfMan.setInt("speech_volume", convertVolumeToMixer(_voiceVolume.getInt()));
 	ConfMan.set("last_saved_game", _lastSavedGame.getString());
-	ConfMan.setInt("gamma", _gamma.getInt());
+	if (_gamma.getType() == Registry::String)
+		ConfMan.set("gamma", _gamma.getString());
+	else
+		ConfMan.setInt("gamma", _gamma.getInt());
 	ConfMan.setInt("talkspeed", convertTalkSpeedToGUI(_textSpeed.getInt()));
 	ConfMan.setBool("subtitles", convertSubtitlesToGUI(_speechMode.getInt()));
 	ConfMan.setBool("speech_mute", convertSpeechMuteToGUI(_speechMode.getInt()));
