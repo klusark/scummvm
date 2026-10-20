@@ -287,6 +287,10 @@ private:
 	GLuint _dimRegionVBO;
 	GLuint _blastVBO;
 	GLuint _storedDisplay;
+
+	void applyGamma();
+	OpenGL::Shader *_gammaProgram;
+	GLuint _gammaTex;
 };
 
 }
