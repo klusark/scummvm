@@ -196,6 +196,12 @@ public:
 
 	TextObjectDefaults _sayLineDefaults, _printLineDefaults, _blastTextDefaults;
 
+	/**
+	 * Where the subtitles of actors that are not on the screen are placed,
+	 * the y coordinate is the bottom of the text. Set by SetOffscreenTextPos.
+	 */
+	int _offscreenTextX, _offscreenTextY;
+
 	void debugLua(const Common::String &str);
 
 protected:

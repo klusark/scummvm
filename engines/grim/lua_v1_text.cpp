@@ -171,8 +171,13 @@ void Lua_V1::BlastText() {
 }
 
 void Lua_V1::SetOffscreenTextPos() {
-	// called with (0,0) on dialog entry, (nil, nil) on dialog exit
-	warning("Lua_V1::SetOffscreenTextPos: implement opcode");
+	// called with (320, 0) on dialog entry, (nil, nil) on dialog exit.
+	// Anything that is not a number selects the default position.
+	lua_Object xObj = lua_getparam(1);
+	lua_Object yObj = lua_getparam(2);
+
+	g_grim->_offscreenTextX = lua_isnumber(xObj) ? (int)lua_getnumber(xObj) : 320;
+	g_grim->_offscreenTextY = lua_isnumber(yObj) ? (int)lua_getnumber(yObj) : 450;
 }
 
 void Lua_V1::TextFileGetLine() {

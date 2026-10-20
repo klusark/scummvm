@@ -161,6 +161,9 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 	_printLineDefaults.setFont(nullptr);
 	_printLineDefaults.setJustify(TextObject::LJUSTIFY);
 
+	_offscreenTextX = 320;
+	_offscreenTextY = 450;
+
 	_sayLineDefaults.setX(0);
 	_sayLineDefaults.setY(100);
 	_sayLineDefaults.setWidth(0);
