@@ -411,6 +411,15 @@ public:
 	 * @see walkTo
 	 */
 	void walkForward();
+	/**
+	 * Turns the movement heading towards the given yaw by at most twice
+	 * the turn rate and moves the actor forward in the same frame, so
+	 * the actor walks on a curve when the direction changes.
+	 *
+	 * @param heading The yaw the actor should walk towards.
+	 * @see walkForward
+	 */
+	void walkTowards(const Math::Angle &heading);
 	void moveTo(const Math::Vector3d &pos);
 	/**
 	 * Used to tell the actor if it is running or not.
