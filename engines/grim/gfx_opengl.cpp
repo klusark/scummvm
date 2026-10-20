@@ -270,9 +270,65 @@ void GfxOpenGL::flipBuffer(bool opportunistic) {
 			// When using an FBO, the older texture will be used
 			return;
 		}
+	} else if (_gamma != 1.0f) {
+		applyGamma();
 	}
 
 	g_system->updateScreen();
+}
+
+void GfxOpenGL::applyGamma() {
+	// There is no gamma in the fixed function pipeline, so the finished frame is
+	// read back, converted and drawn again.
+	byte table[256];
+	buildGammaTable(_gamma, table);
+
+	byte *data = new byte[_screenWidth * _screenHeight * 4];
+	glReadPixels(0, 0, _screenWidth, _screenHeight, GL_RGBA, GL_UNSIGNED_BYTE, data);
+	for (int i = 0; i < _screenWidth * _screenHeight; i++) {
+		data[i * 4 + 0] = table[data[i * 4 + 0]];
+		data[i * 4 + 1] = table[data[i * 4 + 1]];
+		data[i * 4 + 2] = table[data[i * 4 + 2]];
+	}
+
+	const GLboolean blend = glIsEnabled(GL_BLEND);
+	const GLboolean texture = glIsEnabled(GL_TEXTURE_2D);
+	const GLboolean lighting = glIsEnabled(GL_LIGHTING);
+	const GLboolean depthTest = glIsEnabled(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+	glDisable(GL_TEXTURE_2D);
+	glDisable(GL_LIGHTING);
+	glDisable(GL_DEPTH_TEST);
+	glDepthMask(GL_FALSE);
+
+	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();
+	glLoadIdentity();
+	glOrtho(0, _screenWidth, _screenHeight, 0, 0, 1);
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glLoadIdentity();
+
+	glRasterPos2i(0, _screenHeight - 1);
+	glBitmap(0, 0, 0, 0, 0, -1, nullptr);
+	glDrawPixels(_screenWidth, _screenHeight, GL_RGBA, GL_UNSIGNED_BYTE, data);
+
+	glPopMatrix();
+	glMatrixMode(GL_PROJECTION);
+	glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
+
+	glDepthMask(GL_TRUE);
+	if (depthTest)
+		glEnable(GL_DEPTH_TEST);
+	if (lighting)
+		glEnable(GL_LIGHTING);
+	if (texture)
+		glEnable(GL_TEXTURE_2D);
+	if (blend)
+		glEnable(GL_BLEND);
+
+	delete[] data;
 }
 
 bool GfxOpenGL::isHardwareAccelerated() {

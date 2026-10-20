@@ -48,12 +48,18 @@ namespace Grim {
 GfxBase::GfxBase() :
 		type(Graphics::RendererType::kRendererTypeDefault),
 		_renderBitmaps(true), _renderZBitmaps(true), _shadowModeActive(false),
-		_currentPos(0, 0, 0), _dimLevel(0.0f),
+		_currentPos(0, 0, 0), _dimLevel(0.0f), _gamma(1.0f),
 		_screenWidth(0), _screenHeight(0),
 		_scaleW(1.0f), _scaleH(1.0f), _currentShadowArray(nullptr),
 		_shadowColorR(255), _shadowColorG(255), _shadowColorB(255) {
 	for (unsigned int i = 0; i < _numSpecialtyTextures; i++) {
 		_specialtyTextures[i]._isShared = true;
+	}
+}
+
+void GfxBase::buildGammaTable(float gamma, byte *table) {
+	for (int i = 0; i < 256; i++) {
+		table[i] = (byte)(powf(i / 255.f, gamma) * 255.f + 0.5f);
 	}
 }
 
