@@ -22,6 +22,8 @@ void checkZBuffer() {
 		discard;
 }
 
+uniform float gamma;
+
 void main() {
 	if (UBOOL_TEST(hasZBuffer))
 		checkZBuffer();
@@ -32,4 +34,5 @@ void main() {
 
 	if (outColor.a < alphaRef)
 		discard;
+	outColor.rgb = pow(outColor.rgb, vec3(gamma));
 }
