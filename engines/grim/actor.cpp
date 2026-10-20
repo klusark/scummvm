@@ -1196,6 +1196,18 @@ Math::Angle Actor::getYawTo(const Math::Vector3d &p) const {
 		return Math::Angle::arcTangent2(-dpos.x(), dpos.y());
 }
 
+// The subtitles of an actor that is not on the screen are shown at a position the
+// scripts can change, they move it to the top while a dialog is open.
+static void placeOffscreenText(TextObject *textObject) {
+	if (g_grim->getGameType() == GType_GRIM) {
+		textObject->setX(g_grim->_offscreenTextX);
+		textObject->setY(g_grim->_offscreenTextY);
+	} else {
+		textObject->setX(640 / 2);
+		textObject->setY(463);
+	}
+}
+
 void Actor::sayLine(const char *msgId, bool background, float x, float y) {
 	assert(msgId);
 
@@ -1329,8 +1341,7 @@ void Actor::sayLine(const char *msgId, bool background, float x, float y) {
 				_mustPlaceText = true;
 			} else {
 				_mustPlaceText = false;
-				textObject->setX(640 / 2);
-				textObject->setY(463);
+				placeOffscreenText(textObject);
 			}
 		}
 		textObject->setText(msgId, _mustPlaceText);
@@ -1835,8 +1846,7 @@ void Actor::draw() {
 		TextObject *textObject = TextObject::getPool().getObject(_sayLineText);
 		if (textObject) {
 			if (p1.x == 1000 || p2.x == -1000 || p2.x == -1000) {
-				textObject->setX(640 / 2);
-				textObject->setY(463);
+				placeOffscreenText(textObject);
 			} else {
 				textObject->setX((p1.x + p2.x) / 2);
 				textObject->setY(p1.y);
