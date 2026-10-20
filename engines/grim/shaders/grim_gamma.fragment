@@ -1,0 +1,11 @@
+in vec2 Texcoord;
+
+OUTPUT
+
+uniform sampler2D tex;
+uniform float gamma;
+
+void main() {
+	vec4 color = texture(tex, Texcoord);
+	outColor = vec4(pow(color.rgb, vec3(gamma)), 1.0);
+}
