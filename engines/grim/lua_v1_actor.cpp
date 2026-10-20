@@ -65,8 +65,13 @@ void Lua_V1::SetSelectedActor() {
  * actor for movement
  */
 void Lua_V1::GetCameraActor() {
-	// TODO verify what is going on with selected actor
+	// The original returns a hidden camera actor here. WalkActorVector only
+	// needs its orientation, which comes from the current setup instead.
 	Actor *actor = g_grim->getSelectedActor();
+	if (!actor) {
+		lua_pushnil();
+		return;
+	}
 	lua_pushusertag(actor->getId(), MKTAG('A','C','T','R'));
 }
 
