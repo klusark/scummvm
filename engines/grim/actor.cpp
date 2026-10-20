@@ -1806,12 +1806,21 @@ bool Actor::updateTalk(uint frameTime) {
 }
 
 bool Actor::canSee(const Actor *other) const {
-	if (g_grim->getGameType() != GType_GRIM || _setName.empty() || other->_setName != _setName || _costumeStack.empty())
+	if (g_grim->getGameType() != GType_GRIM || _setName.empty() || other->_setName != _setName)
 		return false;
 
-	Costume *costume = _costumeStack.back();
-	int joint = costume->getHeadFirstJoint();
-	if (joint < 0 || !costume->getModelNodes())
+	// The head is set on whichever costume was on top at the time, not
+	// necessarily the one on top now.
+	Costume *costume = nullptr;
+	int joint = -1;
+	for (Costume *c : _costumeStack) {
+		joint = c->getHeadFirstJoint();
+		if (joint >= 0 && c->getModelNodes()) {
+			costume = c;
+			break;
+		}
+	}
+	if (!costume)
 		return false;
 
 	ModelNode *node = costume->getModelNodes() + joint;
