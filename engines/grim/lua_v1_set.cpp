@@ -274,13 +274,11 @@ void Lua_V1::GetCurrentSetup() {
 
 	const char *name = lua_getstring(nameObj);
 
-	// FIXME there are some big difference here !
-	Set *scene = g_grim->loadSet(name);
-	if (!scene) {
-		warning("GetCurrentSetup() Requested scene (%s) is not loaded", name);
-		lua_pushnil();
+	// The original does not load the set, it only reports one that is already loaded
+	Set *scene = g_grim->findSet(name);
+	if (!scene)
 		return;
-	}
+
 	lua_pushnumber(scene->getSetup());
 }
 
