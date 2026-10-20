@@ -261,6 +261,8 @@ void GfxOpenGL::clearDepthBuffer() {
 }
 
 void GfxOpenGL::flipBuffer(bool opportunistic) {
+	byte *original = nullptr;
+
 	if (opportunistic) {
 		GLint fbo = 0;
 		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
@@ -271,26 +273,43 @@ void GfxOpenGL::flipBuffer(bool opportunistic) {
 			return;
 		}
 	} else if (_gamma != 1.0f) {
-		applyGamma();
+		original = applyGamma();
 	}
 
 	g_system->updateScreen();
+
+	if (original) {
+		// The frame is not always drawn again, so the next one would be converted
+		// twice if the converted one was left in the buffer.
+		drawFrame(original);
+		delete[] original;
+	}
 }
 
-void GfxOpenGL::applyGamma() {
+byte *GfxOpenGL::applyGamma() {
 	// There is no gamma in the fixed function pipeline, so the finished frame is
-	// read back, converted and drawn again.
+	// read back, converted and drawn again. The original frame is returned.
 	byte table[256];
 	buildGammaTable(_gamma, table);
 
-	byte *data = new byte[_screenWidth * _screenHeight * 4];
-	glReadPixels(0, 0, _screenWidth, _screenHeight, GL_RGBA, GL_UNSIGNED_BYTE, data);
-	for (int i = 0; i < _screenWidth * _screenHeight; i++) {
-		data[i * 4 + 0] = table[data[i * 4 + 0]];
-		data[i * 4 + 1] = table[data[i * 4 + 1]];
-		data[i * 4 + 2] = table[data[i * 4 + 2]];
-	}
+	const int size = _screenWidth * _screenHeight * 4;
+	byte *original = new byte[size];
+	glReadPixels(0, 0, _screenWidth, _screenHeight, GL_RGBA, GL_UNSIGNED_BYTE, original);
 
+	byte *converted = new byte[size];
+	for (int i = 0; i < size; i += 4) {
+		converted[i + 0] = table[original[i + 0]];
+		converted[i + 1] = table[original[i + 1]];
+		converted[i + 2] = table[original[i + 2]];
+		converted[i + 3] = original[i + 3];
+	}
+	drawFrame(converted);
+	delete[] converted;
+
+	return original;
+}
+
+void GfxOpenGL::drawFrame(const byte *data) {
 	const GLboolean blend = glIsEnabled(GL_BLEND);
 	const GLboolean texture = glIsEnabled(GL_TEXTURE_2D);
 	const GLboolean lighting = glIsEnabled(GL_LIGHTING);
@@ -327,8 +346,6 @@ void GfxOpenGL::applyGamma() {
 		glEnable(GL_TEXTURE_2D);
 	if (blend)
 		glEnable(GL_BLEND);
-
-	delete[] data;
 }
 
 bool GfxOpenGL::isHardwareAccelerated() {
