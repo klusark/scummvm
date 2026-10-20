@@ -149,7 +149,7 @@ void Lua_V1::DrawPolygon() {
 		return;
 	}
 
-	//int layer = 2;
+	int layer = 2;
 	Color color;
 	lua_Object tableObj2 = lua_getparam(2);
 	if (lua_istable(tableObj2)) {
@@ -163,7 +163,7 @@ void Lua_V1::DrawPolygon() {
 		lua_pushstring("layer");
 		lua_Object layerObj = lua_gettable();
 		if (lua_isnumber(layerObj))
-			/*layer = (int)*/lua_getnumber(layerObj);
+			layer = (int)lua_getnumber(layerObj);
 	}
 
 	// This code only supports 4 point polygons because the game doesn't
@@ -201,6 +201,7 @@ void Lua_V1::DrawPolygon() {
 
 	PrimitiveObject *prim = new PrimitiveObject();
 	prim->createPolygon(p[0], p[1], p[2], p[3], color);
+	prim->setLayer(layer);
 	lua_pushusertag(prim->getId(), MKTAG('P','R','I','M'));
 }
 
@@ -230,7 +231,7 @@ void Lua_V1::DrawLine() {
 		p2.y = (int)((1 - lua_getnumber(y2Obj)) * 240);
 	}
 
-	//int layer = 2;
+	int layer = 2;
 	if (lua_istable(tableObj)) {
 		lua_pushobject(tableObj);
 		lua_pushstring("color");
@@ -242,11 +243,12 @@ void Lua_V1::DrawLine() {
 		lua_pushstring("layer");
 		lua_Object layerObj = lua_gettable();
 		if (lua_isnumber(layerObj))
-			/*layer = (int)*/lua_getnumber(layerObj);
+			layer = (int)lua_getnumber(layerObj);
 	}
 
 	PrimitiveObject *p = new PrimitiveObject();
-	p->createLine(p1, p2, color); // TODO Add layer support
+	p->createLine(p1, p2, color);
+	p->setLayer(layer);
 	lua_pushusertag(p->getId(), MKTAG('P','R','I','M'));
 }
 
@@ -274,10 +276,8 @@ void Lua_V1::ChangePrimitive() {
 	lua_pushobject(tableObj);
 	lua_pushstring("layer");
 	lua_Object layer = lua_gettable();
-	if (lua_isnumber(layer)) {
-		// TODO pmodify->setLayer(lua_getnumber(layer));
-		warning("Not implemented: PrimitiveObject::setLayer. Layer: %d", (int)lua_getnumber(layer));
-	}
+	if (lua_isnumber(layer))
+		pmodify->setLayer((int)lua_getnumber(layer));
 
 	lua_pushobject(tableObj);
 	lua_pushstring("xoffset");
@@ -387,6 +387,7 @@ void Lua_V1::DrawRectangle() {
 		p2.y = (int)((1 - lua_getnumber(y2Obj)) * 240);
 	}
 	bool filled = false;
+	int layer = 2;
 
 	if (lua_istable(tableObj)) {
 		lua_pushobject(tableObj);
@@ -401,10 +402,17 @@ void Lua_V1::DrawRectangle() {
 		lua_Object objFilled = lua_gettable();
 		if (!lua_isnil(objFilled))
 			filled = true;
+
+		lua_pushobject(tableObj);
+		lua_pushstring("layer");
+		lua_Object layerObj = lua_gettable();
+		if (lua_isnumber(layerObj))
+			layer = (int)lua_getnumber(layerObj);
 	}
 
 	PrimitiveObject *p = new PrimitiveObject();
 	p->createRectangle(p1, p2, color, filled);
+	p->setLayer(layer);
 	lua_pushusertag(p->getId(), MKTAG('P','R','I','M')); // FIXME: we use PRIM usetag here
 }
 

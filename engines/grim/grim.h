@@ -225,6 +225,7 @@ protected:
 	virtual void updateNormalMode();
 	virtual void updateDrawMode();
 	virtual void drawNormalMode();
+	void drawPrimitives(int layer);
 
 	void savegameSave();
 	void saveGRIM();

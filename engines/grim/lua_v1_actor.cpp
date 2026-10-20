@@ -81,7 +81,7 @@ void Lua_V1::SetActorTalkColor() {
 
 	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R'))
 		return;
-	if (!lua_isuserdata(colorObj) && lua_tag(colorObj) != MKTAG('C','O','L','R'))
+	if (!lua_isuserdata(colorObj) || lua_tag(colorObj) != MKTAG('C','O','L','R'))
 		return;
 	Actor *actor = getactor(actorObj);
 	actor->setTalkColor(getcolor(colorObj));
@@ -397,7 +397,22 @@ void Lua_V1::GetAngleBetweenActors() {
 		return;
 	}
 
-	lua_pushnumber(actor1->getYawTo(actor2).getDegrees());
+	if (g_grim->getGameType() == GType_MONKEY4) {
+		lua_pushnumber(actor1->getYawTo(actor2).getDegrees());
+		return;
+	}
+
+	// The original measures the angle between the direction the first actor faces
+	// and the direction to the second one. The height of the vector to the other
+	// actor is taken from the facing vector, so it is not the real difference.
+	Math::Vector3d forward = actor1->getPuckVector();
+	Math::Vector3d delta = actor2->getPos() - actor1->getPos();
+	delta.z() = forward.z() - actor1->getPos().z();
+	forward.normalize();
+	delta.normalize();
+
+	float dot = CLIP(forward.dotProduct(delta), -1.0f, 1.0f);
+	lua_pushnumber(90.0f - asin(dot) * 180.0f / (float)M_PI);
 }
 
 void Lua_V1::GetActorYawToPoint() {
@@ -625,8 +640,7 @@ void Lua_V1::IsActorResting() {
 		return;
 
 	Actor *actor = getactor(actorObj);
-	// FIXME verify if exist one flag for resting mode
-	pushbool(!(actor->isWalking() || actor->isTurning()));
+	pushbool(actor->isResting());
 }
 
 /* Get the location of one of the actor's nodes, this is
@@ -772,8 +786,18 @@ void Lua_V1::GetActorCostume() {
 	if (lua_isnil(costumeObj)) {
 		// dummy
 	} else if (lua_isnumber(costumeObj)) {
-		//int num = (int)lua_getnumber(costumeObj);
-		error("GetActorCostume: implement number Id");
+		// The costumes are counted from the top of the stack.
+		int num = (int)lua_getnumber(costumeObj);
+		int idx = actor->getCostumeStackDepth() - 1 - num;
+		costume = nullptr;
+		if (num >= 0 && idx >= 0) {
+			for (Costume *c : actor->getCostumes()) {
+				if (idx-- == 0) {
+					costume = c;
+					break;
+				}
+			}
+		}
 	} else
 		return;
 
@@ -941,7 +965,9 @@ void Lua_V1::SetActorChoreLooping() {
 		int chore = (int)lua_getnumber(choreObj);
 		costume->setChoreLooping(chore, getbool(3));
 	} else if (lua_isnil(choreObj)) {
-		error("SetActorChoreLooping: implement nil case");
+		for (int i = 0; i < costume->getNumChores(); i++) {
+			costume->setChoreLooping(i, getbool(3));
+		}
 	}
 }
 
@@ -1227,8 +1253,7 @@ void Lua_V1::WalkActorVector() {
 	// The second parameter is the camera actor, which only provides the
 	// orientation of the camera. That is taken from the current setup instead.
 	//lua_Object cameraActorObj = lua_getparam(2);
-	//lua_Object zObj = lua_getparam(5);
-	//lua_Object param6Obj = lua_getparam(6);
+	lua_Object adjustObj = lua_getparam(6);
 
 	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R'))
 		return;
@@ -1251,6 +1276,11 @@ void Lua_V1::WalkActorVector() {
 	Math::Vector3d adjustVector(moveHoriz, moveVert, 0);
 	// find the angle the adjust vector is around the unit circle
 	Math::Angle adjustYaw = adjustVector.unitCircleAngle();
+
+	// The sixth parameter turns the movement, to correct cameras that are not
+	// aligned with the controls
+	if (lua_isnumber(adjustObj))
+		adjustYaw += lua_getnumber(adjustObj);
 
 	Math::Angle yaw = cameraYaw + adjustYaw;
 	// yaw is offset from forward by 180 degrees
@@ -1417,8 +1447,17 @@ void Lua_V1::GetVisibleThings() {
 
 	lua_Object result = lua_createtable();
 
-	// TODO verify code below
-	if (actor->isInSet(g_grim->getCurrSet()->getName())) {
+	if (g_grim->getGameType() == GType_GRIM) {
+		// The actors of the set of the observer, but itself, that it can see
+		for (Actor *a : Actor::getPool()) {
+			if (a != actor && actor->canSee(a)) {
+				lua_pushobject(result);
+				lua_pushusertag(a->getId(), MKTAG('A','C','T','R'));
+				lua_pushnumber(1);
+				lua_settable();
+			}
+		}
+	} else if (actor->isInSet(g_grim->getCurrSet()->getName())) {
 		for (Actor *a : g_grim->getActiveActors()) {
 			// Consider the active actor visible
 			if (actor == a || actor->getYawTo(a) < 90) {
@@ -1544,10 +1583,28 @@ void Lua_V1::SetActorShadowValid() {
 }
 
 void Lua_V1::GetActorRect() {
-	// This function is only used in one place and it is only checked if the return value is nil or not.
-	// Looking at how it is used I don't see any reason to ever return nil.
-	// If it does not return nil, the light that comes out of Chepito's lantern move properly.
-	lua_pushnumber(1);
+	lua_Object actorObj = lua_getparam(1);
+
+	if (g_grim->getGameType() == GType_MONKEY4) {
+		lua_pushnumber(1);
+		return;
+	}
+
+	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R')) {
+		lua_pushnil();
+		return;
+	}
+
+	int x1, y1, x2, y2;
+	if (!getactor(actorObj)->getScreenRect(&x1, &y1, &x2, &y2)) {
+		lua_pushnil();
+		return;
+	}
+
+	lua_pushnumber(x1);
+	lua_pushnumber(y1);
+	lua_pushnumber(x2);
+	lua_pushnumber(y2);
 }
 
 void Lua_V1::SetActorInvClipNode() {

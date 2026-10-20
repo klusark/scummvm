@@ -231,6 +231,8 @@ public:
 	 * @see turnTo
 	 */
 	bool isTurning() const;
+	/** True when the actor neither walked nor turned during the last update */
+	bool isResting() const { return !_walkedLast && _lastTurnDir == 0; }
 	/**
 	 * Stops the actor from turning
 	 */
@@ -440,6 +442,19 @@ public:
 	 * is facing.
 	 */
 	Math::Vector3d getPuckVector() const;
+
+	/**
+	 * Finds the rectangle the actor covers on the screen. Returns false when
+	 * the actor is not drawn.
+	 */
+	bool getScreenRect(int *x1, int *y1, int *x2, int *y2);
+
+	/**
+	 * Tells whether an actor is in the field of view of this one. The field
+	 * is set with the maximum roll of the head, it is centered on the direction
+	 * the actor faces and starts at the first joint of the head.
+	 */
+	bool canSee(const Actor *other) const;
 
 	void setPuckOrient(bool orient);
 

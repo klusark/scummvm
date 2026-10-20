@@ -119,11 +119,15 @@ Actor::Actor() :
 		_sectorSortOrder(-1), _fakeUnbound(false), _lightMode(LightFastDyn),
 		_hasFollowedBoxes(false), _lookAtActor(0) {
 
-	// Some actors don't set walk and turn rates, so we default the
-	// _turnRate so Doug at the cat races can turn and we set the
-	// _walkRate so Glottis at the demon beaver entrance can walk and
-	// so Chepito in su.set
-	_turnRate = 100.0f;
+	// Some actors don't set walk and turn rates, so they use the defaults
+	// of the original: Doug at the cat races, Glottis at the demon beaver
+	// entrance and Chepito in su.set
+	if (g_grim->getGameType() == GType_GRIM) {
+		_walkRate = 0.4f;
+		_turnRate = 135.0f;
+	} else {
+		_turnRate = 100.0f;
+	}
 
 	_activeShadowSlot = -1;
 	_shadowArray = new Shadow[MAX_SHADOWS];
@@ -1799,6 +1803,51 @@ bool Actor::updateTalk(uint frameTime) {
 	}
 
 	return false;
+}
+
+bool Actor::canSee(const Actor *other) const {
+	if (g_grim->getGameType() != GType_GRIM || _setName.empty() || other->_setName != _setName || _costumeStack.empty())
+		return false;
+
+	Costume *costume = _costumeStack.back();
+	int joint = costume->getHeadFirstJoint();
+	if (joint < 0 || !costume->getModelNodes())
+		return false;
+
+	ModelNode *node = costume->getModelNodes() + joint;
+	node->_needsUpdate = true;
+	ModelNode *root = node;
+	while (root->_parent) {
+		root = root->_parent;
+		root->_needsUpdate = true;
+	}
+
+	Math::Matrix4 matrix;
+	matrix.setPosition(_pos);
+	matrix.buildFromEuler(_yaw, _pitch, _roll, Math::EO_ZXY);
+	root->setMatrix(matrix);
+	root->update();
+
+	Math::Vector3d delta = other->_pos - node->_pivotMatrix.getPosition();
+	Math::Vector3d direction(delta.x(), delta.y(), 0.0f);
+	direction.normalize();
+	Math::Vector3d forward = getSimplePuckVector();
+	float dot = forward.x() * direction.x() + forward.y() * direction.y();
+	return dot >= cosf(fabsf(costume->getHeadMaxRoll()) * 0.5f * (float)M_PI / 180.0f);
+}
+
+bool Actor::getScreenRect(int *x1, int *y1, int *x2, int *y2) {
+	if (_costumeStack.empty() || !_visible || !g_grim->getCurrSet() || !isInSet(g_grim->getCurrSet()->getName()))
+		return false;
+
+	*x1 = 1000;
+	*y1 = 1000;
+	*x2 = -1000;
+	*y2 = -1000;
+	g_driver->startActorDraw(this);
+	_costumeStack.back()->getBoundingBox(x1, y1, x2, y2);
+	g_driver->finishActorDraw();
+	return *x1 != 1000 && *x2 != -1000 && *y1 != 1000 && *y2 != -1000;
 }
 
 void Actor::draw() {

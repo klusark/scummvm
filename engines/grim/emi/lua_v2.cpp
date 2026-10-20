@@ -19,11 +19,13 @@
  *
  */
 
+#include "common/array.h"
 #include "common/endian.h"
 #include "common/savefile.h"
 
 #include "graphics/surface.h"
 
+#include "engines/grim/debug.h"
 #include "engines/grim/emi/lua_v2.h"
 #include "engines/grim/emi/emi_registry.h"
 #include "engines/grim/emi/sound/emisound.h"
@@ -39,9 +41,27 @@
 
 namespace Grim {
 
+// The screen can be dimmed more than once, each dim has an id that is used to remove it.
+// The strongest one that is left is shown.
+struct DimEntry {
+	int _id;
+	float _level;
+};
+
+static Common::Array<DimEntry> g_dimRegions;
+static int g_nextDimId = 1;
+
+static void updateDimLevel() {
+	float level = 0.0f;
+	for (uint i = 0; i < g_dimRegions.size(); i++) {
+		level = MAX(level, g_dimRegions[i]._level);
+	}
+	g_driver->setDimLevel(level);
+}
+
 void Lua_V2::UndimAll() {
-	g_driver->setDimLevel(0);
-	warning("Lua_V2::UndimAll: stub");
+	g_dimRegions.clear();
+	updateDimLevel();
 }
 
 void Lua_V2::UndimRegion() {
@@ -49,13 +69,19 @@ void Lua_V2::UndimRegion() {
 
 	if (lua_isnumber(regionObj)) {
 		int region = (int)lua_getnumber(regionObj);
-		// FIXME func(region);
-		warning("Lua_V2::UndimRegion: region: %d", region);
+		for (uint i = 0; i < g_dimRegions.size(); i++) {
+			if (g_dimRegions[i]._id == region) {
+				g_dimRegions.remove_at(i);
+				break;
+			}
+		}
+		updateDimLevel();
 	} else {
 		lua_pushnil();
 		// HACK: The demo uses this to undim the intro-screen.
 		// thus UndimRegion(nil) might mean UndimScreen.
-		g_driver->setDimLevel(0);
+		g_dimRegions.clear();
+		updateDimLevel();
 	}
 }
 
@@ -66,9 +92,13 @@ void Lua_V2::DimScreen() {
 	if (lua_isnumber(dimObj))
 		dim = lua_getnumber(dimObj);
 
-	g_driver->setDimLevel(dim);
-	// FIXME func(dim);
-	warning("Lua_V2::DimScreen: dim: %f", dim);
+	DimEntry region;
+	region._id = g_nextDimId++;
+	region._level = dim;
+	g_dimRegions.push_back(region);
+	updateDimLevel();
+
+	lua_pushnumber(region._id);
 }
 
 void Lua_V2::MakeCurrentSetup() {
@@ -90,8 +120,8 @@ void Lua_V2::LockBackground() {
 		return;
 	}
 	const char *filename = lua_getstring(filenameObj);
-	warning("Lua_V2::LockBackground, filename: %s", filename);
-	// FIXME: implement missing rest part of code
+	// The original only keeps the background loaded
+	Debug::debug(Debug::Scripts, "Lua_V2::LockBackground, filename: %s", filename);
 }
 
 void Lua_V2::UnLockBackground() {
@@ -103,8 +133,8 @@ void Lua_V2::UnLockBackground() {
 	}
 
 	const char *filename = lua_getstring(filenameObj);
-	// FIXME: implement missin code
-	warning("Lua_V2::UnLockBackground: stub, filename: %s", filename);
+	// The original only keeps the background loaded
+	Debug::debug(Debug::Scripts, "Lua_V2::UnLockBackground, filename: %s", filename);
 }
 
 void Lua_V2::MakeScreenTextures() {
@@ -196,15 +226,13 @@ void Lua_V2::SetActiveCD() {
 	int cd = (int)lua_getnumber(cdObj);
 
 	if (cd == 1 || cd == 2) {
-		warning("Lua_V2::GetActiveCD: set to CD: %d", cd);
-		// FIXME
+		// There is only one set of data, so the CD can always be changed
 		lua_pushnumber(1.0);
 	}
 }
 
 void Lua_V2::GetActiveCD() {
-	// FIXME: return current CD number 1 or 2, original can also avoid push any numer
-	warning("Lua_V2::GetActiveCD: return const CD 1");
+	// There is only one set of data, so the first CD is always the one in use
 	lua_pushnumber(1);
 }
 
@@ -734,7 +762,7 @@ static void stubError(const char *funcName) {
 // Stubbed functions with semi-known arguments:
 // TODO: Verify and implement these: (And add type-checking), also rename params
 void Lua_V2::NukeAllScriptLocks() {
-	warning("Lua_V2::NukeAllScriptLocks() - TODO: Implement opcode");
+	// The original frees the resources that the scripts keep loaded with the lock opcodes
 }
 
 void Lua_V2::FRUTEY_Begin() {

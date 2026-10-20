@@ -75,6 +75,7 @@ public:
 	int getJoint1() const { return _joint1Node; }
 	int getJoint2() const { return _joint2Node; }
 	int getJoint3() const { return _joint3Node; }
+	float getMaxRoll() const { return _maxRoll; }
 
 private:
 	int _joint1Node;
