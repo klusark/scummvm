@@ -1568,7 +1568,8 @@ void GrimEngine::setSet(Set *scene) {
 
 	Set *lastSet = _currSet;
 	_currSet = scene;
-	_currSet->setSoundParameters();
+	if (_currSet)
+		_currSet->setSoundParameters();
 	// should delete the old scene after setting the new one
 	if (lastSet && !lastSet->_locked) {
 		delete lastSet;
