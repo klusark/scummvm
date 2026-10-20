@@ -180,6 +180,13 @@ public:
 	 * @see stopWalking
 	 */
 	bool isWalking() const;
+	/**
+	 * Returns true while the actor is following a path set by walkTo,
+	 * unlike isWalking it is not affected by walking forward.
+	 *
+	 * @see walkTo
+	 */
+	bool isWalkingToPoint() const { return _walking; }
 
 	/**
 	 * Sets the rotation of thes actor in the 3D scene.
