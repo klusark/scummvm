@@ -1217,19 +1217,17 @@ void Lua_V1::PointActorAt() {
 
 void Lua_V1::WalkActorVector() {
 	lua_Object actorObj = lua_getparam(1);
-	lua_Object actor2Obj = lua_getparam(2);
-	//lua_Object xObj = lua_getparam(3);
-	//lua_Object yObj = lua_getparam(4);
+	// The second parameter is the camera actor, which only provides the
+	// orientation of the camera. That is taken from the current setup instead.
+	//lua_Object cameraActorObj = lua_getparam(2);
 	//lua_Object zObj = lua_getparam(5);
 	//lua_Object param6Obj = lua_getparam(6);
 
-	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R') || !lua_isuserdata(actor2Obj) || lua_tag(actor2Obj) != MKTAG('A','C','T','R'))
+	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R'))
 		return;
 
-	//Actor *actor = static_cast<Actor *>(lua_getuserdata(actorObj));
-	Actor *actor2 = getactor(actor2Obj);
+	Actor *actor = getactor(actorObj);
 
-	// TODO whole below part need rewrote to much original
 	float moveHoriz, moveVert;
 
 	// Third option is the "left/right" movement
@@ -1251,11 +1249,7 @@ void Lua_V1::WalkActorVector() {
 	// yaw is offset from forward by 180 degrees
 	yaw -= 180.0f;
 
-	// set the new direction or walk forward
-	if (actor2->getYaw() != yaw)
-		actor2->turnTo(0, yaw, 0);
-	else
-		actor2->walkForward();
+	actor->walkTowards(yaw);
 }
 
 /* Set the pitch of the actor to the requested value,
