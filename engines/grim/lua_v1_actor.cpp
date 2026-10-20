@@ -693,8 +693,9 @@ void Lua_V1::SetActorColormap() {
 		const char *name = lua_getstring(nameObj);
 		actor->setColormap(name);
 	} else if (lua_isnil(nameObj)) {
-		error("SetActorColormap: implement remove cmap");
-		// remove ?
+		// The original releases the colormap set on the actor. The costume
+		// does not keep its default colormap, so it can't be restored.
+		warning("SetActorColormap: removing the colormap is not supported");
 	}
 }
 
