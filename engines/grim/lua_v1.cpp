@@ -227,6 +227,11 @@ void Lua_V1::WriteRegistryValue() {
 
 	// Check isnumber first, because isstring returns true for numbers
 	if (lua_isnumber(valObj)) {
+		if (scumm_stricmp(key, "Gamma") == 0 && g_grim->getGameType() == GType_GRIM) {
+			// The gamma is a fraction, don't truncate it
+			g_registry->setString(key, Common::String::format("%g", lua_getnumber(valObj)));
+			return;
+		}
 		int val = (int)lua_getnumber(valObj);
 		g_registry->setInt(key, val);
 	} else if (lua_isstring(valObj)) {
