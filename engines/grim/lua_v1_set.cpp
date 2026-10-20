@@ -242,8 +242,7 @@ void Lua_V1::UnLockSet() {
 void Lua_V1::MakeCurrentSet() {
 	lua_Object nameObj = lua_getparam(1);
 	if (!lua_isstring(nameObj)) {
-		// TODO setting current set null
-		warning("Lua_V1::MakeCurrentSet: implement missing case");
+		g_grim->setSet(static_cast<Set *>(nullptr));
 		return;
 	}
 
