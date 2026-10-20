@@ -628,6 +628,17 @@ void Actor::walkTo(const Math::Vector3d &p) {
 			bool pathFound = false;
 
 			Set *currSet = g_grim->getCurrSet();
+
+			// The original does not snap the start of a walk to the closest sector,
+			// the actor has to be inside a visible walkbox. A script can leave an
+			// actor outside of them, for example by enabling a sector while the
+			// inventory is open, and relies on the walk being ignored.
+			if (!currSet->findPointSector(_pos, Sector::WalkType)) {
+				warning("Actor::walkTo(): %s is not inside a walkbox", _name.c_str());
+				_walking = false;
+				return;
+			}
+
 			currSet->findClosestSector(p, nullptr, &_destPos);
 
 			Common::List<PathNode *> openList;
