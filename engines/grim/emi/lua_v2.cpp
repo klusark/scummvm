@@ -464,8 +464,7 @@ void Lua_V2::GetSectorName() {
 }
 
 void Lua_V2::GammaEnabled() {
-	warning("Lua_V2::GammaEnabled: implement opcode, pushing nil");
-	lua_pushnil();
+	lua_pushnumber(1);
 }
 
 void Lua_V2::FileFindFirst() {

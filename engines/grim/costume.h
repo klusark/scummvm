@@ -73,6 +73,7 @@ public:
 	const Common::List<Chore *> &getPlayingChores() const { return _playingChores; }
 
 	void setHead(int joint1, int joint2, int joint3, float maxRoll, float maxPitch, float maxYaw);
+	void copyHeadLookState(Costume *other);
 	void setLookAtRate(float rate);
 	float getLookAtRate() const;
 	virtual void moveHead(bool entering, const Math::Vector3d &lookAt);
@@ -103,6 +104,7 @@ protected:
 	void load(TextSplitter &ts, Costume *prevCost);
 
 	ModelComponent *getMainModelComponent() const;
+	void inheritHead();
 
 	Common::String _fname;
 	Costume *_prevCostume;
