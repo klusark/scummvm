@@ -971,6 +971,25 @@ void Actor::walkForward() {
 	}
 }
 
+void Actor::walkTowards(const Math::Angle &heading) {
+	Math::Angle diff = heading - _moveYaw;
+	diff.normalize(-180);
+
+	// The original turns the heading by twice the turn rate every frame and
+	// does not wait until it is aligned before walking.
+	const float maxTurn = fabsf(g_grim->getPerSecond(_turnRate)) * 2.f;
+	if (fabsf(diff.getDegrees()) <= maxTurn) {
+		_moveYaw = heading;
+	} else if (diff > 0) {
+		_moveYaw += maxTurn;
+	} else {
+		_moveYaw -= maxTurn;
+	}
+	_turning = true;
+
+	walkForward();
+}
+
 Math::Vector3d Actor::getSimplePuckVector() const {
 	if (g_grim->getGameType() == GType_MONKEY4) {
 		Math::Angle yaw = 0;
