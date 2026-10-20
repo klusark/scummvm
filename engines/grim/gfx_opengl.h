@@ -145,6 +145,7 @@ private:
 	GLenum _depthFunc;
 
 	void readPixels(int x, int y, int width, int height, uint8 *buffer);
+	void applyGamma();
 };
 
 } // end of namespace Grim
