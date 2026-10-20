@@ -285,6 +285,7 @@ private:
 	GLuint _storedDisplay;
 
 	void applyGamma();
+	void drawGammaPass(float gamma);
 	OpenGL::Shader *_gammaProgram;
 	GLuint _gammaTex;
 };
