@@ -501,12 +501,23 @@ void Lua_V1::SetGamma() {
 		return;
 	double level = lua_getnumber(levelObj);
 
-	// The original builds a color table from the gamma for its renderer. The default
-	// of 1 doesn't change any color, the scripts set it on startup, so only complain
-	// when the brightness option has actually been changed.
-	// FIXME: apply the gamma to the output
-	if (level != 1.0)
-		warning("Lua_V1::SetGamma, implement opcode, level: %f", level);
+	// The original ignores it while drawing to the screen directly
+	if (g_grim->getMode() == GrimEngine::DrawMode)
+		return;
+
+	// FIXME: The gamma of EMI is not known yet
+	if (g_grim->getGameType() != GType_GRIM) {
+		if (level != 1.0)
+			warning("Lua_V1::SetGamma, implement opcode, level: %f", level);
+		return;
+	}
+
+	// The scripts keep it between 0.5 and 1.5, anything else is a broken setting
+	// and 0 would turn the whole screen white.
+	if (level <= 0.0)
+		level = 1.0;
+
+	g_driver->setGamma((float)level);
 }
 
 void Lua_V1::Display() {

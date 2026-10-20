@@ -223,6 +223,8 @@ GfxOpenGLS::GfxOpenGLS() {
 	_dimProgram = nullptr;
 	_dimPlaneProgram = nullptr;
 	_dimRegionProgram = nullptr;
+	_gammaProgram = nullptr;
+	_gammaTex = 0;
 
 	float div = 6.0f;
 	_overworldProjMatrix = makeFrustumMatrix(-1.f / div, 1.f / div, -0.75f / div, 0.75f / div, 1.0f / div, 3276.8f);
@@ -248,6 +250,9 @@ GfxOpenGLS::~GfxOpenGLS() {
 	delete _dimProgram;
 	delete _dimPlaneProgram;
 	delete _dimRegionProgram;
+	delete _gammaProgram;
+	if (_gammaTex)
+		glDeleteTextures(1, &_gammaTex);
 	glDeleteTextures(1, &_storedDisplay);
 	glDeleteTextures(1, &_emergTexture);
 }
@@ -293,6 +298,9 @@ void GfxOpenGLS::setupTexturedQuad() {
 
 	_emergProgram->enableVertexAttribute("position", _smushVBO, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
 	_emergProgram->enableVertexAttribute("texcoord", _smushVBO, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 2 * sizeof(float));
+
+	_gammaProgram->enableVertexAttribute("position", _smushVBO, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
+	_gammaProgram->enableVertexAttribute("texcoord", _smushVBO, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 2 * sizeof(float));
 
 	if (g_grim->getGameType() == GType_GRIM) {
 		_backgroundProgram->enableVertexAttribute("position", _smushVBO, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
@@ -369,6 +377,7 @@ void GfxOpenGLS::setupShaders() {
 	_smushProgram = OpenGL::Shader::fromFiles("grim_smush", commonAttributes);
 	_textProgram = OpenGL::Shader::fromFiles("grim_text", commonAttributes);
 	_emergProgram = OpenGL::Shader::fromFiles("grim_emerg", commonAttributes);
+	_gammaProgram = OpenGL::Shader::fromFiles("grim_gamma", commonAttributes);
 
 	static const char* actorAttributes[] = {"position", "texcoord", "color", "normal", nullptr};
 	_actorProgram = OpenGL::Shader::fromFiles(isEMI ? "emi_actor" : "grim_actor", actorAttributes);
@@ -517,9 +526,46 @@ void GfxOpenGLS::flipBuffer(bool opportunistic) {
 			// When using an FBO, the older texture will be used
 			return;
 		}
+	} else if (_gamma != 1.0f) {
+		applyGamma();
 	}
 
 	g_system->updateScreen();
+}
+
+void GfxOpenGLS::applyGamma() {
+	// The finished frame is copied to a texture and drawn again through a shader
+	// that applies the gamma.
+	if (!_gammaTex)
+		glGenTextures(1, &_gammaTex);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, _gammaTex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, _screenWidth, _screenHeight, 0);
+
+	const GLboolean blend = glIsEnabled(GL_BLEND);
+	const GLboolean depthTest = glIsEnabled(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+	glDisable(GL_DEPTH_TEST);
+	glDepthMask(GL_FALSE);
+
+	_gammaProgram->use();
+	_gammaProgram->setUniform("tex", 0);
+	_gammaProgram->setUniform1f("gamma", _gamma);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadEBO);
+	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+	glDepthMask(GL_TRUE);
+	if (depthTest)
+		glEnable(GL_DEPTH_TEST);
+	if (blend)
+		glEnable(GL_BLEND);
 }
 
 void GfxOpenGLS::getScreenBoundingBox(const Mesh *model, int *x1, int *y1, int *x2, int *y2) {
