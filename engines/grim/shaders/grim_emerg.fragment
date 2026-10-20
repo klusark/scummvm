@@ -5,6 +5,9 @@ OUTPUT
 uniform sampler2D tex;
 uniform vec3 color;
 
+uniform float gamma;
+
 void main() {
 	outColor = vec4(color, texture(tex, Texcoord).a);
+	outColor.rgb = pow(outColor.rgb, vec3(gamma));
 }
