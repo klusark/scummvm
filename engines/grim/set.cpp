@@ -19,6 +19,8 @@
  *
  */
 
+#include "common/archive.h"
+
 #include "engines/grim/debug.h"
 #include "engines/grim/set.h"
 #include "engines/grim/textsplit.h"
@@ -363,9 +365,14 @@ void Set::Setup::load(Set *set, int id, TextSplitter &ts) {
 		ts.scanString(" zbuffer %256s", 1, buf);
 		// Don't even try to load if it's the "none" bitmap
 		if (strcmp(buf, "<none>.lbm") != 0) {
-			_bkgndZBm = Bitmap::create(buf);
-			Debug::debug(Debug::Bitmaps | Debug::Sets,
-						 "Loading scene z-buffer bitmap: %s\n", buf);
+			if (SearchMan.hasFile(Common::Path(buf))) {
+				_bkgndZBm = Bitmap::create(buf);
+				Debug::debug(Debug::Bitmaps | Debug::Sets,
+							 "Loading scene z-buffer bitmap: %s\n", buf);
+			} else {
+				Debug::debug(Debug::Bitmaps | Debug::Sets,
+							 "Scene z-buffer bitmap %s is missing\n", buf);
+			}
 		}
 	}
 
@@ -859,7 +866,11 @@ void Set::setSetup(int num) {
 }
 
 Bitmap::Ptr Set::loadBackground(const char *fileName) {
-	Bitmap::Ptr bg = Bitmap::create(fileName);
+	// Some sets have setups without any art that the game never selects, the
+	// original only loads the setup in use, so don't warn about the missing files.
+	Bitmap::Ptr bg;
+	if (SearchMan.hasFile(Common::Path(fileName)))
+		bg = Bitmap::create(fileName);
 	if (!bg) {
 		Debug::warning(Debug::Bitmaps | Debug::Sets,
 					   "Unable to load scene bitmap: %s, loading dfltroom instead", fileName);
