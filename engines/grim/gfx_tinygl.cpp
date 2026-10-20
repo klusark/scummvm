@@ -50,7 +50,7 @@ GfxBase *CreateGfxTinyGL() {
 GfxTinyGL::GfxTinyGL() :
 		_alpha(1.f),
 		_currentActor(nullptr), _smushImage(nullptr),
-		_storedDisplay(nullptr) {
+		_storedDisplay(nullptr), _redrawAll(false) {
 	type = Graphics::RendererType::kRendererTypeTinyGL;
 	// TGL_LEQUAL as tglDepthFunc ensures that subsequent drawing attempts for
 	// the same triangles are not ignored by the depth test.
@@ -188,14 +188,57 @@ void GfxTinyGL::flipBuffer(bool opportunistic) {
 	Graphics::Surface glBuffer;
 	TinyGL::getSurfaceRef(glBuffer);
 
+	if (_redrawAll) {
+		// The gamma changed, so everything on the screen has to be converted again
+		dirtyAreas.clear();
+		dirtyAreas.push_back(Common::Rect(glBuffer.w, glBuffer.h));
+		_redrawAll = false;
+	}
+
 	if (!dirtyAreas.empty()) {
+		byte gammaTable[256];
+		const bool useGamma = _gamma != 1.0f && glBuffer.format.bytesPerPixel >= 2;
+		if (useGamma)
+			buildGammaTable(_gamma, gammaTable);
+
 		for (Common::List<Common::Rect>::iterator itRect = dirtyAreas.begin(); itRect != dirtyAreas.end(); ++itRect) {
-			g_system->copyRectToScreen(glBuffer.getBasePtr(itRect->left, itRect->top), glBuffer.pitch,
+			if (!useGamma) {
+				g_system->copyRectToScreen(glBuffer.getBasePtr(itRect->left, itRect->top), glBuffer.pitch,
+				                           itRect->left, itRect->top, itRect->width(), itRect->height());
+				continue;
+			}
+
+			// Apply the gamma to a copy, the buffer of TinyGL keeps the original colors
+			// since only the dirty areas are redrawn.
+			Graphics::Surface corrected;
+			corrected.create(itRect->width(), itRect->height(), glBuffer.format);
+			for (int y = 0; y < itRect->height(); y++) {
+				for (int x = 0; x < itRect->width(); x++) {
+					uint32 color = glBuffer.format.bytesPerPixel == 2 ?
+						*(const uint16 *)glBuffer.getBasePtr(itRect->left + x, itRect->top + y) :
+						*(const uint32 *)glBuffer.getBasePtr(itRect->left + x, itRect->top + y);
+					byte a, r, g, b;
+					glBuffer.format.colorToARGB(color, a, r, g, b);
+					color = glBuffer.format.ARGBToColor(a, gammaTable[r], gammaTable[g], gammaTable[b]);
+					if (glBuffer.format.bytesPerPixel == 2)
+						*(uint16 *)corrected.getBasePtr(x, y) = color;
+					else
+						*(uint32 *)corrected.getBasePtr(x, y) = color;
+				}
+			}
+			g_system->copyRectToScreen(corrected.getPixels(), corrected.pitch,
 			                           itRect->left, itRect->top, itRect->width(), itRect->height());
+			corrected.free();
 		}
 	}
 
 	g_system->updateScreen();
+}
+
+void GfxTinyGL::setGamma(float gamma) {
+	if (gamma != _gamma)
+		_redrawAll = true;
+	GfxBase::setGamma(gamma);
 }
 
 bool GfxTinyGL::isHardwareAccelerated() {

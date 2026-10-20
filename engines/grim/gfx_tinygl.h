@@ -55,6 +55,7 @@ public:
 	void clearScreen() override;
 	void clearDepthBuffer() override;
 	void flipBuffer(bool opportunistic = false) override;
+	void setGamma(float gamma) override;
 
 	bool isHardwareAccelerated() override;
 	bool supportsShaders() override;
@@ -138,6 +139,7 @@ private:
 	float _alpha;
 	const Actor *_currentActor;
 	TGLenum _depthFunc;
+	bool _redrawAll;
 
 	void readPixels(int x, int y, int width, int height, uint8 *buffer);
 };
