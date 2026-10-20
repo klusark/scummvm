@@ -517,6 +517,8 @@ void GfxOpenGLS::clearDepthBuffer() {
 }
 
 void GfxOpenGLS::flipBuffer(bool opportunistic) {
+	bool restore = false;
+
 	if (opportunistic) {
 		GLint fbo = 0;
 		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
@@ -528,9 +530,16 @@ void GfxOpenGLS::flipBuffer(bool opportunistic) {
 		}
 	} else if (_gamma != 1.0f) {
 		applyGamma();
+		restore = true;
 	}
 
 	g_system->updateScreen();
+
+	if (restore) {
+		// The frame is not always drawn again, so the next one would be converted
+		// twice if the converted one was left in the buffer.
+		drawGammaPass(1.0f);
+	}
 }
 
 void GfxOpenGLS::applyGamma() {
@@ -547,6 +556,13 @@ void GfxOpenGLS::applyGamma() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, _screenWidth, _screenHeight, 0);
 
+	drawGammaPass(_gamma);
+}
+
+void GfxOpenGLS::drawGammaPass(float gamma) {
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, _gammaTex);
+
 	const GLboolean blend = glIsEnabled(GL_BLEND);
 	const GLboolean depthTest = glIsEnabled(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
@@ -555,7 +571,7 @@ void GfxOpenGLS::applyGamma() {
 
 	_gammaProgram->use();
 	_gammaProgram->setUniform("tex", 0);
-	_gammaProgram->setUniform1f("gamma", _gamma);
+	_gammaProgram->setUniform1f("gamma", gamma);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadEBO);
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
