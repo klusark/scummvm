@@ -610,7 +610,8 @@ void Lua_V1::IsActorMoving() {
 		return;
 
 	Actor *actor = getactor(actorObj);
-	pushbool(actor->isWalking());
+	// The original only reports a walk set by WalkActorTo, not walking forward
+	pushbool(actor->isWalkingToPoint());
 }
 
 void Lua_V1::IsActorResting() {
