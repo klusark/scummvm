@@ -294,6 +294,10 @@ byte *GfxOpenGL::applyGamma() {
 
 	const int size = _screenWidth * _screenHeight * 4;
 	byte *original = new byte[size];
+
+	// The frame is drawn on a multisampled framebuffer, it has to be resolved to
+	// be read.
+	g_system->presentBuffer();
 	glReadPixels(0, 0, _screenWidth, _screenHeight, GL_RGBA, GL_UNSIGNED_BYTE, original);
 
 	byte *converted = new byte[size];
