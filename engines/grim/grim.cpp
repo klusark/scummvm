@@ -161,8 +161,9 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 	_printLineDefaults.setFont(nullptr);
 	_printLineDefaults.setJustify(TextObject::LJUSTIFY);
 
+	// The default of SetOffscreenTextPos, in EMI it is at the top of the screen
 	_offscreenTextX = 320;
-	_offscreenTextY = 450;
+	_offscreenTextY = (gameType == GType_MONKEY4) ? 30 : 450;
 
 	_sayLineDefaults.setX(0);
 	_sayLineDefaults.setY(100);
