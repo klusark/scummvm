@@ -19,6 +19,10 @@
  *
  */
 
+#include "common/config-manager.h"
+#include "common/file.h"
+#include "image/png.h"
+
 #include "engines/grim/grim.h"
 #include "engines/grim/lua_v1.h"
 #include "engines/grim/resource.h"
@@ -500,6 +504,42 @@ void Lua_V1::ScreenShot() {
 	} else {
 		lua_pushnil();
 	}
+}
+
+// Debug aid for the autorun scripts (like dump_patchr): with dump_frames_dir set, DumpFrame("name") writes the frame as it is drawn to
+// <dump_frames_dir>/<name>.png, to be compared with the frames of the original game.
+void Lua_V1::DumpFrame() {
+	lua_Object nameObj = lua_getparam(1);
+	if (!ConfMan.hasKey("dump_frames_dir") || !lua_isstring(nameObj)) {
+		lua_pushnil();
+		return;
+	}
+	const Common::String dir = ConfMan.get("dump_frames_dir");
+	const Common::String name = lua_getstring(nameObj);
+	GrimEngine::EngineMode mode = g_grim->getMode();
+	g_grim->setMode(GrimEngine::NormalMode);
+	g_grim->updateDisplayScene();
+	g_driver->_screenshotColor = true;
+	Bitmap *shot = g_driver->getScreenshot(640, 480, false);
+	g_driver->_screenshotColor = false;
+	g_grim->setMode(mode);
+	if (!shot) {
+		lua_pushnil();
+		return;
+	}
+	shot->setActiveImage(0);
+	shot->getBitmapData()->convertToColorFormat(Graphics::PixelFormat(4, 8, 8, 8, 8, 24, 16, 8, 0));
+	Common::DumpFile out;
+	bool ok = false;
+	if (out.open(Common::Path(dir + "/" + name + ".png", '/'), true)) {
+		ok = Image::writePNG(out, shot->getData());
+		out.close();
+	}
+	delete shot;
+	if (ok)
+		lua_pushnumber(1.0);
+	else
+		lua_pushnil();
 }
 
 void Lua_V1::SetGamma() {

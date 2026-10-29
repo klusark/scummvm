@@ -203,7 +203,7 @@ Bitmap *GfxBase::createScreenshotBitmap(Graphics::Surface *src, int w, int h, bo
 			sr /= (x1 - x0) * (y1 - y0);
 			sg /= (x1 - x0) * (y1 - y0);
 			sb /= (x1 - x0) * (y1 - y0);
-			if (g_grim->getGameType() == GType_MONKEY4) {
+			if (g_grim->getGameType() == GType_MONKEY4 || _screenshotColor) {
 				pixel = buffer.format.RGBToColor(sr, sg, sb);
 			} else {
 				uint32 color = (sr + sg + sb) / 3;
