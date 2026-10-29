@@ -21,6 +21,7 @@
 
 #include "common/system.h"
 #include "common/timer.h"
+#include "common/config-manager.h"
 
 #include "gui/debugger.h"
 
@@ -161,7 +162,18 @@ IMuse::IMuse(int sampleRate, Audio::Mixer *mixer, Common::Mutex *mutex, bool low
 
 	// The remastered calls the heartbeat every 16 ms, but its counters still advance by 20 ms each time
 	int timerPeriodUsec = _remastered ? IMUSE_REMASTERED_TIMER_PERIOD_USEC : 1000000 / _callbackFps;
-	g_system->getTimerManager()->installTimerProc(timer_handler, timerPeriodUsec, this, "IMuse");
+	_timerPeriodUsec = timerPeriodUsec;
+	// With --sim-fps the engine runs the heartbeats itself, in steps of simulated time (see simulate())
+	if (!ConfMan.hasKey("sim_fps"))
+		g_system->getTimerManager()->installTimerProc(timer_handler, timerPeriodUsec, this, "IMuse");
+}
+
+void IMuse::simulate(uint32 totalMs) {
+	uint64 due = (uint64)totalMs * 1000 / _timerPeriodUsec;
+	while (_simTicks < due) {
+		_simTicks++;
+		imHeartbeat();
+	}
 }
 
 IMuse::~IMuse() {

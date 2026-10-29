@@ -408,6 +408,7 @@ void SmushPlayer::restore(SaveGame *state) {
 		_movieTime = 0;
 
 		_smushDecoder->start();
+		applyClockScale();
 		timerCallback(this);
 	}
 }

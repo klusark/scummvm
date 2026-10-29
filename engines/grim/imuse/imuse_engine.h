@@ -66,6 +66,8 @@ private:
 
 	int _callbackFps;
 	static void timer_handler(void *refConf);
+	uint64 _simTicks = 0;
+	int _timerPeriodUsec = 0;
 
 	bool _checkForUnderrun;
 	int _underrunCooldown;
@@ -342,6 +344,9 @@ private:
 public:
 	IMuse(int sampleRate, Audio::Mixer *mixer, Common::Mutex *mutex, bool lowLatencyMode = false, bool demo = false, bool remastered = false);
 	~IMuse();
+
+	/** Runs the heartbeats due for totalMs milliseconds of simulated time (--sim-fps), instead of the timer */
+	void simulate(uint32 totalMs);
 
 	// Wrapper functions used by the main engine
 
