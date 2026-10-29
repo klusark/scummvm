@@ -6,6 +6,7 @@
 #include "engines/grim/lua/lauxlib.h"
 #include "engines/grim/lua/lfunc.h"
 #include "engines/grim/lua/lmem.h"
+#include "engines/grim/lua/lopcodes.h"
 #include "engines/grim/lua/lstring.h"
 #include "engines/grim/lua/lundump.h"
 
@@ -116,13 +117,84 @@ static void LoadConstants(TProtoFunc *tf, ZIO *Z) {
 	}
 }
 
+// The original interpreter asserts on an opcode it doesn't know when it loads a function, so a bad patch only shows up
+// there. Check that the code is a well formed sequence of instructions as well, so it is caught here too.
+static int32 opcodeSize(int32 op) {
+	switch (op) {
+	case SETLISTW:
+		return 4;
+	case SETLIST:
+	case CALLFUNC:
+	case PUSHNUMBERW:
+	case PUSHCONSTANTW:
+	case GETGLOBALW:
+	case GETDOTTEDW:
+	case PUSHSELFW:
+	case CREATEARRAYW:
+	case SETGLOBALW:
+	case ONTJMPW:
+	case ONFJMPW:
+	case JMPW:
+	case IFFJMPW:
+	case IFTUPJMPW:
+	case IFFUPJMPW:
+	case SETLINEW:
+		return 3;
+	case PUSHNIL:
+	case PUSHNUMBER:
+	case PUSHCONSTANT:
+	case PUSHUPVALUE:
+	case PUSHLOCAL:
+	case GETGLOBAL:
+	case GETDOTTED:
+	case PUSHSELF:
+	case CREATEARRAY:
+	case SETLOCAL:
+	case SETGLOBAL:
+	case SETTABLE:
+	case SETLIST0:
+	case SETMAP:
+	case ONTJMP:
+	case ONFJMP:
+	case JMP:
+	case IFFJMP:
+	case IFTUPJMP:
+	case IFFUPJMP:
+	case CLOSURE:
+	case CALLFUNC0:
+	case CALLFUNC1:
+	case RETCODE:
+	case SETLINE:
+	case POP:
+		return 2;
+	default:
+		return 1;
+	}
+}
+
+static void CheckCode(const TProtoFunc *tf, uint32 size, ZIO *Z) {
+	uint32 pc = 2; // the first two bytes are the stack size and the vararg flag
+	int32 op = ENDCODE;
+
+	while (pc < size) {
+		op = tf->code[pc];
+		if (op > POP1)
+			luaL_verror("invalid opcode %d at %d in the function at line %d of %s", op, pc, tf->lineDefined, zname(Z));
+		pc += opcodeSize(op);
+	}
+	if (pc != size || op != ENDCODE)
+		luaL_verror("the code of the function at line %d of %s doesn't end properly", tf->lineDefined, zname(Z));
+}
+
 static void LoadFunctions(TProtoFunc *tf, ZIO *Z);
 
 static TProtoFunc *LoadFunction(ZIO *Z) {
 	TProtoFunc *tf = luaF_newproto();
 	tf->lineDefined = LoadWord(Z);
 	tf->fileName = LoadTString(Z);
-	tf->code = (byte *)LoadBlock(LoadSize(Z), Z);
+	uint32 codeSize = LoadSize(Z);
+	tf->code = (byte *)LoadBlock(codeSize, Z);
+	CheckCode(tf, codeSize, Z);
 	LoadConstants(tf, Z);
 	LoadLocals(tf, Z);
 	LoadFunctions(tf, Z);
