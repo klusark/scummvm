@@ -333,13 +333,54 @@ static void io_write() {
 	pushresult(status);
 }
 
+// date([format]) of the original is the strftime of the C library (the default is "%c", "10/26/26 12:12:03"): the scripts of the autorun take the hour and
+// the minutes from it. The specifiers that are not here are left as they are.
 static void io_date() {
 	TimeDate t;
-	char b[BUFSIZ];
-
 	g_system->getTimeAndDate(t);
-	snprintf(b, BUFSIZ, "%02d.%02d.%d %02d:%02d.%02d", t.tm_mday, t.tm_mon + 1, 1900 + t.tm_year, t.tm_hour, t.tm_min, t.tm_sec);
-	lua_pushstring(b);
+	static const char *const days[] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+	static const char *const months[] = { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December" };
+	static const int cumulative[] = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 };
+	const int year = 1900 + t.tm_year;
+	const bool leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+	const int yday = cumulative[t.tm_mon] + t.tm_mday + (leap && t.tm_mon > 1 ? 1 : 0);
+	const int wday = CLIP(t.tm_wday, 0, 6);
+
+	lua_Object o = lua_getparam(1);
+	const char *fmt = lua_isstring(o) ? lua_getstring(o) : "%c";
+	Common::String out;
+	for (const char *c = fmt; *c; c++) {
+		if (*c != '%' || !c[1]) {
+			out += *c;
+			continue;
+		}
+		c++;
+		switch (*c) {
+		case 'a': out += Common::String(days[wday]).substr(0, 3); break;
+		case 'A': out += days[wday]; break;
+		case 'b': out += Common::String(months[t.tm_mon]).substr(0, 3); break;
+		case 'B': out += months[t.tm_mon]; break;
+		case 'c': out += Common::String::format("%02d/%02d/%02d %02d:%02d:%02d", t.tm_mon + 1, t.tm_mday, year % 100, t.tm_hour, t.tm_min, t.tm_sec); break;
+		case 'd': out += Common::String::format("%02d", t.tm_mday); break;
+		case 'H': out += Common::String::format("%02d", t.tm_hour); break;
+		case 'I': out += Common::String::format("%02d", t.tm_hour % 12 == 0 ? 12 : t.tm_hour % 12); break;
+		case 'j': out += Common::String::format("%03d", yday); break;
+		case 'm': out += Common::String::format("%02d", t.tm_mon + 1); break;
+		case 'M': out += Common::String::format("%02d", t.tm_min); break;
+		case 'p': out += t.tm_hour < 12 ? "AM" : "PM"; break;
+		case 'S': out += Common::String::format("%02d", t.tm_sec); break;
+		case 'w': out += Common::String::format("%d", wday); break;
+		case 'x': out += Common::String::format("%02d/%02d/%02d", t.tm_mon + 1, t.tm_mday, year % 100); break;
+		case 'X': out += Common::String::format("%02d:%02d:%02d", t.tm_hour, t.tm_min, t.tm_sec); break;
+		case 'y': out += Common::String::format("%02d", year % 100); break;
+		case 'Y': out += Common::String::format("%d", year); break;
+		case '%': out += '%'; break;
+		default:
+			out += '%';
+			out += *c;
+		}
+	}
+	lua_pushstring(out.c_str());
 }
 
 static void io_exit() {
