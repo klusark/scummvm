@@ -1429,8 +1429,17 @@ void Lua_V1::GetVisibleThings() {
 
 	lua_Object result = lua_createtable();
 
-	// TODO verify code below
-	if (actor->isInSet(g_grim->getCurrSet()->getName())) {
+	if (g_grim->getGameType() == GType_GRIM) {
+		// The actors of the set of the observer, but itself, that it can see
+		for (Actor *a : Actor::getPool()) {
+			if (a != actor && actor->canSee(a)) {
+				lua_pushobject(result);
+				lua_pushusertag(a->getId(), MKTAG('A','C','T','R'));
+				lua_pushnumber(1);
+				lua_settable();
+			}
+		}
+	} else if (actor->isInSet(g_grim->getCurrSet()->getName())) {
 		for (Actor *a : g_grim->getActiveActors()) {
 			// Consider the active actor visible
 			if (actor == a || actor->getYawTo(a) < 90) {
@@ -1556,10 +1565,28 @@ void Lua_V1::SetActorShadowValid() {
 }
 
 void Lua_V1::GetActorRect() {
-	// This function is only used in one place and it is only checked if the return value is nil or not.
-	// Looking at how it is used I don't see any reason to ever return nil.
-	// If it does not return nil, the light that comes out of Chepito's lantern move properly.
-	lua_pushnumber(1);
+	lua_Object actorObj = lua_getparam(1);
+
+	if (g_grim->getGameType() == GType_MONKEY4) {
+		lua_pushnumber(1);
+		return;
+	}
+
+	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R')) {
+		lua_pushnil();
+		return;
+	}
+
+	int x1, y1, x2, y2;
+	if (!getactor(actorObj)->getScreenRect(&x1, &y1, &x2, &y2)) {
+		lua_pushnil();
+		return;
+	}
+
+	lua_pushnumber(x1);
+	lua_pushnumber(y1);
+	lua_pushnumber(x2);
+	lua_pushnumber(y2);
 }
 
 void Lua_V1::SetActorInvClipNode() {
