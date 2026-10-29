@@ -200,6 +200,8 @@ public:
 	Math::Vector3d _animPos;
 	Math::Quaternion _animRot;
 	bool _meshVisible, _hierVisible;
+	/** The node of the parent model this hierarchy is hung on (an item in a hand), -1 for the root of a costume */
+	int _attachNode;
 	bool _initialized;
 	bool _needsUpdate;
 	Math::Matrix4 _matrix;

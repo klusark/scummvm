@@ -29,6 +29,7 @@
 #include "engines/grim/material.h"
 #include "engines/grim/textsplit.h"
 #include "engines/grim/gfx_base.h"
+#include "engines/grim/actor.h"
 #include "engines/grim/resource.h"
 #include "engines/grim/colormap.h"
 #include "engines/grim/sprite.h"
@@ -583,7 +584,7 @@ void Mesh::getBoundingBox(int *x1, int *y1, int *x2, int *y2) const {
 ModelNode::ModelNode() :
 		_initialized(false), _needsUpdate(true), _mesh(nullptr), _flags(0), _type(0),
 		_depth(0), _numChildren(0), _parent(nullptr), _child(nullptr), _sprite(nullptr),
-		_sibling(nullptr), _meshVisible(false), _hierVisible(false) {
+		_sibling(nullptr), _meshVisible(false), _hierVisible(false), _attachNode(-1) {
 	_name[0] = '\0';
 }
 
@@ -647,6 +648,13 @@ void ModelNode::draw() const {
 		translateViewpointStart();
 	}
 	translateViewpoint();
+	// What hangs on the node the inventory animations name is clipped by the plane through the actor (FUN_004950a0)
+	Math::Vector3d clipNormal, clipPoint;
+	const Actor *drawn = Actor::getDrawnActor();
+	const bool invClip = _attachNode >= 0 && drawn && drawn->getInvClipNode() == _attachNode && !g_driver->isShadowModeActive() &&
+	                     drawn->getInvClipPlane(clipNormal, clipPoint);
+	if (invClip)
+		g_driver->setActorClip(true, clipNormal, clipPoint);
 	if (_hierVisible) {
 		if (_child) {
 			translateViewpointStart();
@@ -670,6 +678,8 @@ void ModelNode::draw() const {
 			_child->draw();
 		}
 	}
+	if (invClip)
+		g_driver->setActorClip(drawn->isClipActive(), drawn->getClipNormal(), drawn->getClipPoint());
 
 	if (_sibling || _child) {
 		translateViewpointFinish();

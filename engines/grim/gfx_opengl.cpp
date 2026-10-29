@@ -678,10 +678,38 @@ void GfxOpenGL::startActorDraw(const Actor *actor) {
 		const Math::Quaternion &quat = actor->getRotationQuat();
 		const float &scale = actor->getScale();
 
+		glGetFloatv(GL_MODELVIEW_MATRIX, _actorView);
 		glTranslatef(pos.x(), pos.y(), pos.z());
 		glScalef(scale, scale, scale);
 		glMultMatrixf(quat.toMatrix().getData());
 	}
+}
+
+void GfxOpenGL::setActorClip(bool enable, const Math::Vector3d &normal, const Math::Vector3d &point) {
+	if (g_grim->getGameType() != GType_GRIM)
+		return;
+	if (!enable) {
+		glDisable(GL_CLIP_PLANE0);
+		return;
+	}
+	// the plane in the eye space: the view of the camera on the normal and the point
+	const GLfloat *m = _actorView;
+	const double n[3] = {
+		m[0] * normal.x() + m[4] * normal.y() + m[8] * normal.z(),
+		m[1] * normal.x() + m[5] * normal.y() + m[9] * normal.z(),
+		m[2] * normal.x() + m[6] * normal.y() + m[10] * normal.z() };
+	const double p[3] = {
+		m[0] * point.x() + m[4] * point.y() + m[8] * point.z() + m[12],
+		m[1] * point.x() + m[5] * point.y() + m[9] * point.z() + m[13],
+		m[2] * point.x() + m[6] * point.y() + m[10] * point.z() + m[14] };
+	const GLdouble equation[4] = { n[0], n[1], n[2], -(n[0] * p[0] + n[1] * p[1] + n[2] * p[2]) };
+	// (glClipPlane takes the plane in the coordinates of the current matrix)
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glLoadIdentity();
+	glClipPlane(GL_CLIP_PLANE0, equation);
+	glPopMatrix();
+	glEnable(GL_CLIP_PLANE0);
 }
 
 void GfxOpenGL::finishActorDraw() {
