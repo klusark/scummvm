@@ -527,8 +527,10 @@ void GfxOpenGLS::flipBuffer(bool opportunistic) {
 
 void GfxOpenGLS::setGamma(float gamma) {
 	GfxBase::setGamma(gamma);
-	if (g_grim->getGameType() == GType_MONKEY4)
-		return;
+
+	// The gamma of EMI is not known, but the shaders are shared with Grim and an unset
+	// uniform is zero, which would turn every color into white.
+	const float value = g_grim->getGameType() == GType_MONKEY4 ? 1.0f : _gamma;
 
 	// The clones of these programs share the uniform.
 	OpenGL::Shader *shaders[] = {
@@ -536,7 +538,7 @@ void GfxOpenGLS::setGamma(float gamma) {
 		_actorProgram, _actorLightsProgram, _spriteProgram, _primitiveProgram
 	};
 	for (OpenGL::Shader *shader : shaders)
-		shader->setUniform1f("gamma", _gamma);
+		shader->setUniform1f("gamma", value);
 }
 
 void GfxOpenGLS::getScreenBoundingBox(const Mesh *model, int *x1, int *y1, int *x2, int *y2) {
