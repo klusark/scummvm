@@ -310,6 +310,9 @@ void Actor::saveState(SaveGame *savedState) const {
 
 	savedState->writeBool(_drawnToClean);
 	savedState->writeBool(_fakeUnbound);
+	savedState->writeBool(_constrained);
+	savedState->writeVector3d(_constrainDir);
+
 }
 
 bool Actor::restoreState(SaveGame *savedState) {
@@ -530,6 +533,12 @@ bool Actor::restoreState(SaveGame *savedState) {
 		// Note: actor will stay invisible until re-bound to set
 		// by game scripts.
 		_fakeUnbound = false;
+	}
+	if (savedState->saveMinorVersion() >= 34) {
+		_constrained = savedState->readBool();
+		_constrainDir = savedState->readVector3d();
+	} else {
+		_constrained = false;
 	}
 
 	return true;

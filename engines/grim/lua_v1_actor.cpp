@@ -1457,17 +1457,13 @@ void Lua_V1::SetActorFollowBoxes() {
 
 void Lua_V1::SetActorConstrain() {
 	lua_Object actorObj = lua_getparam(1);
-	//lua_Object constrainObj = lua_getparam(2);
+	lua_Object constrainObj = lua_getparam(2);
 
 	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R'))
 		return;
 
-	//Actor *actor = static_cast<Actor *>(lua_getuserdata(actorObj));
-	//bool constrain = !lua_isnil(constrainObj);
-
-	// FIXME that below should be enabled, but for now it's disabled realated to
-	// above func SetActorFollowBoxes.
-	//actor->setConstrain(constrain);
+	Actor *actor = getactor(actorObj);
+	actor->setConstrain(!lua_isnil(constrainObj));
 }
 
 void Lua_V1::GetVisibleThings() {
