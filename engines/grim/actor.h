@@ -60,6 +60,11 @@ struct Shadow {
 	SectorListType planeList;
 	bool active;
 	bool dontNegate;
+	/** SetActorShadowValid (Grim): 0 the shadow is always drawn, -1 only while the actor is on the negative side of the plane of the shadow, 1 on the positive side */
+	int valid;
+	/** The plane of the sector of SetActorShadowPlane (Grim): the normal and the distance */
+	float planeNormal[3];
+	float planeDist;
 	Color color;
 	void *userData;
 };
@@ -532,6 +537,22 @@ public:
 	void clearShadowPlane(int i);
 	void setShadowValid(int);
 	void setActivateShadow(int, bool);
+
+	// SetActorClipPlane, SetActorClipActive, SetActorInvClipNode and SetActorFrustrumCull (Grim)
+	void setClipPlane(const Math::Vector3d &normal, const Math::Vector3d &point);
+	void setClipActive(int active) { _clipActive = active; }
+	bool isClipActive() const { return _clipActive != 0; }
+	const Math::Vector3d &getClipNormal() const { return _clipNormal; }
+	const Math::Vector3d &getClipPoint() const { return _clipPoint; }
+	/** The models hung on this node of the costume (an item in the hand) are clipped by the plane through the actor that faces the way it does; -1 none */
+	void setInvClipNode(int node) { _invClipNode = node; }
+	int getInvClipNode() const { return _invClipNode; }
+	bool getInvClipPlane(Math::Vector3d &normal, Math::Vector3d &point) const;
+	/** An actor that is drawn is the one the nodes of its models ask for the clip of the node they hang on */
+	static const Actor *getDrawnActor() { return s_drawnActor; }
+	/** Kept for the scripts: the original does not draw an actor that is outside the view; ScummVM draws what is in it only through the clipping of the renderer */
+	void setFrustumCull(bool cull) { _frustumCull = cull; }
+	bool isFrustumCull() const { return _frustumCull; }
 
 	void setFollowBoxes(bool follow);
 	bool hasFollowBoxes() const { return _followBoxes; }

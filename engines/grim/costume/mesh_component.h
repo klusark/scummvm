@@ -45,6 +45,7 @@ public:
 
 	ModelNode *getNode() { return _node; }
 	Model *getModel() { return _model; }
+	int getNum() const { return _num; }
 
 private:
 	int _num;
