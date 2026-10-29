@@ -694,6 +694,10 @@ void VideoDecoder::AudioTrack::setRate(Common::Rational rate) {
 	// Convert rational rate to audio rate
 	uint32 convertedRate = (stream->getRate() * rate).toInt();
 
+	// A stream that has not got its rate yet gives 0, which the mixer cannot play
+	if (convertedRate == 0)
+		return;
+
 	setRate(convertedRate);
 }
 
@@ -709,6 +713,10 @@ void VideoDecoder::AudioTrack::start() {
 
 	Audio::AudioStream *stream = getAudioStream();
 	assert(stream);
+
+	// A stream that has no rate yet (an empty audio track) cannot be mixed
+	if (stream->getRate() == 0)
+		return;
 
 	g_system->getMixer()->playStream(_soundType, &_handle, stream, -1, _muted ? 0 : getVolume(), getBalance(), DisposeAfterUse::NO);
 
