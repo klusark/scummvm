@@ -1056,6 +1056,33 @@ void Lua_V2::WalkActorVector() {
 	actor2->walkForward();
 }
 
+// GetFloorHeights(x, z [, margin]): the heights (y) of the planes of the visible walk sectors of the current set that lie above/below the place
+// x, z (a list). Not in the original: for the scripts that play the game (route planning), which need the floor under a place whatever
+// its height; GetPointSector answers only for a point on the plane of a sector (steps, ramps and ribbons of floor are found by chance only).
+void Lua_V2::GetFloorHeights() {
+	lua_Object xObj = lua_getparam(1);
+	lua_Object zObj = lua_getparam(2);
+	lua_Object marginObj = lua_getparam(3); // optional: how far inside the sector the place has to be
+	float margin = lua_isnumber(marginObj) ? lua_getnumber(marginObj) : 0.f;
+	lua_Object result = lua_createtable();
+	Set *set = g_grim->getCurrSet();
+	if (set && lua_isnumber(xObj) && lua_isnumber(zObj)) {
+		Math::Vector3d p(lua_getnumber(xObj), 0.f, lua_getnumber(zObj));
+		int n = 0;
+		for (int i = 0; i < set->getSectorCount(); i++) {
+			Sector *s = set->getSectorBase(i);
+			float y = 0.f;
+			if (s && (s->getType() & Sector::WalkType) && s->isVisible() && s->containsXZ(p, &y, margin)) {
+				lua_pushobject(result);
+				lua_pushnumber(++n);
+				lua_pushnumber(y);
+				lua_settable();
+			}
+		}
+	}
+	lua_pushobject(result);
+}
+
 void Lua_V2::EnableActorPuck() {
 	lua_Object actorObj = lua_getparam(1);
 

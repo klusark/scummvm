@@ -62,10 +62,15 @@ static void updateDimLevel() {
 // The dim regions live in this file, not in the saved game: a game loaded into a process that has dimmed the screen since
 // (the start of the game does) would stay dim, black with the regions that the loaded game never undims. A loaded game
 // starts undimmed, as the dim of a scene that was saved dimmed is set again by its own script.
+static void registerLateOpcodes();
+
 void Lua_V2::postRestoreHandle() {
 	Lua_V1::postRestoreHandle();
 	g_dimRegions.clear();
 	updateDimLevel();
+	// The globals come back from the saved game as they were: a function that was added to the port later (GetFloorHeights) is not in
+	// the games saved before it, and is put in again
+	registerLateOpcodes();
 }
 
 void Lua_V2::UndimAll() {
@@ -951,8 +956,17 @@ struct luaL_reg monkeyMainOpcodes[] = {
 	{ "SetReplayMode", LUA_OPCODE(Lua_V2, SetReplayMode) },
 // ResidualVM-hacks:
 	{ "GetResidualVMPreference", LUA_OPCODE(Lua_V2, GetResidualVMPreference) },
-	{ "SetResidualVMPreference", LUA_OPCODE(Lua_V2, SetResidualVMPreference) }
+	{ "SetResidualVMPreference", LUA_OPCODE(Lua_V2, SetResidualVMPreference) },
+	// (at the end: the saved games refer to the opcodes by their place in the table)
+	{ "GetFloorHeights", LUA_OPCODE(Lua_V2, GetFloorHeights) },
 };
+
+static void registerLateOpcodes() {
+	for (uint i = 0; i < ARRAYSIZE(monkeyMainOpcodes); i++) {
+		if (!strcmp(monkeyMainOpcodes[i].name, "GetFloorHeights"))
+			lua_register(monkeyMainOpcodes[i].name, monkeyMainOpcodes[i].func);
+	}
+}
 
 void Lua_V2::registerOpcodes() {
 	Lua_V1::registerOpcodes();
