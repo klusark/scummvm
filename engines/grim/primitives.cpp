@@ -28,7 +28,7 @@
 namespace Grim {
 
 PrimitiveObject::PrimitiveObject() :
-		_filled(false), _type(InvalidType) {
+		_filled(false), _type(InvalidType), _layer(2) {
 }
 
 PrimitiveObject::~PrimitiveObject() {
@@ -49,6 +49,8 @@ void PrimitiveObject::saveState(SaveGame *savedState) const {
 	savedState->writeLEUint16(_p3.y);
 	savedState->writeLEUint16(_p4.x);
 	savedState->writeLEUint16(_p4.y);
+
+	savedState->writeLESint32(_layer);
 }
 
 bool PrimitiveObject::restoreState(SaveGame *savedState) {
@@ -66,6 +68,11 @@ bool PrimitiveObject::restoreState(SaveGame *savedState) {
 	_p3.y = savedState->readLEUint16();
 	_p4.x = savedState->readLEUint16();
 	_p4.y = savedState->readLEUint16();
+
+	if (savedState->saveMinorVersion() >= 32)
+		_layer = savedState->readLESint32();
+	else
+		_layer = 2;
 
 	return true;
 }
