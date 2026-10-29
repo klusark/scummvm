@@ -355,7 +355,9 @@ void TextObject::setupText() {
 	else
 		setupTextReal<Common::String>(msg, sConvert);
 
-	_elapsedTime = 0;
+	// (the timer of a text of the original runs from the call that made it, wherever the text is laid out again)
+	if (g_grim->getGameType() != GType_GRIM)
+		_elapsedTime = 0;
 }
 
 int TextObject::getLineX(int line) const {
