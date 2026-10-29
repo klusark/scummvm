@@ -33,6 +33,9 @@ class SaveGame;
 
 class MoviePlayer {
 protected:
+	/** Plays at the speed of the game clock, see the --time-scale option */
+	void applyClockScale();
+
 	Common::String _fname;
 	Common::Mutex _frameMutex;
 	Video::VideoDecoder *_videoDecoder;     //< Initialize this to your needed subclass of VideoDecoder in the constructor
@@ -90,6 +93,10 @@ public:
 	 */
 	void saveState(SaveGame *state);
 	void restoreState(SaveGame *state);
+
+public:
+	/** With --sim-fps: decodes the frames that are due, this replaces the timer (called by the engine each frame) */
+	void simulate();
 
 protected:
 	static void timerCallback(void *ptr);

@@ -25,6 +25,13 @@
 #define FORBIDDEN_SYMBOL_EXCEPTION_stdin
 #define FORBIDDEN_SYMBOL_EXCEPTION_FILE
 
+#define FORBIDDEN_SYMBOL_EXCEPTION_getenv
+#define FORBIDDEN_SYMBOL_EXCEPTION_fopen
+#define FORBIDDEN_SYMBOL_EXCEPTION_fputs
+#define FORBIDDEN_SYMBOL_EXCEPTION_fclose
+#define FORBIDDEN_SYMBOL_EXCEPTION_remove
+#define FORBIDDEN_SYMBOL_EXCEPTION_rename
+
 #include "common/archive.h"
 #include "common/debug-channels.h"
 #include "common/file.h"
@@ -32,6 +39,9 @@
 #include "common/config-manager.h"
 #include "common/compression/stuffit.h"
 #include "common/translation.h"
+
+#include "audio/mixer_intern.h"
+#include "video/video_decoder.h"
 
 #include "backends/keymapper/action.h"
 #include "backends/keymapper/keymap.h"
@@ -83,6 +93,7 @@
 
 namespace Grim {
 
+
 GrimEngine *g_grim = nullptr;
 GfxBase *g_driver = nullptr;
 int g_imuseState = -1;
@@ -111,6 +122,25 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 	ConfMan.registerDefault("use_arb_shaders", true);
 
 	_showFps = ConfMan.getBool("show_fps");
+	_autorunPending = ConfMan.hasKey("autorun");
+	if (ConfMan.hasKey("time_scale"))
+		_clockScale = CLIP(ConfMan.getInt("time_scale"), 10, 10000) / 100.0f;
+	if (ConfMan.hasKey("sim_fps"))
+		_simFps = CLIP(ConfMan.getInt("sim_fps"), 1, 1000);
+	// sim_frame_ms: every simulated frame is exactly that many milliseconds (the original, patched to a fixed frame time, runs 17 ms frames: 60 fps
+	// would give 16 and 17 ms alternately)
+	if (ConfMan.hasKey("sim_frame_ms")) {
+		_simMs = CLIP(ConfMan.getInt("sim_frame_ms"), 1, 1000);
+		if (!_simFps)
+			_simFps = 1000 / _simMs;
+	}
+	if (ConfMan.hasKey("sim_render_every"))
+		_simRenderEvery = CLIP(ConfMan.getInt("sim_render_every"), 1, 1000);
+	if (_simFps) {
+		// the sound is mixed and iMuse runs in steps of the simulated time too, see luaUpdate()
+		static_cast<Audio::MixerImpl *>(_mixer)->setSimulated(true);
+		Video::g_videoSimulated = true;
+	}
 
 	_softRenderer = true;
 
@@ -806,16 +836,38 @@ void GrimEngine::luaUpdate() {
 
 	// Update timing information
 	unsigned newStart = g_system->getMillis();
-	if (newStart < _frameStart) {
+	if (_simFps) {
+		// Simulated time: every frame is the same length however long it really took, so that a run does not depend on
+		// the speed of the machine (the whole milliseconds add up to exactly _simFps frames a second)
+		unsigned before = _simMs ? _simFrame * _simMs : (unsigned)((uint64)_simFrame * 1000 / _simFps);
+		_simFrame++;
+		unsigned simTime = _simMs ? _simFrame * _simMs : (unsigned)((uint64)_simFrame * 1000 / _simFps);
+		_frameTime = simTime - before;
 		_frameStart = newStart;
-		return;
+		// the sound and iMuse move on by the same simulated time
+		static_cast<Audio::MixerImpl *>(_mixer)->simulateStep(simTime);
+		Video::g_videoSimMillis = simTime;
+		if (g_movie)
+			g_movie->simulate();
+		if (g_imuse)
+			g_imuse->simulate(simTime);
+	} else {
+		if (newStart < _frameStart) {
+			_frameStart = newStart;
+			return;
+		}
+		_frameTime = newStart - _frameStart;
+		_frameStart = newStart;
 	}
-	_frameTime = newStart - _frameStart;
-	_frameStart = newStart;
 
-	if (_mode == PauseMode || _shortFrame) {
+	// (a frame after a change of set or a load is a short one, so that the time of the load does not count; with a simulated clock every frame
+	// is as long as the others, as it is in the original with the fixed frame time)
+	if (_mode == PauseMode || (_shortFrame && (!_simFps || (ConfMan.hasKey("sim_short_frame") && ConfMan.getBool("sim_short_frame"))))) {
 		_frameTime = 0;
 	}
+
+	// Everything that depends on time uses the frame time, from walking to the scripts
+	_frameTime = (unsigned)(_frameTime * _clockScale);
 
 	// (the original does not update the actors in a frame that began with a movie: the scripts that end the movie, and set the angles of Manny
 	// right after, see the angles that are seen change one frame later than they would without the movie)
@@ -1016,6 +1068,9 @@ void GrimEngine::doFlip() {
 			snprintf(_fps, sizeof(_fps), "%7.2f", (double)(_frameCounter * 1000) / (double)delta);
 			_frameCounter = 0;
 			_lastFrameTime = currentTime;
+			// (counted in real time, the log shows how fast a simulated run goes)
+			if (_simFps && ++_fpsReports % 10 == 0)
+				warning("FPS %s (real time), simulated clock %u ms", _fps, (unsigned)((uint64)_simFrame * 1000 / _simFps));
 		}
 	}
 }
@@ -1163,7 +1218,21 @@ void GrimEngine::mainLoop() {
 			}
 		}
 
-		if (_mode != PauseMode) {
+		// A simulated run goes through thousands of frames a second, drawing them all is most of what it costs: draw one frame
+		// in _simRenderEvery (by the count of frames, not by the clock, so that a run stays the same every time), and every
+		// frame when what is on the screen changes (a set, a camera setup, the mode) or a movie plays, as the scripts that
+		// follow the camera react to the drawing and the time of a movie comes from it
+		bool renderFrame = true;
+		if (_simFps && _simRenderEvery > 1) {
+			if (_setupChanged || _mode != _lastSimRenderMode || _currSet != _lastSimRenderSet || _mode == SmushMode || (g_movie && g_movie->isPlaying()) || _simFrame % _simRenderEvery == 0) {
+				_lastSimRenderMode = _mode;
+				_lastSimRenderSet = _currSet;
+			} else {
+				renderFrame = false;
+			}
+		}
+
+		if (_mode != PauseMode && renderFrame) {
 			// Draw the display scene before doing the luaUpdate.
 			// This give a large performance boost as OpenGL stores commands
 			// in a queue on the gpu to be rendered later. When doFlip is
@@ -1173,7 +1242,18 @@ void GrimEngine::mainLoop() {
 			updateDisplayScene();
 		}
 
-		doFlip();
+		if (renderFrame)
+			doFlip();
+		else
+			_frameCounter++;
+
+		// Start the script once the game is running in a set, which is also the case
+		// after loading a savegame with --save-slot
+		if (_autorunPending && _currSet && (_mode == NormalMode || _mode == SmushMode)) {
+			runAutorun();
+		}
+
+		pollRemoteLua();
 
 		// We do not want the scripts to update while a movie is playing in the PS2-version.
 		if (!(getGamePlatform() == Common::kPlatformPS2 && _mode == SmushMode)) {
@@ -1313,6 +1393,12 @@ void GrimEngine::savegameRestore() {
 	g_movie->pause(false);
 
 	debug(2, "GrimEngine::savegameRestore() finished.");
+
+	// An autorun script that loaded a game has to run again on the loaded state
+	if (ConfMan.hasKey("autorun")) {
+		_autorunPending = true;
+		_autorunLoaded = true;
+	}
 
 	_shortFrame = true;
 	clearEventQueue();
@@ -1719,6 +1805,60 @@ void GrimEngine::pauseEngineIntern(bool pause) {
 
 void GrimEngine::debugLua(const Common::String &str) {
 	lua_dostring(str.c_str());
+}
+
+// Debug aid: with SCUMMVM_LUA_REMOTE=<dir> a file <dir>/cmd.lua is run as Lua when it appears (and
+// deleted), the global string R is then written to <dir>/cmd.out ("done" marks the end).
+void GrimEngine::pollRemoteLua() {
+	static const char *dir = getenv("SCUMMVM_LUA_REMOTE");
+	if (!dir || (++_remotePoll % 6) != 0)
+		return;
+	Common::FSNode cmd(Common::Path(Common::String(dir) + "/cmd.lua"));
+	if (!cmd.exists())
+		return;
+	Common::SeekableReadStream *in = cmd.createReadStream();
+	if (!in)
+		return;
+	Common::String code = in->readString(0, in->size());
+	delete in;
+	remove((Common::String(dir) + "/cmd.lua").c_str());
+	lua_dostring("R = \"\"");
+	int status = lua_dostring(code.c_str());
+	lua_Object r = lua_getglobal("R");
+	Common::String out = lua_isstring(r) ? lua_getstring(r) : "";
+	if (status != 0)
+		out += " (error)";
+	Common::String tmp = Common::String(dir) + "/cmd.tmp";
+	FILE *f = fopen(tmp.c_str(), "wb");
+	if (f) {
+		fputs(out.c_str(), f);
+		fclose(f);
+		rename(tmp.c_str(), (Common::String(dir) + "/cmd.out").c_str());
+	}
+}
+
+void GrimEngine::runAutorun() {
+	_autorunPending = false;
+
+	const Common::Path path = ConfMan.getPath("autorun");
+	Common::FSNode node(path);
+	Common::SeekableReadStream *stream = node.createReadStream();
+	if (!stream) {
+		warning("Autorun: could not open '%s'", path.toString().c_str());
+		return;
+	}
+	Common::String script = stream->readString(0, stream->size());
+	delete stream;
+
+	// As a task the script can wait, for example for an actor to arrive
+	warning("Autorun: running '%s'", path.toString().c_str());
+	// A save made while the script was running holds that task, so stop an old one first
+	Common::String task = Common::String::format("%sif __autorun__ then stop_script(__autorun__) end\n__autorun__ = function()\n%s\nend\nstart_script(__autorun__)", _autorunLoaded ? "AR_LOADED = TRUE\n" : "", script.c_str());
+	if (lua_dostring(task.c_str()) != 0) {
+		// Nothing would ever run, so don't leave the game sitting there
+		warning("Autorun: '%s' failed to load", path.toString().c_str());
+		quitGame();
+	}
 }
 
 Common::String GrimEngine::getLanguagePrefix() const {

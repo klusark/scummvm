@@ -57,6 +57,7 @@ private:
 	int32 makeMixerFlags(int32 flags);
 	static void timerHandler(void *refConf);
 	void callback();
+	uint64 _simTicks = 0;
 	void switchToNextRegion(Track *track);
 	int allocSlot(int priority);
 	void selectVolumeGroup(const char *soundName, int volGroupId);
@@ -70,6 +71,8 @@ private:
 	void flushTrack(Track *track);
 
 public:
+	/** Runs the callbacks due for totalMs milliseconds of simulated time (--sim-fps) */
+	void simulate(uint32 totalMs);
 	Imuse(int fps, bool demo);
 	~Imuse();
 

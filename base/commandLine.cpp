@@ -247,6 +247,20 @@ static const char HELP_STRING4[] =
 	"                           This method only works on the full version of the game,\n"
 	"                           Demo users can still join a game via the main menu.\n"
 #endif
+#ifdef ENABLE_GRIM
+	"  --autorun=FILE           Run the Lua script FILE as a game script once the game\n"
+	"                           has started, for Grim Fandango or Escape from Monkey\n"
+	"                           Island. The script can end the game with exit()\n"
+	"  --time-scale=NUM         Run the game clock NUM percent as fast (10 - 10000), for\n"
+	"                           Grim Fandango or Escape from Monkey Island (default: 100)\n"
+	"                           Voices and movies keep their normal speed, use\n"
+	"                           --engine-speed=0 to go faster than the frame limit\n"
+	"  --sim-fps=NUM            Simulate the game clock for Grim Fandango or Escape from\n"
+	"                           Monkey Island: every frame advances the game by exactly\n"
+	"                           1/NUM second however long it takes (1 - 1000), the sound\n"
+	"                           and the music as well, so a run does not depend on the\n"
+	"                           speed of the computer (--engine-speed=0 runs it flat out)\n"
+#endif
 	"  --engine-speed=NUM       Set frame per second limit (0 - 100), 0 = no limit\n"
 	"                           (default: 60)\n"
 	"                           Grim Fandango or Escape from Monkey Island\n"
@@ -1045,6 +1059,33 @@ Common::String parseCommandLine(Common::StringMap &settings, int argc, const cha
 
 #if defined(ENABLE_SKY) || defined(ENABLE_QUEEN)
 			DO_LONG_OPTION_BOOL("alt-intro")
+			END_OPTION
+#endif
+
+#ifdef ENABLE_GRIM
+			DO_LONG_OPTION("autorun")
+				Common::FSNode path(Common::Path::fromCommandLine(option));
+				if (!path.exists()) {
+					usage("Non-existent autorun script '%s'", option);
+				} else if (!path.isReadable()) {
+					usage("Non-readable autorun script '%s'", option);
+				}
+				settings["autorun"] = path.getPath().toConfig();
+			END_OPTION
+
+			DO_LONG_OPTION_INT("time-scale")
+				if (retval < 10 || retval > 10000)
+					usage("--time-scale: '%s' is out of range, use 10 - 10000", option);
+			END_OPTION
+
+			DO_LONG_OPTION_INT("sim-fps")
+				if (retval < 1 || retval > 1000)
+					usage("--sim-fps: '%s' is out of range, use 1 - 1000", option);
+			END_OPTION
+
+			DO_LONG_OPTION_INT("sim-render-every")
+				if (retval < 1 || retval > 1000)
+					usage("--sim-render-every: '%s' is out of range, use 1 - 1000", option);
 			END_OPTION
 #endif
 

@@ -30,6 +30,13 @@
 
 namespace Video {
 
+bool g_videoSimulated = false;
+uint32 g_videoSimMillis = 0;
+
+static inline uint32 videoMillis() {
+	return g_videoSimulated ? g_videoSimMillis : g_system->getMillis();
+}
+
 VideoDecoder::VideoDecoder() {
 	_startTime = 0;
 	_dirtyPalette = false;
@@ -131,7 +138,7 @@ void VideoDecoder::pauseVideo(bool pause) {
 	}
 
 	if (_pauseLevel == 1 && pause) {
-		_pauseStartTime = g_system->getMillis(); // Store the starting time from pausing to keep it for later
+		_pauseStartTime = videoMillis(); // Store the starting time from pausing to keep it for later
 
 		for (auto &track : _tracks)
 			track->pause(true);
@@ -139,13 +146,13 @@ void VideoDecoder::pauseVideo(bool pause) {
 		for (auto &track : _tracks)
 			track->pause(false);
 
-		_startTime += (g_system->getMillis() - _pauseStartTime);
+		_startTime += (videoMillis() - _pauseStartTime);
 	}
 }
 
 void VideoDecoder::resetPauseStartTime() {
 	if (isPaused())
-		_pauseStartTime = g_system->getMillis();
+		_pauseStartTime = videoMillis();
 }
 
 void VideoDecoder::setVolume(byte volume) {
@@ -302,7 +309,7 @@ uint32 VideoDecoder::getTime() const {
 		}
 	}
 
-	return MAX<int>((_playbackRate * (g_system->getMillis() - _startTime)).toInt(), 0);
+	return MAX<int>((_playbackRate * (videoMillis() - _startTime)).toInt(), 0);
 }
 
 uint32 VideoDecoder::getTimeToNextFrame() const {
@@ -366,7 +373,7 @@ bool VideoDecoder::rewind() {
 		startAudio();
 
 	_lastTimeChange = 0;
-	_startTime = g_system->getMillis();
+	_startTime = videoMillis();
 	resetPauseStartTime();
 	findNextVideoTrack();
 	return true;
@@ -406,7 +413,7 @@ bool VideoDecoder::seek(const Audio::Timestamp &time) {
 	// Also reset our start time
 	if (isPlaying()) {
 		startAudio();
-		_startTime = g_system->getMillis() - (time.msecs() / _playbackRate).toInt();
+		_startTime = videoMillis() - (time.msecs() / _playbackRate).toInt();
 	}
 
 	resetPauseStartTime();
@@ -506,7 +513,7 @@ void VideoDecoder::setRate(const Common::Rational &rate) {
 		_lastTimeChange = getTime();
 
 	_playbackRate = targetRate;
-	_startTime = g_system->getMillis();
+	_startTime = videoMillis();
 
 	// Adjust start time if we've seek'ed to something besides zero time
 	if (_lastTimeChange != 0)
@@ -991,7 +998,7 @@ void VideoDecoder::resetStartTime() {
 	if (_nextVideoTrack) {
 		Audio::Timestamp curTime = _nextVideoTrack->getFrameTime(_nextVideoTrack->getCurFrame());
 		if (isPlaying()) {
-			_startTime = g_system->getMillis() - (curTime.msecs() / _playbackRate).toInt();
+			_startTime = videoMillis() - (curTime.msecs() / _playbackRate).toInt();
 		}
 	}
 }

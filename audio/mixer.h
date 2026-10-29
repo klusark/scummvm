@@ -67,6 +67,9 @@ public:
  * The main audio mixer that handles mixing of an arbitrary number of
  * audio streams (in the form of AudioStream instances).
  */
+/** True while the engine mixes the sound in steps of simulated time (MixerImpl::setSimulated()) */
+extern bool g_mixerSimulated;
+
 class Mixer : Common::NonCopyable {
 public:
 	/** Sound types. */

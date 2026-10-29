@@ -111,6 +111,7 @@ public:
 	void mainLoop();
 	unsigned getFrameStart() const { return _frameStart; }
 	unsigned getFrameTime() const { return _frameTime; }
+	float getClockScale() const { return _clockScale; }
 
 	// perSecond should allow rates of zero, some actors will accelerate
 	// up to their normal speed (such as the bone wagon) so handling
@@ -233,9 +234,16 @@ protected:
 	void savegameRestore();
 	void restoreGRIM();
 
+	/** Runs the script given with --autorun, as a game script */
+	void runAutorun();
+
 	virtual void storeSaveGameMetadata(SaveGame *state);
 	virtual void storeSaveGameImage(SaveGame *savedState);
 
+	bool _autorunPending = false;
+	int _remotePoll = 0;
+	void pollRemoteLua();
+	bool _autorunLoaded = false;
 	bool _savegameLoadRequest = false;
 	bool _savegameSaveRequest = false;
 	Common::String _savegameFileName;
@@ -256,6 +264,18 @@ protected:
 	Common::String _movieSetup;
 
 	unsigned _frameStart = 0, _frameTime = 0, _movieTime = 0;
+	/** How much faster than real time the game clock runs, set with --time-scale */
+	float _clockScale = 1.0f;
+	/** With --sim-fps the clock advances by a fixed time per frame instead of real time (0 = real time) */
+	unsigned _simFps = 0;
+	unsigned _simFrame = 0;
+	/** With sim_frame_ms in the configuration: the length of every simulated frame in milliseconds (0 = as many as sim-fps gives) */
+	unsigned _simMs = 0;
+	/** With --sim-fps: only one frame in this many is drawn (1 = every frame) */
+	unsigned _simRenderEvery = 8;
+	EngineMode _lastSimRenderMode = NormalMode;
+	Set *_lastSimRenderSet = nullptr;
+	unsigned _fpsReports = 0;
 	int _prevSmushFrame = 0;
 	unsigned int _frameCounter = 0;
 	unsigned int _lastFrameTime = 0;

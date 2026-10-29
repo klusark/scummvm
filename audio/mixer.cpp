@@ -351,6 +351,40 @@ int MixerImpl::mixCallback(byte *samples, uint len) {
 	// Since the mixer callback has been called, the mixer must be ready...
 	_mixerReady = true;
 
+	if (_simulated) {
+		// the engine mixes the sound itself, in steps of simulated time
+		memset(samples, 0, len);
+		return 0;
+	}
+
+	return mixLocked(samples, len);
+}
+
+void MixerImpl::setSimulated(bool simulated) {
+	Common::StackLock lock(_mutex);
+	_simulated = simulated;
+	g_mixerSimulated = simulated;
+	_simFramesDone = 0;
+}
+
+void MixerImpl::simulateStep(uint32 totalMs) {
+	Common::StackLock lock(_mutex);
+
+	const uint bytesPerFrame = _outBytesPerSample * (_stereo ? 2 : 1);
+	const uint64 target = (uint64)totalMs * _sampleRate / 1000;
+	// sound is mixed (and thrown away) for the time that has passed since the last step
+	enum { CHUNK = 2048 };
+	byte buffer[CHUNK * 8];
+	assert(bytesPerFrame * CHUNK <= sizeof(buffer));
+	while (_simFramesDone < target) {
+		uint n = (uint)MIN<uint64>(CHUNK, target - _simFramesDone);
+		mixLocked(buffer, n * bytesPerFrame);
+		_simFramesDone += n;
+	}
+}
+
+int MixerImpl::mixLocked(byte *samples, uint len) {
+
 	// we store samples of size defined by the backend
 	const uint bytesPerFrame = _outBytesPerSample * (_stereo ? 2 : 1);
 	assert(len % bytesPerFrame == 0);
@@ -657,6 +691,9 @@ int MixerImpl::getVolumeForSoundType(SoundType type) const {
 #pragma mark --- Channel implementations ---
 #pragma mark -
 
+/** See mixer.h */
+bool g_mixerSimulated = false;
+
 Channel::Channel(Mixer *mixer, Mixer::SoundType type, AudioStream *stream,
 				 DisposeAfterUse::Flag autofreeStream, bool reverseStereo, int id, bool permanent)
 	: _type(type), _mixer(mixer), _id(id), _permanent(permanent), _volume(Mixer::kMaxChannelVolume),
@@ -786,6 +823,8 @@ Timestamp Channel::getElapsedTime() const {
 
 	if (isPaused())
 		delta = _pauseStartTime - _mixerTimeStamp;
+	else if (g_mixerSimulated)
+		delta = 0; // the sound moves on in steps of simulated time, not with the real time between two steps
 	else
 		delta = g_system->getMillis(true) - _mixerTimeStamp - _pauseTime;
 

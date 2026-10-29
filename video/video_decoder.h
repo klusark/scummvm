@@ -50,6 +50,10 @@ namespace Video {
 /**
  * Generic interface for video decoder classes.
  */
+/** With g_videoSimulated the video clock is g_videoSimMillis (set by the engine) instead of the system clock */
+extern bool g_videoSimulated;
+extern uint32 g_videoSimMillis;
+
 class VideoDecoder {
 public:
 	VideoDecoder();

@@ -105,6 +105,7 @@ void SmushPlayer::handleFrame() {
 			if (!_currentVideoIsTheora) {
 				_smushDecoder->rewind(); // This doesn't handle if looping fails.
 				_smushDecoder->start();
+				applyClockScale();
 			}
 		}
 	}
@@ -121,6 +122,7 @@ void SmushPlayer::restore(SaveGame *state) {
 	if (isPlaying() && !_currentVideoIsTheora) {
 		_smushDecoder->seek((uint32)_movieTime);
 		_smushDecoder->start();
+		applyClockScale();
 		timerCallback(this);
 	}
 }

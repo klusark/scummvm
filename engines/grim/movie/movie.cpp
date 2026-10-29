@@ -23,6 +23,7 @@
 
 #include "common/system.h"
 #include "common/timer.h"
+#include "common/config-manager.h"
 
 #include "engines/grim/movie/movie.h"
 #include "engines/grim/gfx_base.h"
@@ -85,6 +86,16 @@ void MoviePlayer::timerCallback(void *instance) {
 		movie->postHandleFrame();
 }
 
+void MoviePlayer::simulate() {
+	// a few frames at most, a movie that cannot keep up must not hold the engine
+	for (int i = 0; i < 20; i++) {
+		Common::StackLock lock(_frameMutex);
+		if (!prepareFrame())
+			break;
+		postHandleFrame();
+	}
+}
+
 bool MoviePlayer::prepareFrame() {
 	if (!_videoLooping && _videoDecoder->endOfVideo()) {
 		_videoFinished = true;
@@ -145,7 +156,9 @@ void MoviePlayer::drawMovieSubtitle() {
 
 void MoviePlayer::init() {
 	if (!_timerStarted) {
-		g_system->getTimerManager()->installTimerProc(&timerCallback, 10000, this, "movieLoop");
+		// (with --sim-fps the engine decodes the frames itself, see simulate())
+		if (!ConfMan.hasKey("sim_fps"))
+			g_system->getTimerManager()->installTimerProc(&timerCallback, 10000, this, "movieLoop");
 		_timerStarted = true;
 	}
 
@@ -173,6 +186,12 @@ void MoviePlayer::deinit() {
 	_videoFinished = true;
 }
 
+void MoviePlayer::applyClockScale() {
+	float scale = g_grim->getClockScale();
+	if (scale != 1.0f)
+		_videoDecoder->setRate(Common::Rational((int)(scale * 100 + 0.5f), 100));
+}
+
 bool MoviePlayer::play(const Common::String &filename, bool looping, int x, int y, bool start, bool showSubtitles) {
 	Common::StackLock lock(_frameMutex);
 	deinit();
@@ -195,6 +214,7 @@ bool MoviePlayer::play(const Common::String &filename, bool looping, int x, int 
 
 	if (start) {
 		_videoDecoder->start();
+		applyClockScale();
 
 		// Get the first frame immediately
 		timerCallback(this);

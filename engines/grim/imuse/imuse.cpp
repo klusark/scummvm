@@ -21,6 +21,7 @@
 
 #include "common/textconsole.h"
 #include "common/timer.h"
+#include "common/config-manager.h"
 
 #include "engines/grim/savegame.h"
 #include "engines/grim/debug.h"
@@ -68,7 +69,17 @@ Imuse::Imuse(int fps, bool demo) {
 		_stateMusicTable = grimStateMusicTable;
 		_seqMusicTable = grimSeqMusicTable;
 	}
-	g_system->getTimerManager()->installTimerProc(timerHandler, 1000000 / _callbackFps, this, "imuseCallback");
+	// With --sim-fps the engine runs the callback itself, in steps of simulated time (see simulate())
+	if (!ConfMan.hasKey("sim_fps"))
+		g_system->getTimerManager()->installTimerProc(timerHandler, 1000000 / _callbackFps, this, "imuseCallback");
+}
+
+void Imuse::simulate(uint32 totalMs) {
+	uint64 due = (uint64)totalMs * _callbackFps / 1000;
+	while (_simTicks < due) {
+		_simTicks++;
+		callback();
+	}
 }
 
 Imuse::~Imuse() {
