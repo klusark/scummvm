@@ -74,6 +74,7 @@ public:
 	virtual void restoreState(SaveGame *state);
 protected:
 	void setKeys(int startTime, int stopTime);
+	void updateGrim(uint time);
 	virtual void fade(Animation::FadeMode, uint msecs);
 	Component *getComponentForTrack(int i) const;
 
