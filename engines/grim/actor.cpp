@@ -962,7 +962,48 @@ void Actor::doWalkForward() {
 		_walkedCur = true;
 	}
 
-	_walking = false;
+	if (g_grim->getGameType() != GType_GRIM)
+		_walking = false;
+
+	if (g_grim->getGameType() == GType_GRIM && _followBoxes && grimRuleOn("walk_sectors")) {
+		// Actor_UpdateWalker (FUN_00491110): the step over the sectors, with the turn keys that forbid a turn at an edge
+		ensureHeading();
+		if (!_hSector)
+			updateHeadingSector();
+		const Math::Vector3d before = _pos;
+		const bool keyA = _running || _turnKey != -1;
+		const bool keyB = _running || _turnKey != 1;
+		const bool done = grimWalkSectors(dist, keyA, keyB);
+		if (done || (_pos - before).getMagnitude() > 0.0001f)
+			_walkedCur = true;
+		const Math::Vector3d after = _pos;
+		_pos = before;
+		moveTo(after);
+		return;
+	}
+
+	if (_constrained) {
+		// Along the line of the constraint, either way: a heading further off the line than the reflection angle does
+		// not move the actor
+		Sector *sector = nullptr;
+		if (g_grim->getCurrSet())
+			sector = g_grim->getCurrSet()->findPointSector(_pos, Sector::WalkType);
+		Math::Vector3d up = sector ? sector->getNormal() : Math::Vector3d(0.f, 0.f, 1.f);
+		Math::Vector3d forward(-moveSine(), moveCosine(), 0.f);
+		if (sector) {
+			forward = sector->getProjectionToPuckVector(forward);
+			forward.normalize();
+		}
+		Math::Vector3d right = Math::Vector3d::crossProduct(forward, up);
+		if (fabsf(Math::Angle::arcSine(CLIP(right.dotProduct(_constrainDir), -1.f, 1.f)).getDegrees()) > _reflectionAngle)
+			return;
+		Math::Vector3d dir = forward.dotProduct(_constrainDir) > 0 ? _constrainDir : -_constrainDir;
+		if (g_grim->getGameType() == GType_GRIM)
+			setHeadingVector(dir.x(), dir.y(), dir.z());
+		else
+			_moveYaw = Math::Angle::arcTangent2(-dir.x(), dir.y());
+		_yaw = _moveYaw;
+	}
 
 	if (!_followBoxes) {
 		Math::Vector3d forwardVec(-moveSine() * _pitch.getCosine(),
@@ -988,11 +1029,43 @@ void Actor::doWalkForward() {
 	}
 
 	int tries = 0;
+	bool gapJumped = false; // (once in a call: two thin sectors a gap apart would send the walk back and forth for ever)
+	// The edge rules of the original (FUN_004a8610) are ported for the boxes as the set file has them; the original shrinks the boxes in another way
+	// (FUN_004a9d00: the shared vertices move together) than ScummVM does, and with them shrunk the rules of ScummVM are kept; so they are for an actor
+	// that is constrained to a line (stairs, curbs: the first block of FUN_004a8610 aligns it with the line, not ported yet)
+	const bool exactEdges = g_grim->getGameType() == GType_GRIM && grimRuleOn("exact_edges");
 	while (dist > 0.0f) {
 		Sector *currSector = nullptr, *prevSector = nullptr, *startSector = nullptr;
+		// the sectors that were left in this step: the original keeps each switched off while the rest of the step is walked, so that the walk cannot go back
+		// to one of them (FUN_004a8610, the sector flag at +0x2c)
+		Common::Array<Sector *> left;
 		Sector::ExitInfo ei;
 
-		g_grim->getCurrSet()->findClosestSector(_pos, &currSector, &_pos);
+		if (g_grim->getGameType() == GType_GRIM) {
+			ensureHeading();
+			// The walker of the original keeps the sector it is in (+0x5c) and changes it only where the walk leaves it: it does not look for
+			// it again in every frame (sectors that lie over each other would give it another plane each time)
+			if (_hSector && g_grim->getCurrSet()->grimOwnsSector(_hSector))
+				currSector = const_cast<Sector *>(_hSector);
+		}
+		// EMI: the sector the actor is on is the one that holds its place (if there is none, the one under or over it, a step off in
+		// height: a stair, a platform). The closest sector in space would put an actor that has just stepped over the edge of a
+		// platform back on its edge.
+		if (g_grim->getGameType() == GType_MONKEY4) {
+			currSector = g_grim->getCurrSet()->findPointSector(_pos, Sector::WalkType);
+			if (!currSector) {
+				currSector = g_grim->getCurrSet()->findStepSector(_pos, Sector::WalkType, nullptr, 0.6f);
+				if (currSector) {
+					const float planeDist = currSector->distanceToPoint(_pos);
+					_pos -= planeDist * currSector->getNormal();
+				}
+			}
+		}
+		if (!currSector) {
+			g_grim->getCurrSet()->findClosestSector(_pos, &currSector, &_pos);
+			if (g_grim->getGameType() == GType_GRIM && currSector)
+				setHeadingSector(currSector);
+		}
 		if (!currSector) { // Shouldn't happen...
 			Math::Vector3d forwardVec(-moveSine() * _pitch.getCosine(),
 			                           moveCosine() * _pitch.getCosine(), _pitch.getSine());
@@ -1042,6 +1115,20 @@ void Actor::doWalkForward() {
 
 			Math::Vector3d puckVec = currSector->getProjectionToPuckVector(forwardVec);
 			puckVec /= puckVec.getMagnitude();
+			if (exactEdges && _headingSet && _hSector == currSector) {
+				// The walker of the original steps along the forward vector of its frame, which lies in the plane of the sector (FUN_004a8350: the
+				// vector (0, step, 0) in the frame), not along a vector made from the heading on the ground
+				puckVec = Math::Vector3d(_hFwd[0], _hFwd[1], _hFwd[2]);
+				if (backwards)
+					puckVec = -puckVec;
+			}
+			// The original first looks whether the whole step ends in the sector it is in, by the test of the sector (a point up to 2e-5 outside an edge is
+			// inside: Sector_ContainsPoint): then it moves there at once, also along an edge (FUN_004a8610)
+			if (exactEdges && currSector->isPointInSector(_pos + puckVec * dist, true)) {
+				moveTo(_pos + puckVec * dist);
+				_walkedCur = true;
+				return;
+			}
 			currSector->getExitInfo(_pos, puckVec, &ei);
 			float exitDist = (ei.exitPoint - _pos).getMagnitude();
 			if (dist < exitDist) {
@@ -1056,7 +1143,33 @@ void Actor::doWalkForward() {
 
 			// Check for an adjacent sector which can continue
 			// the path
-			currSector = g_grim->getCurrSet()->findPointSector(ei.exitPoint + (float)0.0001 * puckVec, Sector::WalkType);
+			if (exactEdges) {
+				// (the original asks for the sector at the exit point itself, with the sector it leaves switched off: FUN_004a8610)
+				left.push_back(prevSector);
+				currSector = g_grim->getCurrSet()->findPointSector(ei.exitPoint, Sector::WalkType, true, &left);
+						} else {
+			// (not the sector being left: with the tolerance of the point test its edge still counts as inside a little way on)
+			currSector = g_grim->getCurrSet()->findPointSector(ei.exitPoint + (float)0.0001 * puckVec, Sector::WalkType, prevSector);
+
+			// EMI: the floor goes up or down by a step (stairs, a platform in the Lua Bar): the next sector is the one under or over the
+			// place, whose plane is a step away; the position is set onto it below.
+			if (!currSector && g_grim->getGameType() == GType_MONKEY4)
+				currSector = g_grim->getCurrSet()->findStepSector(ei.exitPoint + (float)0.0001 * puckVec, Sector::WalkType, prevSector, 0.6f);
+
+			// EMI: neighbouring sectors of different heights can leave a gap of a few centimetres between them (the
+			// way to Meathook's front door), the walk goes on into a sector that is that close
+			if (!currSector && !gapJumped && g_grim->getGameType() == GType_MONKEY4) {
+				gapJumped = true;
+				Sector *near = nullptr;
+				Math::Vector3d nearPt;
+				const Math::Vector3d probe = ei.exitPoint + (float)0.0001 * puckVec;
+				g_grim->getCurrSet()->findClosestSector(probe, &near, &nearPt, prevSector);
+				if (near && (nearPt - probe).getMagnitude() < 0.1f) {
+					currSector = near;
+					_pos = nearPt;
+				}
+				}
+			}
 
 			// EMI: some sectors are significantly higher/lower than others.
 			if (currSector && g_grim->getGameType() == GType_MONKEY4) {
@@ -1067,6 +1180,11 @@ void Actor::doWalkForward() {
 
 			if (currSector == prevSector || currSector == startSector)
 				break;
+			if (g_grim->getGameType() == GType_GRIM && currSector && _headingSet)
+				setHeadingSector(currSector);
+			// (the original goes on for no more than 2 cm into the next sector in a frame: FUN_004a8610)
+			if (g_grim->getGameType() == GType_GRIM && currSector && dist > 0.02f)
+				dist = 0.02f;
 		}
 
 		int turnDir = 1;
@@ -1074,6 +1192,39 @@ void Actor::doWalkForward() {
 			ei.angleWithEdge = 180 - ei.angleWithEdge;
 			ei.edgeDir = -ei.edgeDir;
 			turnDir = -1;
+		}
+		if (_constrained) {
+			// A constrained actor is turned along the edge whatever the angle, the line of the constraint with it, and
+			// stops for this frame
+			if (g_grim->getGameType() == GType_GRIM)
+				turnHeadingBy(((ei.angleWithEdge + (exactEdges ? 0.2f : 1.f)) * turnDir).getDegrees());
+			else
+				_moveYaw += (ei.angleWithEdge + 1.f) * turnDir;
+			_yaw = _moveYaw;
+			_constrainDir = Math::Vector3d(-moveSine(), moveCosine(), 0.f);
+			return;
+		}
+		if (exactEdges) {
+			// The original turns along the edge by 90.2 - asin(|cos|), the angle with the edge and 0.2 degrees (FUN_004a6d10), when that is below the reflection
+			// angle, and not against a turn key that is held (unless it runs): toward the left (a positive turn) only if the key is not the right one, and the other way round
+			// (FUN_004a8610). The rest of the step is walked in the new direction.
+			float a = ei.angleWithEdge.getDegrees() + 0.2f;
+			if (!(a < _reflectionAngle))
+				return;
+			float t = a * turnDir;
+			// (an actor that runs, SetActorWalkDominate, is turned whichever key is held: the flag at +0x1bc in FUN_00491110)
+			if (!_running && !((t > 0.f && _currTurnDir != -1) || (t < 0.f && _currTurnDir != 1)))
+				return;
+			turnHeadingBy(t);
+			_movePitch = 0;
+			_moveRoll = 0;
+			_turning = true;
+			if (oldDist <= dist + 0.001f) {
+				tries++;
+				if (tries > 3)
+					break;
+			}
+			continue;
 		}
 		if (ei.angleWithEdge > _reflectionAngle)
 			return;
@@ -1083,7 +1234,14 @@ void Actor::doWalkForward() {
 		if (g_grim->getGameType() == GType_MONKEY4) {
 			ei.angleWithEdge = -ei.angleWithEdge;
 		}
-		turnTo(0, _moveYaw + ei.angleWithEdge * turnDir, 0);
+		if (g_grim->getGameType() == GType_GRIM) {
+			turnHeadingBy((ei.angleWithEdge * turnDir).getDegrees());
+			_movePitch = 0;
+			_moveRoll = 0;
+			_turning = true;
+		} else {
+			turnTo(0, _moveYaw + ei.angleWithEdge * turnDir, 0);
+		}
 
 		if (oldDist <= dist + 0.001f) {
 			// If we didn't move at all, keep trying a couple more times
@@ -1738,6 +1896,202 @@ void Actor::setFollowBoxes(bool follow) {
 	}
 	if (follow)
 		_hasFollowedBoxes = true;
+}
+
+// FUN_004a7520: the direction along the box the walker stands in. The heading goes back (or ahead, for a walk backwards) to the edge it came in through; from
+// there a point of the opposite edge, at the same fraction along it but at least 15% from the corners, is where the line goes.
+bool Actor::grimConstraintLine(float *out) const {
+	const Sector *sector = _hSector;
+	if (!sector)
+		return false;
+	const float pos[3] = { _pos.x(), _pos.y(), _pos.z() };
+	const float sgn = _wsDist <= 0.f ? 100.f : -100.f;
+	const float far[3] = { toF((LD)_hFwd[0] * sgn + pos[0]), toF((LD)_hFwd[1] * sgn + pos[1]), toF((LD)_hFwd[2] * sgn + pos[2]) };
+	float ex[3] = { 0.f, 0.f, 0.f };
+	sector->grimFindExitPoint(pos, far, ex);
+	int idx = sector->grimExitEdge();
+	if (idx == -1)
+		return false;
+	const Math::Vector3d *v = sector->getVertices();
+	const int n = sector->getNumVertices();
+	auto V = [&](int i) -> const Math::Vector3d & { return v[((i % n) + n) % n]; };
+	auto d2 = [&](const Math::Vector3d &a, const float *b) {
+		const LD dx = (LD)a.x() - b[0], dy = (LD)a.y() - b[1], dz = (LD)a.z() - b[2];
+		return (float)(dz * dz + dy * dy + dx * dx);
+	};
+	auto edgeIsAlongHeading = [&](int from, int to) {
+		// the edge from vertex 'to' to vertex 'from' against the forward vector of the walker: closer than 1 degree to it, or to its opposite
+		float e[3] = { V(from).x() - V(to).x(), V(from).y() - V(to).y(), V(from).z() - V(to).z() };
+		origNormalize3(e);
+		const LD dot = (LD)e[0] * _hFwd[0] + (LD)_hFwd[2] * e[2] + (LD)e[1] * _hFwd[1];
+		const LD ang = 90.0L - (LD)originalAsinDeg((float)dot);
+		return ang < 1.0L || 179.0L < ang;
+	};
+	if (0.0025f <= d2(V(idx), ex)) {
+		// the exit is not at the corner of the edge: when it is at the other corner of the edge and the edge runs along the heading, the edge before
+		if (d2(V(idx - 1), ex) < 0.0025f && edgeIsAlongHeading(idx - 1, idx))
+			idx = ((idx - 1) % n + n) % n;
+	} else if (edgeIsAlongHeading(idx - 1, idx)) {
+		idx = (idx + 1) % n;
+	}
+	const Math::Vector3d &vi = V(idx);
+	const Math::Vector3d &vp = V(idx - 1);
+	float dx = vp.x() - vi.x();
+	float t;
+	if (fabsf(dx) <= 1e-05f)
+		dx = 0.f;
+	if (dx == 0.f)
+		t = (float)(((LD)ex[1] - vi.y()) / ((LD)vp.y() - vi.y()));
+	else
+		t = (float)(((LD)ex[0] - vi.x()) / dx);
+	if (t < 0.15f)
+		t = 0.15f;
+	if (0.85f < t)
+		t = 0.85f;
+	const Math::Vector3d &o1 = V(idx + 1);
+	const Math::Vector3d &o2 = V(n - 2 + idx);
+	const float mx = (float)(((LD)o2.x() - o1.x()) * t + o1.x());
+	const float my = (float)(((LD)o2.y() - o1.y()) * t + o1.y());
+	const float mz = (float)(((LD)o2.z() - o1.z()) * t + o1.z());
+	out[0] = mx - ex[0];
+	out[1] = my - ex[1];
+	out[2] = mz - ex[2];
+	origNormalize3(out);
+	if (_wsDist < 0.f) {
+		out[0] = out[0] * -1.f;
+		out[1] = out[1] * -1.f;
+		out[2] = out[2] * -1.f;
+	}
+	return true;
+}
+
+// The scripts constrain the actor on stairs and curbs. Walker_SetConstraint (FUN_004a85b0): the walker is turned onto the line of the box it stands in and
+// walks only along it.
+void Actor::setConstrain(bool constrain) {
+	_constrained = false;
+	if (g_grim->getGameType() != GType_GRIM)
+		return;
+	// (the original ignores it during a walk along a path)
+	if (!constrain || _walking)
+		return;
+	ensureHeading();
+	float line[3];
+	if (!_hSector || !grimConstraintLine(line))
+		return;
+	_cvec[0] = line[0];
+	_cvec[1] = line[1];
+	_cvec[2] = line[2];
+	_hFwd[0] = line[0];
+	_hFwd[1] = line[1];
+	_hFwd[2] = line[2];
+	rebuildHeadingRight();
+	syncMoveYaw();
+	_constrained = true;
+	_constrainDir = Math::Vector3d(line[0], line[1], line[2]);
+	_yaw = Math::Angle::arcTangent2(-line[0], line[1]);
+}
+
+// FUN_004a8310: the position of the walker is set as it is; the actors it runs into are looked at once after the whole step (FUN_004939f0)
+void Actor::grimSetWalkerPos(const float *p) {
+	_pos.set(p[0], p[1], p[2]);
+}
+
+// Walker_WalkSectors (FUN_004a8610): a step of the walk. The point the step ends at (in the frame of the walker: straight ahead by the distance) is the new
+// position when it is in the sector. Else the walk goes on to the exit point of the sector, with the sector switched off so that it cannot come back to
+// it; into a sector that is there (the rest of the step, but no more than 2 cm in one frame), or, at an edge, turned along it by the angle with the edge when
+// that is below the reflection angle and the turn key that is held does not forbid it (the step goes on in the new direction).
+bool Actor::grimWalkSectors(float dist, bool turnLeft, bool turnRight) {
+	bool ret = false;
+	if (Debug::isChannelEnabled(Debug::Actors))
+		Debug::debug(Debug::Actors, "WALKSEC %s depth %d dist %.9g pos %.9g %.9g %.9g fwd %.9g %.9g %.9g constrained %d", _name.c_str(), s_wsDepth, dist, _pos.x(), _pos.y(), _pos.z(), _hFwd[0], _hFwd[1], _hFwd[2], _constrained);
+	if (s_wsDepth == 0)
+		_wsDist = dist;
+	s_wsDepth++;
+	if (_constrained) {
+		const LD d = (LD)_hRight[0] * _cvec[0] + (LD)_cvec[2] * _hRight[2] + (LD)_hRight[1] * _cvec[1];
+		const LD a = (90.0L - (LD)originalAsinDeg((float)d)) - 90.0L;
+		float turn = (float)a;
+		if ((LD)_reflectionAngle < fabsl(a))
+			return false;
+		const LD f = (LD)_hFwd[0] * _cvec[0] + (LD)_cvec[2] * _hFwd[2] + (LD)_hFwd[1] * _cvec[1];
+		if (f <= 0.L)
+			turn = -turn;
+		turnHeadingBy(turn);
+	}
+	const float local[3] = { 0.f, dist, 0.f };
+	const float frame[12] = { _hRight[0], _hRight[1], _hRight[2], _hFwd[0], _hFwd[1], _hFwd[2], _hUp[0], _hUp[1], _hUp[2], _pos.x(), _pos.y(), _pos.z() };
+	float target[3];
+	origTurn(target, local, frame, true);
+	Sector *sector = const_cast<Sector *>(_hSector);
+	if (!sector || sector->grimContains(target, true)) {
+		grimSetWalkerPos(target);
+		s_wsDepth = 0;
+		return true;
+	}
+	if (s_wsDepth > 8) {
+		s_wsDepth = 0;
+		return false;
+	}
+	const float pos[3] = { _pos.x(), _pos.y(), _pos.z() };
+	float exitPt[3];
+	float angle = sector->grimFindExitPoint(pos, target, exitPt);
+	const int exitEdge = sector->grimExitEdge();
+	sector->grimSetFree(false);
+	float rel[3] = { toF((LD)exitPt[0] - pos[0]), toF((LD)exitPt[1] - pos[1]), toF((LD)exitPt[2] - pos[2]) };
+	float local2[3];
+	origToLocal(local2, rel, frame);
+	dist = toF((LD)dist - local2[1]);
+	Sector *next = g_grim->getCurrSet()->grimSectorAt(exitPt);
+	if (Debug::isChannelEnabled(Debug::Actors))
+		Debug::debug(Debug::Actors, "WALKSEC2 sector %s exit %.9g %.9g %.9g angle %.9g edge %d next %s keys %d %d", sector->getName().c_str(), exitPt[0], exitPt[1], exitPt[2], angle, exitEdge, next ? next->getName().c_str() : "none", turnLeft, turnRight);
+	if (!next) {
+		grimSetWalkerPos(exitPt);
+		if (!(sector->getType() & 0x100)) {
+			const float aa = angle < 0.f ? -angle : angle;
+			if (_reflectionAngle <= aa || _constrained) {
+				_wsDist = _wsDist - dist;
+			} else if ((angle > 0.f && turnLeft) || (angle < 0.f && turnRight)) {
+				turnHeadingBy(angle);
+				sector->grimSetFree(true);
+				ret = grimWalkSectors(dist, true, true);
+			}
+			if (_constrained) {
+				turnHeadingBy(angle);
+				_cvec[0] = _hFwd[0];
+				_cvec[1] = _hFwd[1];
+				_cvec[2] = _hFwd[2];
+			}
+			sector->grimSetFree(true);
+			return ret;
+		}
+		// a funnel sector: along the edge that is next to the one the walk left by
+		const int n = sector->getNumVertices();
+		const int fe = sector->grimFunnelEdge();
+		if ((fe + 1) % n != exitEdge) {
+			const Math::Vector3d &fv = sector->getVertices()[fe];
+			const float crel[3] = { toF((LD)fv.x() - pos[0]), toF((LD)fv.y() - pos[1]), toF((LD)fv.z() - pos[2]) };
+			float cl[3];
+			origToLocal(cl, crel, frame);
+			if (cl[0] <= 0.f) {
+				if (angle < 3.0f)
+					angle = toF(((LD)angle - -90.0L) - -90.2L);
+			} else if (3.0f < angle) {
+				angle = toF(-90.2L - (90.0L - (LD)angle));
+			}
+			turnHeadingBy(angle);
+			ret = grimWalkSectors(dist, true, true);
+			sector->grimSetFree(true);
+			return ret;
+		}
+		return false;
+	}
+	grimSetWalkerPos(exitPt);
+	setHeadingSector(next);
+	if (0.02f <= dist)
+		dist = 0.02f;
+	ret = grimWalkSectors(dist, true, true);
+	sector->grimSetFree(true);
+	return ret;
 }
 
 // ---- The heading of a Grim actor, as the original keeps it ----
