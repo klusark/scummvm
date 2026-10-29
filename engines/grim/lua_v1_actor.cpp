@@ -772,8 +772,18 @@ void Lua_V1::GetActorCostume() {
 	if (lua_isnil(costumeObj)) {
 		// dummy
 	} else if (lua_isnumber(costumeObj)) {
-		//int num = (int)lua_getnumber(costumeObj);
-		error("GetActorCostume: implement number Id");
+		// The costumes are counted from the top of the stack.
+		int num = (int)lua_getnumber(costumeObj);
+		int idx = actor->getCostumeStackDepth() - 1 - num;
+		costume = nullptr;
+		if (num >= 0 && idx >= 0) {
+			for (Costume *c : actor->getCostumes()) {
+				if (idx-- == 0) {
+					costume = c;
+					break;
+				}
+			}
+		}
 	} else
 		return;
 
@@ -814,7 +824,7 @@ void Lua_V1::PrintActorCostumes() {
 void Lua_V1::LoadCostume() {
 	lua_Object nameObj = lua_getparam(1);
 	if (lua_isstring(nameObj)) {
-		// FIXME disable loading costume due creating issue with colormap, this opcode is unknown purpose
+		// (Lua_LoadCostume, 0x49f040: only brings the costume into the resource cache)
 		//const char *name = lua_getstring(nameObj);
 		//g_resourceloader->loadCostume(name, NULL);
 	} else
@@ -941,7 +951,9 @@ void Lua_V1::SetActorChoreLooping() {
 		int chore = (int)lua_getnumber(choreObj);
 		costume->setChoreLooping(chore, getbool(3));
 	} else if (lua_isnil(choreObj)) {
-		error("SetActorChoreLooping: implement nil case");
+		for (int i = 0; i < costume->getNumChores(); i++) {
+			costume->setChoreLooping(i, getbool(3));
+		}
 	}
 }
 
