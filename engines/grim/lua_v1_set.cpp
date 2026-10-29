@@ -150,8 +150,10 @@ void Lua_V1::GetSectorOppositeEdge() {
 	lua_Object actorObj = lua_getparam(1);
 	lua_Object nameObj = lua_getparam(2);
 
-	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R'))
+	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R')) {
+		lua_pushnil();
 		return;
+	}
 
 	if (!lua_isstring(nameObj)) {
 		lua_pushnil();

@@ -81,7 +81,7 @@ void Lua_V1::SetActorTalkColor() {
 
 	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R'))
 		return;
-	if (!lua_isuserdata(colorObj) && lua_tag(colorObj) != MKTAG('C','O','L','R'))
+	if (!lua_isuserdata(colorObj) || lua_tag(colorObj) != MKTAG('C','O','L','R'))
 		return;
 	Actor *actor = getactor(actorObj);
 	actor->setTalkColor(getcolor(colorObj));
@@ -1587,7 +1587,7 @@ void Lua_V1::SetActorClipPlane() {
 		return;
 	}
 	if (!lua_isnumber(normalXObj) || !lua_isnumber(normalYObj) || !lua_isnumber(normalZObj) ||
-	    !lua_isnumber(pointXObj) || !lua_isnumber(pointXObj) || !lua_isnumber(pointXObj)) {
+	    !lua_isnumber(pointXObj) || !lua_isnumber(pointYObj) || !lua_isnumber(pointZObj)) {
 		return;
 	}
 	/*Actor *actor =*/ getactor(actorObj);
@@ -1626,7 +1626,7 @@ void Lua_V1::SetActorFrustrumCull() {
 	lua_Object actorObj = lua_getparam(1);
 	lua_Object stateObj = lua_getparam(2);
 
-	if (!lua_isuserdata(actorObj) || actorObj == LUA_NOOBJECT) {
+	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R')) {
 		return;
 	}
 	/*Actor *actor =*/ getactor(actorObj);
