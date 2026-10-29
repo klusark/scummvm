@@ -991,6 +991,7 @@ struct luaL_reg grimMainOpcodes[] = {
 	{ "TextFileGetLineCount", LUA_OPCODE(Lua_V1, TextFileGetLineCount) },
 	{ "TextFileGetLine", LUA_OPCODE(Lua_V1, TextFileGetLine) },
 	{ "ScreenShot", LUA_OPCODE(Lua_V1, ScreenShot) },
+	{ "DumpFrame", LUA_OPCODE(Lua_V1, DumpFrame) },
 	{ "GetSaveGameImage", LUA_OPCODE(Lua_V1, GetSaveGameImage) },
 	{ "GetImage", LUA_OPCODE(Lua_V1, GetImage) },
 	{ "FreeImage", LUA_OPCODE(Lua_V1, FreeImage) },
@@ -1016,8 +1017,10 @@ struct luaL_reg grimMainOpcodes[] = {
 	{ "GetMemoryUsage", LUA_OPCODE(Lua_V1, GetMemoryUsage) },
 	{ "dofile", LUA_OPCODE(Lua_V1, new_dofile) },
 	// the saved games refer to the opcodes by number, so new ones go to the end
+	{ "DumpSectors", LUA_OPCODE(Lua_V1, DumpSectors) },
 	{ "IsSectorActive", LUA_OPCODE(Lua_V1, IsSectorActive) },
 	{ "GetActorTurnRate", LUA_OPCODE(Lua_V1, GetActorTurnRate) },
+	{ "DumpFrame", LUA_OPCODE(Lua_V1, DumpFrame) }
 };
 
 static struct luaL_reg grimTextOpcodes[] = {
@@ -1099,6 +1102,7 @@ void Lua_V1::boot() {
 
 void Lua_V1::postRestoreHandle() {
 	// the save does not know the builtins added after it was made
+	lua_register("DumpSectors", LUA_OPCODE(Lua_V1, DumpSectors));
 	lua_register("IsSectorActive", LUA_OPCODE(Lua_V1, IsSectorActive));
 
 	if (g_grim->getGameType() == GType_GRIM) {
