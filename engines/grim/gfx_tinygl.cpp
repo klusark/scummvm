@@ -49,7 +49,7 @@ GfxBase *CreateGfxTinyGL() {
 
 GfxTinyGL::GfxTinyGL() :
 		_alpha(1.f),
-		_currentActor(nullptr), _smushImage(nullptr),
+		_currentActor(nullptr), _clipActive(false), _smushImage(nullptr),
 		_storedDisplay(nullptr), _redrawAll(false) {
 	type = Graphics::RendererType::kRendererTypeTinyGL;
 	// TGL_LEQUAL as tglDepthFunc ensures that subsequent drawing attempts for
@@ -567,13 +567,29 @@ void GfxTinyGL::startActorDraw(const Actor *actor) {
 		const Math::Quaternion &quat = actor->getRotationQuat();
 		const float &scale = actor->getScale();
 
+		tglGetFloatv(TGL_MODELVIEW_MATRIX, _actorView);
 		tglTranslatef(pos.x(), pos.y(), pos.z());
 		tglScalef(scale, scale, scale);
 		tglMultMatrixf(quat.toMatrix().getData());
 	}
 }
 
+void GfxTinyGL::setActorClip(bool enable, const Math::Vector3d &normal, const Math::Vector3d &point) {
+	if (g_grim->getGameType() != GType_GRIM)
+		return;
+	_clipActive = enable;
+	if (!enable)
+		return;
+	// the view of the camera on the normal and the point (TinyGL has no clip planes of its own: drawModelFace cuts the polygons)
+	const TGLfloat *m = _actorView;
+	for (int i = 0; i < 3; i++) {
+		_clipNormal[i] = m[i] * normal.x() + m[4 + i] * normal.y() + m[8 + i] * normal.z();
+		_clipPoint[i] = m[i] * point.x() + m[4 + i] * point.y() + m[8 + i] * point.z() + m[12 + i];
+	}
+}
+
 void GfxTinyGL::finishActorDraw() {
+	_clipActive = false;
 	tglMatrixMode(TGL_MODELVIEW);
 	tglPopMatrix();
 	tglMatrixMode(TGL_PROJECTION);
@@ -735,6 +751,65 @@ void GfxTinyGL::drawEMIModelFace(const EMIModel *model, const EMIMeshFace *face)
 		tglDepthMask(TGL_TRUE);
 }
 
+// The polygon cut by the plane of the clip of the actor: what is on the side the normal points to is kept (the original cuts the polygons of its meshes
+// in the eye space, FUN_0044ea50), the vertices on the plane are interpolated with the normals and the texture coordinates.
+void GfxTinyGL::drawClippedFace(const Mesh *mesh, const MeshFace *face) {
+	struct Vertex {
+		float pos[3], normal[3], tex[2];
+	};
+	TGLfloat m[16];
+	tglGetFloatv(TGL_MODELVIEW_MATRIX, m);
+	const int count = face->getNumVertices();
+	Vertex in[16], out[17];
+	float dist[16];
+	if (count > 16)
+		return;
+	for (int i = 0; i < count; i++) {
+		const float *v = mesh->_vertices + 3 * face->getVertex(i);
+		const float *n = mesh->_vertNormals + 3 * face->getVertex(i);
+		for (int c = 0; c < 3; c++) {
+			in[i].pos[c] = v[c];
+			in[i].normal[c] = n[c];
+		}
+		in[i].tex[0] = in[i].tex[1] = 0.f;
+		if (face->hasTexture()) {
+			const float *t = mesh->_textureVerts + 2 * face->getTextureVertex(i);
+			in[i].tex[0] = t[0];
+			in[i].tex[1] = t[1];
+		}
+		float e[3];
+		for (int c = 0; c < 3; c++)
+			e[c] = m[c] * v[0] + m[4 + c] * v[1] + m[8 + c] * v[2] + m[12 + c];
+		dist[i] = (e[0] - _clipPoint[0]) * _clipNormal[0] + (e[1] - _clipPoint[1]) * _clipNormal[1] + (e[2] - _clipPoint[2]) * _clipNormal[2];
+	}
+	int outCount = 0;
+	for (int i = 0; i < count; i++) {
+		const int j = (i + 1) % count;
+		if (dist[i] >= 0.f)
+			out[outCount++] = in[i];
+		if ((dist[i] >= 0.f) != (dist[j] >= 0.f)) {
+			const float t = dist[i] / (dist[i] - dist[j]);
+			Vertex &cut = out[outCount++];
+			for (int c = 0; c < 3; c++) {
+				cut.pos[c] = in[i].pos[c] + (in[j].pos[c] - in[i].pos[c]) * t;
+				cut.normal[c] = in[i].normal[c] + (in[j].normal[c] - in[i].normal[c]) * t;
+			}
+			cut.tex[0] = in[i].tex[0] + (in[j].tex[0] - in[i].tex[0]) * t;
+			cut.tex[1] = in[i].tex[1] + (in[j].tex[1] - in[i].tex[1]) * t;
+		}
+	}
+	if (outCount < 3)
+		return;
+	tglBegin(TGL_POLYGON);
+	for (int i = 0; i < outCount; i++) {
+		tglNormal3fv(out[i].normal);
+		if (face->hasTexture())
+			tglTexCoord2fv(out[i].tex);
+		tglVertex3fv(out[i].pos);
+	}
+	tglEnd();
+}
+
 void GfxTinyGL::drawModelFace(const Mesh *mesh, const MeshFace *face) {
 	// Support transparency in actor objects, such as the message tube
 	// in Manny's Office
@@ -744,6 +819,11 @@ void GfxTinyGL::drawModelFace(const Mesh *mesh, const MeshFace *face) {
 	tglAlphaFunc(TGL_GREATER, 0.5);
 	tglEnable(TGL_ALPHA_TEST);
 	tglNormal3fv(const_cast<float *>(face->getNormal().getData()));
+	if (_clipActive) {
+		drawClippedFace(mesh, face);
+		tglDisable(TGL_ALPHA_TEST);
+		return;
+	}
 	tglBegin(TGL_POLYGON);
 	for (int i = 0; i < face->getNumVertices(); i++) {
 		tglNormal3fv(vertNormals + 3 * face->getVertex(i));

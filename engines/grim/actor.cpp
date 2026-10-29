@@ -47,7 +47,8 @@
 namespace Grim {
 
 Shadow::Shadow() :
-		active(false), dontNegate(false), userData(nullptr) {
+		active(false), dontNegate(false), valid(0), planeDist(0.f), userData(nullptr) {
+	planeNormal[0] = planeNormal[1] = planeNormal[2] = 0.f;
 }
 
 static int animTurn(float turnAmt, const Math::Angle &dest, Math::Angle *cur) {
@@ -100,6 +101,7 @@ static bool grimRuleOn(const char *key) {
 
 bool Actor::_isTalkingBackground = false;
 int Actor::s_wsDepth = 0;
+const Actor *Actor::s_drawnActor = nullptr;
 
 void Actor::saveStaticState(SaveGame *state) {
 	state->writeBool(_isTalkingBackground);
@@ -3003,14 +3005,62 @@ void Actor::drawCostume(Costume *costume) {
 
 	// normal draw actor
 	g_driver->startActorDraw(this);
+	const bool clipped = g_grim->getGameType() == GType_GRIM && _clipActive != 0 && grimRuleOn("clip_plane");
+	if (clipped)
+		g_driver->setActorClip(true, _clipNormal, _clipPoint);
+	s_drawnActor = this;
 	costume->draw();
+	s_drawnActor = nullptr;
+	if (clipped)
+		g_driver->setActorClip(false, _clipNormal, _clipPoint);
 	g_driver->finishActorDraw();
+}
+
+// SetActorClipPlane: the normal is made a unit vector (FUN_004469a0)
+void Actor::setClipPlane(const Math::Vector3d &normal, const Math::Vector3d &point) {
+	typedef long double LD;
+	float n[3] = { normal.x(), normal.y(), normal.z() };
+	const LD len = sqrtl((LD)n[0] * n[0] + (LD)n[2] * n[2] + (LD)n[1] * n[1]);
+	if (len != 0.L) {
+		const LD inv = 1.L / len;
+		n[0] = (float)(inv * n[0]);
+		n[1] = (float)(n[1] * inv);
+		n[2] = (float)(n[2] * inv);
+	}
+	_clipNormal.set(n[0], n[1], n[2]);
+	_clipPoint = point;
+}
+
+// The plane for the item that is hung on the node of SetActorInvClipNode: through the actor, with the way it faces (the second row of its matrix) as the normal
+bool Actor::getInvClipPlane(Math::Vector3d &normal, Math::Vector3d &point) const {
+	if (_invClipNode < 0 || !grimRuleOn("clip_plane"))
+		return false;
+	float m[12];
+	origActorMatrix(m, _pitch.getDegrees(), _yaw.getDegrees(), _roll.getDegrees(), _pos);
+	normal.set(m[3], m[4], m[5]);
+	point = _pos;
+	return true;
 }
 
 void Actor::setShadowPlane(const char *n) {
 	assert(_activeShadowSlot != -1);
 
 	_shadowArray[_activeShadowSlot].name = n;
+
+	if (g_grim->getGameType() != GType_GRIM)
+		return;
+	// (the plane of the sector the shadow is cast on, kept for the side test of SetActorShadowValid: FUN_00493570; the test is off again)
+	Set *set = g_grim->getCurrSet();
+	Sector *sector = set ? set->getSectorByName(n) : nullptr;
+	if (sector) {
+		typedef long double LD;
+		Shadow &shadow = _shadowArray[_activeShadowSlot];
+		float origin[3];
+		int axisA, axisB;
+		sector->grimPlane(shadow.planeNormal, origin, axisA, axisB);
+		shadow.planeDist = (float)-((LD)origin[0] * shadow.planeNormal[0] + (LD)origin[1] * shadow.planeNormal[1] + (LD)origin[2] * shadow.planeNormal[2]);
+		shadow.valid = 0;
+	}
 }
 
 void Actor::addShadowPlane(const char *n, Set *scene, int shadowId) {
@@ -3041,6 +3091,15 @@ bool Actor::shouldDrawShadow(int shadowId) {
 
 	if (shadow->planeList.size() == 0)
 		return false;
+
+	if (g_grim->getGameType() == GType_GRIM && grimRuleOn("shadow_valid")) {
+		// (the original only looks at the side of the plane the actor stands on, when SetActorShadowValid asked for it: FUN_004936e0)
+		if (shadow->valid == 0)
+			return true;
+		const float f = _pos.y() * shadow->planeNormal[1] + _pos.z() * shadow->planeNormal[2] + _pos.x() * shadow->planeNormal[0] + shadow->planeDist;
+		return (shadow->valid != -1 || f <= 0.f) && (shadow->valid != 1 || f >= 0.f);
+	}
+
 	Sector *sector = shadow->planeList.front().sector;
 	Math::Vector3d n = sector->getNormal();
 	Math::Vector3d p = sector->getVertices()[0];
@@ -3072,6 +3131,7 @@ void Actor::setActiveShadow(int shadowId) {
 }
 
 void Actor::setShadowValid(int valid) {
+	_shadowArray[_activeShadowSlot].valid = valid;
 	if (valid == -1)
 		_shadowArray[_activeShadowSlot].dontNegate = true;
 	else
@@ -3110,6 +3170,7 @@ void Actor::clearShadowPlane(int i) {
 	}
 	shadow->active = false;
 	shadow->dontNegate = false;
+	shadow->valid = 0;
 
 	g_driver->destroyShadow(shadow);
 }
@@ -3924,7 +3985,7 @@ void Actor::activateShadow(bool active, SetShadow *setShadow) {
 		setShadowPoint(setShadow->_shadowPoint);
 		setShadowPlane(setShadow->_name.c_str());
 		setShadowColor(setShadow->_color);
-		setShadowValid(-1); // Don't negate the normal.
+		_shadowArray[_activeShadowSlot].dontNegate = true; // Don't negate the normal.
 
 		Common::List<Common::String>::iterator it;
 		for (it = setShadow->_sectorNames.begin(); it != setShadow->_sectorNames.end(); ++it) {

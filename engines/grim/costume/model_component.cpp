@@ -87,6 +87,7 @@ void ModelComponent::init() {
 			_obj = g_resourceloader->loadModel(_name, cm, mc->getModel());
 			_hier = _obj->getHierarchy();
 			mc->getNode()->addChild(_hier);
+			_hier->_attachNode = mc->getNum();
 		} else {
 			_obj = g_resourceloader->loadModel(_name, cm);
 			_hier = _obj->getHierarchy();

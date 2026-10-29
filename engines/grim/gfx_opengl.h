@@ -63,6 +63,7 @@ public:
 
 	void startActorDraw(const Actor *actor) override;
 	void finishActorDraw() override;
+	void setActorClip(bool enable, const Math::Vector3d &normal, const Math::Vector3d &point) override;
 	void setShadow(Shadow *shadow) override;
 	void drawShadowPlanes() override;
 	void setShadowMode() override;
@@ -146,6 +147,8 @@ private:
 	GLint _maxLights;
 	float _alpha;
 	const Actor *_currentActor;
+	/** The view of the camera as it is when an actor is started (the clip plane of an actor is given in the world) */
+	GLfloat _actorView[16];
 	GLenum _depthFunc;
 
 	void readPixels(int x, int y, int width, int height, uint8 *buffer);

@@ -1608,10 +1608,9 @@ void Lua_V1::SetActorShadowValid() {
 		return;
 	}
 	Actor *actor = getactor(actorObj);
-	int valid = (int)lua_getnumber(numObj);
+	int valid = (int)floorf(lua_getnumber(numObj) + 0.5f);
 
-	warning("SetActorShadowValid(%d) unknown purpose", valid);
-
+	// The shadow of the actor is drawn only on one side of its plane (0: on both)
 	actor->setShadowValid(valid);
 }
 
@@ -1647,21 +1646,13 @@ void Lua_V1::SetActorInvClipNode() {
 	if (!lua_isuserdata(actorObj) || actorObj == LUA_NOOBJECT) {
 		return;
 	}
-	/*Actor *actor =*/ getactor(actorObj);
-	int nodeId = (int)lua_getnumber(nodeObj);
+	Actor *actor = getactor(actorObj);
+	int nodeId = lua_isnil(nodeObj) ? -1 : (int)floorf(lua_getnumber(nodeObj) + 0.5f);
 
-	// Game script in grim fandango using it on animation of take in/out things from inventory.
-	// It's unknown purpose of this opcode.
-	//
-	// The node id is 13 'null18' which is between 'hand' and 'thumb'.
-	// Opcode with above node id is used on starting animation.
-	// Exception is when take out 'scythe', then node id is -1.
-	//
-	// The node id -1 is when animation finished.
-	//
-	// This looks like original renderer specific.
-	// There is no known visual differences between lack implementation and original.
-	debug(2, "Stub function: SetActorInvClipNode(%d)", nodeId);
+	// The inventory animations (taking an item in or out of the pocket) use node 13 ('null18', between the hand and the thumb),
+	// -1 when they are over: what hangs on that node is clipped by the plane through the actor, so that the item is not seen
+	// through the body.
+	actor->setInvClipNode(nodeId);
 }
 
 void Lua_V1::SetActorClipPlane() {
@@ -1680,17 +1671,10 @@ void Lua_V1::SetActorClipPlane() {
 	    !lua_isnumber(pointXObj) || !lua_isnumber(pointYObj) || !lua_isnumber(pointZObj)) {
 		return;
 	}
-	/*Actor *actor =*/ getactor(actorObj);
-	// This is triggered in few places:
-	// 'Beaver Dam' - while using firing extinguisher after throughing a bone
-	// 'Engines Porthole - Dock', - press button trigger anchor up/down
-	// 'Engines Porthole - Ocean' - anchor scene
-	// 'High Rollers Dillopede' - lift scene
-	// This looks like original renderer specific.
-	// There is no known visual differences between lack implementation and original.
-	debug(2, "Stub function: SetActorClipPlane(norm(%f, %f, %f), point(%f, %f, %f)",
-	         lua_getnumber(normalXObj), lua_getnumber(normalYObj), lua_getnumber(normalZObj),
-	         lua_getnumber(pointXObj), lua_getnumber(pointYObj), lua_getnumber(pointZObj));
+	Actor *actor = getactor(actorObj);
+	// Used in the Beaver Dam (the fire extinguisher), the Engines Porthole (the anchor) and for the lift of the Dillopede
+	actor->setClipPlane(Math::Vector3d(lua_getnumber(normalXObj), lua_getnumber(normalYObj), lua_getnumber(normalZObj)),
+	                    Math::Vector3d(lua_getnumber(pointXObj), lua_getnumber(pointYObj), lua_getnumber(pointZObj)));
 }
 
 void Lua_V1::SetActorClipActive() {
@@ -1700,16 +1684,8 @@ void Lua_V1::SetActorClipActive() {
 	if (!lua_isuserdata(actorObj) || actorObj == LUA_NOOBJECT) {
 		return;
 	}
-	/*Actor *actor =*/ getactor(actorObj);
-	int state = (int)lua_getnumber(stateObj);
-	// This is triggered in few places:
-	// 'Beaver Dam' - while using firing extinguisher after throughing a bone
-	// 'Engines Porthole - Dock', - press button trigger anchor up/down
-	// 'Engines Porthole - Ocean' - anchor scene
-	// 'High Rollers Dillopede' - lift scene
-	// This looks like original renderer specific.
-	// There is no known visual differences between lack implementation and original.
-	debug(2, "Stub function: SetActorClipActive(%d)", state);
+	Actor *actor = getactor(actorObj);
+	actor->setClipActive((int)floorf(lua_getnumber(stateObj) + 0.5f));
 }
 
 void Lua_V1::SetActorFrustrumCull() {
@@ -1719,16 +1695,10 @@ void Lua_V1::SetActorFrustrumCull() {
 	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R')) {
 		return;
 	}
-	/*Actor *actor =*/ getactor(actorObj);
-	int state = (int)lua_getnumber(stateObj);
-
-	// it's called in 3 places:
-	// - 'End of the World Overview', dropping crane into water
-	// - 'Beaver Warning Sign' - leaving bone wagon
-	// - 'High Rollers Dillopede Hall' - while cutscene after taking suitcase
-	// This looks like original renderer specific.
-	// We don't implement frustrum culling, so we are not affected.
-	debug(2, "Stub function: SetActorFrustrumCull(%d)", state);
+	Actor *actor = getactor(actorObj);
+	// Called for the crane at the End of the World, for the sign at the Beaver Dam and in the Dillopede Hall. The original does not draw an actor
+	// that is outside of the view; ScummVM leaves that to the renderer, so the flag changes nothing that is seen.
+	actor->setFrustumCull(floorf(lua_getnumber(stateObj) + 0.5f) != 0.f);
 }
 
 void Lua_V1::DriveActorTo() {

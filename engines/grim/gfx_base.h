@@ -114,6 +114,8 @@ public:
 	virtual void getActorScreenBBox(const Actor *actor, Common::Point &p1, Common::Point &p2) = 0;
 	virtual void startActorDraw(const Actor *act) = 0;
 	virtual void finishActorDraw() = 0;
+	/** The plane an actor is clipped by (in the world; what is on the side the normal points to is kept), switched on and off while an actor is drawn */
+	virtual void setActorClip(bool enable, const Math::Vector3d &normal, const Math::Vector3d &point) {}
 	virtual void setShadow(Shadow *shadow) = 0;
 	virtual void drawShadowPlanes() = 0;
 	virtual void setShadowMode();

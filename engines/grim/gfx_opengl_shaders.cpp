@@ -923,6 +923,19 @@ void GfxOpenGLS::startActorDraw(const Actor *actor) {
 	}
 }
 
+void GfxOpenGLS::setActorClip(bool enable, const Math::Vector3d &normal, const Math::Vector3d &point) {
+	if (g_grim->getGameType() != GType_GRIM)
+		return;
+	const Math::Vector4d plane(normal.x(), normal.y(), normal.z(), -normal.dotProduct(point));
+	OpenGL::Shader *shaders[] = { _actorProgram, _actorLightsProgram };
+	for (int i = 0; i < 2; i++) {
+		shaders[i]->use();
+		shaders[i]->setUniform("clipActive", enable);
+		if (enable)
+			shaders[i]->setUniform("clipPlane", plane);
+	}
+}
+
 void GfxOpenGLS::finishActorDraw() {
 	_currentActor = nullptr;
 	glDisable(GL_POLYGON_OFFSET_FILL);

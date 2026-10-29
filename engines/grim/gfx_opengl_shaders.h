@@ -73,6 +73,7 @@ public:
 	void startActorDraw(const Actor *actor) override;
 
 	void finishActorDraw() override;
+	void setActorClip(bool enable, const Math::Vector3d &normal, const Math::Vector3d &point) override;
 	void setShadow(Shadow *shadow) override;
 	void drawShadowPlanes() override;
 	void setShadowMode() override;

@@ -66,6 +66,7 @@ public:
 
 	void startActorDraw(const Actor *actor) override;
 	void finishActorDraw() override;
+	void setActorClip(bool enable, const Math::Vector3d &normal, const Math::Vector3d &point) override;
 	void setShadow(Shadow *shadow) override;
 	void drawShadowPlanes() override;
 	void setShadowMode() override;
@@ -138,6 +139,11 @@ private:
 	Graphics::Surface *_storedDisplay;
 	float _alpha;
 	const Actor *_currentActor;
+	/** The view of the camera as it is when an actor is started, and the clip plane of the actor in the eye space (a point and a normal) */
+	TGLfloat _actorView[16];
+	bool _clipActive;
+	float _clipNormal[3], _clipPoint[3];
+	void drawClippedFace(const Mesh *mesh, const MeshFace *face);
 	TGLenum _depthFunc;
 	bool _redrawAll;
 
