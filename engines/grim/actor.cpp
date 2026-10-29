@@ -744,7 +744,11 @@ void Actor::walkTo(const Math::Vector3d &p) {
 			// the actor has to be inside a visible walkbox. A script can leave an
 			// actor outside of them, for example by enabling a sector while the
 			// inventory is open, and relies on the walk being ignored.
-			if (!currSet->findPointSector(_pos, Sector::WalkType)) {
+			// An actor standing right on the edge of a box, such as Meche in set nq after her own
+			// box is switched off, is still inside (a hand's breadth: the keys leave an actor a little off the plane of a thin sector).
+			Math::Vector3d startPt;
+			currSet->findClosestSector(_pos, nullptr, &startPt);
+			if (!currSet->findPointSector(_pos, Sector::WalkType) && (startPt - _pos).getMagnitude() > 0.1f) {
 				warning("Actor::walkTo(): %s is not inside a walkbox", _name.c_str());
 				_walking = false;
 				return;
