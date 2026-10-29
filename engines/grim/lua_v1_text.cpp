@@ -75,7 +75,10 @@ void Lua_V1::ChangeTextObject() {
 				lua_getstring(paramObj);
 
 			}
+		}
 
+		// The size is only returned once, after all the parameters have been applied
+		if (textObject) {
 			lua_pushnumber(textObject->getBitmapWidth());
 			lua_pushnumber(textObject->getBitmapHeight());
 		}
