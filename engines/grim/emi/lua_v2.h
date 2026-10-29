@@ -30,6 +30,7 @@ class Lua_V2 : public Lua_V1 {
 public:
 	typedef Lua_V2 LuaClass;
 	void registerOpcodes() override;
+	void postRestoreHandle() override;
 
 protected:
 	bool findCostume(lua_Object costumeObj, Actor *actor, Costume **costume) override;
