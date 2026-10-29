@@ -489,8 +489,8 @@ bool Set::Setup::restoreState(SaveGame *savedState) {
 
 Light::Light() : _falloffNear(0.0f), _falloffFar(0.0f), _enabled(false), _id(0) {
 	setIntensity(0.0f);
-	setUmbra(0.0f);
-	setPenumbra(0.0f);
+	setUmbraDegrees(0.0f);
+	setPenumbraDegrees(0.0f);
 }
 
 void Set::Setup::getRotation(float *x, float *y, float *z) {
@@ -541,14 +541,24 @@ void Set::Setup::setRoll(Math::Angle roll) {
 	}
 }
 
-void Light::setUmbra(float angle) {
+void Light::setUmbraDegrees(float angle) {
 	_umbraangle = angle;
 	_cosumbraangle = cosf(angle * (float)M_PI / 180.0f);
 }
 
-void Light::setPenumbra(float angle) {
+void Light::setUmbraRadians(float angle) {
+	_umbraangle = angle;
+	_cosumbraangle = cosf(angle);
+}
+
+void Light::setPenumbraDegrees(float angle) {
 	_penumbraangle = angle;
 	_cospenumbraangle = cosf(angle * (float)M_PI / 180.0f);
+}
+
+void Light::setPenumbraRadians(float angle) {
+	_penumbraangle = angle;
+	_cospenumbraangle = cosf(angle);
 }
 
 void Light::setIntensity(float intensity) {
@@ -590,9 +600,9 @@ void Light::load(TextSplitter &ts) {
 	ts.scanString(" intensity %f", 1, &tmp);
 	setIntensity(tmp);
 	ts.scanString(" umbraangle %f", 1, &tmp);
-	setUmbra(tmp);
+	setUmbraDegrees(tmp);
 	ts.scanString(" penumbraangle %f", 1, &tmp);
-	setPenumbra(tmp);
+	setPenumbraDegrees(tmp);
 
 	int r, g, b;
 	ts.scanString(" color %d %d %d", 3, &r, &g, &b);
@@ -634,8 +644,9 @@ void Light::loadBinary(Common::SeekableReadStream *data) {
 
 	_falloffNear = data->readFloatLE();
 	_falloffFar = data->readFloatLE();
-	setUmbra(data->readFloatLE());
-	setPenumbra(data->readFloatLE());
+	// the cone angles of the binary sets are in radians
+	setUmbraRadians(data->readFloatLE());
+	setPenumbraRadians(data->readFloatLE());
 
 	_enabled = true;
 }
@@ -696,8 +707,14 @@ bool Light::restoreState(SaveGame *savedState) {
 	_color         = savedState->readColor();
 
 	setIntensity(    savedState->readFloat());
-	setUmbra(        savedState->readFloat());
-	setPenumbra(     savedState->readFloat());
+	// the angles are saved as they are stored: in radians for EMI, in degrees for Grim
+	if (g_grim->getGameType() == GType_MONKEY4) {
+		setUmbraRadians(savedState->readFloat());
+		setPenumbraRadians(savedState->readFloat());
+	} else {
+		setUmbraDegrees(savedState->readFloat());
+		setPenumbraDegrees(savedState->readFloat());
+	}
 
 	if (savedState->saveMinorVersion() >= 20) {
 		_falloffNear = savedState->readFloat();

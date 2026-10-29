@@ -188,8 +188,10 @@ struct Light {
 	void saveState(SaveGame *savedState) const;
 	bool restoreState(SaveGame *savedState);
 	void setIntensity(float intensity);
-	void setUmbra(float angle);
-	void setPenumbra(float angle);
+	void setUmbraDegrees(float angle);
+	void setUmbraRadians(float angle);
+	void setPenumbraDegrees(float angle);
+	void setPenumbraRadians(float angle);
 
 	enum LightType {
 		Omni = 1,
