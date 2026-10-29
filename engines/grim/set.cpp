@@ -31,6 +31,8 @@
 #include "engines/grim/bitmap.h"
 #include "engines/grim/gfx_base.h"
 #include "engines/grim/sound.h"
+#include "engines/grim/sincos.h"
+#include "engines/grim/imuse/imuse.h"
 #include "engines/grim/emi/sound/emisound.h"
 
 #include "math/frustum.h"
@@ -1046,49 +1048,203 @@ void Set::setLightPosition(int light, const Math::Vector3d &pos) {
 	l._pos = pos;
 }
 
+// The sounds that were put in space (SetSoundPosition) and play on: the original keeps them in a list of its own (newest first), moves their volume and pan
+// when they are set and again when the setup changes, and drops the ones that have stopped (FUN_004a4e20, FUN_004a3fe0, FUN_004a4dc0)
+namespace {
+
+struct PositionedSound {
+	Common::String name;
+	Math::Vector3d pos;
+	int minVol;
+	int maxVol;
+	float scale;
+};
+
+Common::List<PositionedSound> g_positionedSounds;
+
+void dropFinishedSounds() {
+	for (Common::List<PositionedSound>::iterator it = g_positionedSounds.begin(); it != g_positionedSounds.end();) {
+		if (g_imuse->getSoundStatus(it->name.c_str()))
+			++it;
+		else
+			it = g_positionedSounds.erase(it);
+	}
+}
+
+// FUN_004469a0
+void normalize3(float *v) {
+	typedef long double LD;
+	const LD len = sqrtl((LD)v[0] * v[0] + (LD)v[2] * v[2] + (LD)v[1] * v[1]);
+	if (len != 0.L) {
+		const LD inv = 1.L / len;
+		v[0] = (float)(inv * v[0]);
+		v[1] = (float)(v[1] * inv);
+		v[2] = (float)(v[2] * inv);
+	}
+}
+
+// The unit vector to the right of a camera, as the original builds it (FUN_0044f490 with the rotation of FUN_0044f210 about the way it looks by the roll)
+void cameraRight(const Math::Vector3d &pos, const Math::Vector3d &interest, float rollDegrees, float *right) {
+	typedef long double LD;
+	float f[3] = { interest.x() - pos.x(), interest.y() - pos.y(), interest.z() - pos.z() };
+	normalize3(f);
+	float s, c;
+	originalSinCos(rollDegrees, s, c);
+	float m[12] = { 0.f };
+	float t = 1.f - f[2];
+	if (fabsf(t) <= 1e-05f)
+		t = 0.f;
+	if (t == 0.f) {
+		m[0] = c;
+		m[4] = c;
+		m[3] = -s;
+		m[1] = s;
+		m[8] = 1.f;
+	} else {
+		t = f[2] - -1.f;
+		if (fabsf(t) <= 1e-05f)
+			t = 0.f;
+		if (t != 0.f) {
+			const float xx = f[0] * f[0];
+			const float yy = f[1] * f[1];
+			const float xxc = xx * c;
+			const float zz = (1.f - xx) - yy;
+			const float yyc = yy * c;
+			const float omc = 1.f - c;
+			const float xyo = f[1] * f[0] * omc;
+			const float zxo = f[2] * f[0] * omc;
+			const float yzo = f[1] * f[2] * omc;
+			m[0] = (float)(((LD)xxc * zz + yyc) / (1.f - zz) + xx);
+			m[4] = (float)(((LD)yyc * zz + xxc) / (1.f - zz) + yy);
+			m[8] = yyc + xxc + zz;
+			m[1] = f[2] * s + xyo;
+			m[3] = xyo - f[2] * s;
+			m[2] = zxo - f[1] * s;
+			m[5] = yzo + s * f[0];
+			m[6] = zxo + f[1] * s;
+			m[7] = yzo - s * f[0];
+		} else {
+			m[0] = c;
+			m[4] = c;
+			m[1] = -s;
+			m[3] = s;
+			m[8] = 1.f;
+		}
+	}
+	float up[3] = { 0.f, 0.f, 1.f };
+	float az = fabsf(f[2]);
+	if (az > 0.999f) {
+		if (f[2] <= 0.f) {
+			up[1] = 1.f;
+			up[2] = 0.f;
+		} else {
+			up[0] = -0.f;
+			up[1] = -1.f;
+			up[2] = -0.f;
+		}
+	}
+	float u[3];
+	u[0] = (float)((LD)up[0] * m[0] + (LD)up[1] * m[3] + (LD)up[2] * m[6]);
+	u[1] = (float)((LD)m[1] * up[0] + (LD)m[4] * up[1] + (LD)up[2] * m[7]);
+	u[2] = (float)((LD)m[2] * up[0] + (LD)m[8] * up[2] + (LD)up[1] * m[5]);
+	right[0] = (float)((LD)f[1] * u[2] - (LD)f[2] * u[1]);
+	right[1] = (float)((LD)f[2] * u[0] - (LD)f[0] * u[2]);
+	right[2] = (float)((LD)f[0] * u[1] - (LD)f[1] * u[0]);
+	normalize3(right);
+}
+
+} // end of anonymous namespace
+
 void Set::setSoundPosition(const char *soundName, const Math::Vector3d &pos) {
 	setSoundPosition(soundName, pos, _minVolume, _maxVolume);
 }
 
-void Set::setSoundPosition(const char *soundName, const Math::Vector3d &pos, int minVol, int maxVol) {
-	int newBalance, newVolume;
-	calculateSoundPosition(pos, minVol, maxVol, newVolume, newBalance);
-	g_sound->setVolume(soundName, newVolume);
-	g_sound->setPan(soundName, newBalance);
+void Set::setSoundPosition(const char *soundName, const Math::Vector3d &pos, int minVol, int maxVol, float scale) {
+	if (!g_imuse->getSoundStatus(soundName))
+		return;
+	dropFinishedSounds();
+	PositionedSound s;
+	s.name = soundName;
+	s.pos = pos;
+	s.minVol = minVol;
+	s.maxVol = maxVol;
+	s.scale = scale;
+	g_positionedSounds.push_front(s);
+	int volume, balance;
+	calculateSoundPosition(pos, minVol, maxVol, scale, volume, balance);
+	if (volume >= 0)
+		g_sound->setVolume(soundName, volume);
+	g_sound->setPan(soundName, balance);
 }
 
-void Set::calculateSoundPosition(const Math::Vector3d &pos, int minVol, int maxVol, int &volume, int &balance) {
-	// TODO: The volume and pan needs to be updated when the setup changes.
-	// Note: This is only used in Grim. See SoundTrack::updatePosition for the corresponding implementation in EMI.
+void Set::updateSoundPositions() {
+	dropFinishedSounds();
+	for (Common::List<PositionedSound>::const_iterator it = g_positionedSounds.begin(); it != g_positionedSounds.end(); ++it) {
+		int volume, balance;
+		calculateSoundPosition(it->pos, it->minVol, it->maxVol, it->scale, volume, balance);
+		if (volume >= 0)
+			g_sound->setVolume(it->name.c_str(), volume);
+		g_sound->setPan(it->name.c_str(), balance);
+	}
+}
 
-	// distance calculation
-	Math::Vector3d cameraPos = _currSetup->_pos;
-	Math::Vector3d vector = pos - cameraPos;
-	float distance = vector.getMagnitude();
-	float diffVolume = maxVol - minVol;
-	// This 8.f is a guess, so it may need some adjusting
-	int newVolume = (int)(8.f * diffVolume / distance);
-	newVolume += minVol;
-	if (newVolume > _maxVolume)
-		newVolume = _maxVolume;
-	volume = newVolume;
-	float angle;
-
-	Math::Vector3d cameraVector = _currSetup->_interest - _currSetup->_pos;
-	Math::Vector3d up(0, 0, 1);
-	Math::Vector3d right;
-	cameraVector.normalize();
-	float roll = -_currSetup->_roll * (float)M_PI / 180.f;
-	float cosr = cos(roll);
-	// Rotate the up vector by roll.
-	up = up * cosr + Math::Vector3d::crossProduct(cameraVector, up) * sin(roll) +
-	     cameraVector * Math::Vector3d::dotProduct(cameraVector, up) * (1 - cosr);
-	right = Math::Vector3d::crossProduct(cameraVector, up);
-	right.normalize();
-	angle = atan2(Math::Vector3d::dotProduct(vector, right), Math::Vector3d::dotProduct(vector, cameraVector));
-
-	float pan = sin(angle);
-	balance = (int)((pan + 1.f) / 2.f * 127.f + 0.5f);
+// FUN_004a4e80: the distance is the original's rough one (FUN_00446a10, which also takes the vector to the unit length), the volume falls off
+// in a straight line from the loudest at 0.8 from the camera over `scale`, the pan is the part of that direction along the right of the camera
+void Set::calculateSoundPosition(const Math::Vector3d &pos, int minVol, int maxVol, float scale, int &volume, int &balance) const {
+	typedef long double LD;
+	volume = -1;
+	balance = 64;
+	if (!_currSetup)
+		return;
+	const float nearDist = 0.8f;
+	const float panScale = 1.5f;
+	float d[3] = { pos.x() - _currSetup->_pos.x(), pos.y() - _currSetup->_pos.y(), pos.z() - _currSetup->_pos.z() };
+	float ax = fabsf(d[0]), ay = fabsf(d[1]), az = fabsf(d[2]);
+	float mx = ax, md = ay, mn = az;
+	if (az <= ay) {
+		if (ax < ay) {
+			md = ax;
+			mx = ay;
+			if (ax < az) {
+				mn = ax;
+				md = az;
+			}
+		}
+	} else if (az <= ax) {
+		mn = ay;
+		md = az;
+	} else {
+		mn = ax;
+		mx = az;
+		if (ay < ax) {
+			mn = ay;
+			md = ax;
+		}
+	}
+	const float len = (float)((LD)mn * 0.25 + (LD)md * 0.34375 + mx);
+	const float inv = 1.f / len;
+	for (int i = 0; i < 3; i++)
+		d[i] = (float)((LD)d[i] * inv);
+	const LD t = (LD)len - nearDist;
+	if (t >= 0.L) {
+		const LD range = (LD)(uint32)(maxVol - minVol);
+		const LD v = ((LD)scale - t) * (range / scale) + minVol;
+		uint32 vol = (uint32)(int64)v;
+		if (vol < (uint32)minVol)
+			vol = minVol;
+		else if (vol > (uint32)maxVol)
+			vol = maxVol;
+		volume = vol;
+	}
+	float right[3];
+	cameraRight(_currSetup->_pos, _currSetup->_interest, _currSetup->_roll, right);
+	LD x = ((LD)right[0] * d[0] + (LD)right[1] * d[1] + (LD)right[2] * d[2]) * panScale;
+	if (x < -1.L)
+		x = -1.L;
+	else if (!(x <= 1.L))
+		x = 1.L;
+	uint32 pan = (uint32)(int64)((x - -1.L) * 64.L);
+	balance = pan > 0x7f ? 0x7f : pan;
 }
 
 Sector *Set::getSectorBase(int id) {

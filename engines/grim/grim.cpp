@@ -1569,7 +1569,7 @@ void GrimEngine::makeCurrentSetup(int num) {
 		getCurrSet()->setSetup(num);
 		getCurrSet()->setSoundParameters(20, 127);
 		cameraChangeHandle(prevSetup, num);
-		// here should be set sound position
+		getCurrSet()->updateSoundPositions();
 
 		_setupChanged = true;
 	}

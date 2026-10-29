@@ -265,7 +265,7 @@ void Lua_V1::SetSoundPosition() {
 	Math::Vector3d pos;
 	int minVolume = 10;
 	int maxVolume = 127;
-	float someParam = 0;
+	float scale = 8.f;
 	int argId = 1;
 	lua_Object paramObj;
 
@@ -285,20 +285,21 @@ void Lua_V1::SetSoundPosition() {
 		pos = actor->getPos();
 	} else if (lua_isnumber(actorObj)) {
 		float x = lua_getnumber(actorObj);
-		float y = lua_getnumber(argId++);
-		float z = lua_getnumber(argId++);
+		float y = lua_getnumber(lua_getparam(argId++));
+		float z = lua_getnumber(lua_getparam(argId++));
 		pos.set(x, y, z);
 	}
 
-	paramObj = (int)lua_getparam(argId++);
+	// (the original keeps the volumes as bytes, so that a negative one comes out above 127)
+	paramObj = lua_getparam(argId++);
 	if (lua_isnumber(paramObj)) {
-		minVolume = (int)lua_getnumber(paramObj);
+		minVolume = (uint8)(int)lua_getnumber(paramObj);
 		if (minVolume > 127)
 			minVolume = 127;
 	}
 	paramObj = lua_getparam(argId++);
 	if (lua_isnumber(paramObj)) {
-		maxVolume = (int)lua_getnumber(paramObj);
+		maxVolume = (uint8)(int)lua_getnumber(paramObj);
 		if (maxVolume > 127)
 			maxVolume = 127;
 		else if (maxVolume < minVolume)
@@ -307,9 +308,9 @@ void Lua_V1::SetSoundPosition() {
 
 	paramObj = lua_getparam(argId++);
 	if (lua_isnumber(paramObj)) {
-		someParam = (int)lua_getnumber(paramObj);
-		if (someParam < 0.0)
-			someParam = 0.0;
+		scale = lua_getnumber(paramObj);
+		if (scale < 0.f)
+			scale = 0.f;
 	}
 
 	if (g_grim->getCurrSet()) {
@@ -317,7 +318,7 @@ void Lua_V1::SetSoundPosition() {
 			error("SetSoundPosition: number is not yet supported");
 		else {
 			const char *soundName = lua_getstring(nameObj);
-			g_grim->getCurrSet()->setSoundPosition(soundName, pos, minVolume, maxVolume);
+			g_grim->getCurrSet()->setSoundPosition(soundName, pos, minVolume, maxVolume, scale);
 		}
 	}
 }

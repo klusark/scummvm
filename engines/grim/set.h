@@ -69,8 +69,10 @@ public:
 	void setupLights(const Math::Vector3d &pos, bool inOverworld);
 
 	void setSoundPosition(const char *soundName, const Math::Vector3d &pos);
-	void setSoundPosition(const char *soundName, const Math::Vector3d &pos, int minVol, int maxVol);
-	void calculateSoundPosition(const Math::Vector3d &pos, int minVol, int maxVol, int &volume, int &balance);
+	void setSoundPosition(const char *soundName, const Math::Vector3d &pos, int minVol, int maxVol, float scale = 8.0f);
+	void updateSoundPositions();
+	/** The volume and pan of a sound at pos for the camera of the current setup (FUN_004a4e80); volume is -1 when the sound is too close to change it. */
+	void calculateSoundPosition(const Math::Vector3d &pos, int minVol, int maxVol, float scale, int &volume, int &balance) const;
 	void setSoundParameters(int minVolume, int maxVolume);
 	void getSoundParameters(int *minVolume, int *maxVolume);
 
