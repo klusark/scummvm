@@ -928,10 +928,8 @@ void Lua_V2::SetActorFOV() {
 		return;
 
 	if (lua_isnumber(fovObj)) {
-		float fov = lua_getnumber(fovObj);
-		// FIXME: implement missing code
-		//actor->func(fov); // cos(fov * some tuntime val * 0.5)
-		warning("Lua_V2::SetActorFOV: implement opcode. actor: %s, param: %f", actor->getName().c_str(), fov);
+		// The original keeps cos(fov * (pi / 180) * 0.5) in the actor (0x412ff0)
+		actor->setFov(lua_getnumber(fovObj));
 	}
 }
 
@@ -1070,8 +1068,9 @@ void Lua_V2::EnableActorPuck() {
 
 	bool enable = getbool(2);
 
-	// FIXME: Implement.
-	warning("Lua_V2::EnableActorPuck: stub, actor: %s enable: %s", actor->getName().c_str(), enable ? "TRUE" : "FALSE");
+	// The original makes (or destroys) the actor's puck, the body it is walked and turned with (0x413240); the port's actor
+	// is its own body, so what is kept is whether the actor may be walked
+	actor->enablePuck(enable);
 }
 
 // Helper function, not called from LUA directly
