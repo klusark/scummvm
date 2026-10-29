@@ -162,6 +162,12 @@ void Head::Joint::restoreState(SaveGame *state) {
 	_roll = state->readFloat();
 }
 
+void Head::Joint::copyAngles(const Joint &other) {
+	_pitch = other._pitch;
+	_yaw = other._yaw;
+	_roll = other._roll;
+}
+
 Head::Head() :
 	_maxPitch(0), _maxYaw(0), _maxRoll(0),
 	_joint1Node(-1), _joint2Node(-1), _joint3Node(-1) {
@@ -213,6 +219,12 @@ void Head::lookAt(bool entering, const Math::Vector3d &point, float rate, const 
 			_joint3.orientTowards(entering, point, rate / 3, matrix, _maxPitch / 3, _maxYaw / 3, 10.f, 1.000f);
 		}
 	}
+}
+
+void Head::copyLookState(const Head &other) {
+	_joint1.copyAngles(other._joint1);
+	_joint2.copyAngles(other._joint2);
+	_joint3.copyAngles(other._joint3);
 }
 
 void Head::saveState(SaveGame *state) const {
