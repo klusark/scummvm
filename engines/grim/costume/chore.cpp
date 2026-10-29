@@ -19,7 +19,9 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "engines/grim/costume.h"
+#include "engines/grim/grim.h"
 #include "engines/grim/savegame.h"
 #include "engines/grim/textsplit.h"
 #include "engines/grim/costume/chore.h"
@@ -147,9 +149,47 @@ void Chore::setLastFrame() {
 	setKeys(-1, -1);
 }
 
+// Cos_InstUpdateChore of the original (CHORE.DLL FUN_100053e0): a chore starts at time 0 and the first update already takes the time of the frame; the keys from
+// the time the chore was at up to (not including) the new time are set, and a chore that has reached its length is over (a looping one goes on with what is left
+// of the time from 0).
+void Chore::updateGrim(uint time) {
+	int cur = _currTime < 0 ? 0 : _currTime;
+	int dt = (int)time;
+	for (;;) {
+		const int newTime = cur + dt;
+		for (int i = 0; i < _numTracks; i++) {
+			Component *comp = getComponentForTrack(i);
+			if (!comp)
+				continue;
+			for (int j = 0; j < _tracks[i].numKeys; j++) {
+				if (_tracks[i].keys[j].time >= newTime)
+					break;
+				if (_tracks[i].keys[j].time >= cur)
+					comp->setKey(_tracks[i].keys[j].value);
+			}
+		}
+		if (newTime < _length) {
+			_currTime = newTime;
+			return;
+		}
+		if (!_looping) {
+			_playing = false;
+			_currTime = newTime;
+			return;
+		}
+		dt = newTime - _length;
+		cur = 0;
+	}
+}
+
 void Chore::update(uint time) {
 	if (!_playing || _paused)
 		return;
+
+	if (g_grim->getGameType() == GType_GRIM && (!ConfMan.hasKey("chore_timing") || ConfMan.getBool("chore_timing"))) {
+		updateGrim(time);
+		return;
+	}
 
 	int newTime;
 	if (_currTime < 0)
