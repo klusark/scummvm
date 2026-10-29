@@ -52,6 +52,7 @@ public:
 
 		void saveState(SaveGame *state) const;
 		void restoreState(SaveGame *state);
+		void copyAngles(const Joint &other);
 
 	private:
 		ModelNode *_node;
@@ -71,10 +72,14 @@ public:
 
 	void saveState(SaveGame *state) const;
 	void restoreState(SaveGame *state);
+	void copyLookState(const Head &other);
 
 	int getJoint1() const { return _joint1Node; }
 	int getJoint2() const { return _joint2Node; }
 	int getJoint3() const { return _joint3Node; }
+	float getMaxRoll() const { return _maxRoll; }
+	float getMaxPitch() const { return _maxPitch; }
+	float getMaxYaw() const { return _maxYaw; }
 
 private:
 	int _joint1Node;

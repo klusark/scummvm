@@ -22,6 +22,7 @@
 #include "common/endian.h"
 
 #include "engines/grim/debug.h"
+#include "engines/grim/grim.h"
 #include "engines/grim/colormap.h"
 #include "engines/grim/costume.h"
 #include "engines/grim/textsplit.h"
@@ -191,6 +192,23 @@ void Costume::load(Common::SeekableReadStream *data) {
 	}
 
 	_head = new Head();
+	inheritHead();
+}
+
+void Costume::inheritHead() {
+	// The original inherits the head setup only when the model is shared with the previous costume
+	if (_prevCostume && getModel() && getModel() == _prevCostume->getModel()) {
+		const Head *prevHead = static_cast<const Head *>(_prevCostume->_head);
+		setHead(prevHead->getJoint1(), prevHead->getJoint2(), prevHead->getJoint3(),
+				prevHead->getMaxRoll(), prevHead->getMaxPitch(), prevHead->getMaxYaw());
+		copyHeadLookState(_prevCostume);
+	}
+}
+
+void Costume::copyHeadLookState(Costume *other) {
+	// The original keeps the head look angles in the model, so they carry over between costumes sharing it
+	if (other && getModel() && getModel() == other->getModel())
+		static_cast<Head *>(_head)->copyLookState(*static_cast<const Head *>(other->_head));
 }
 
 Costume::~Costume() {
@@ -567,6 +585,11 @@ bool Costume::restoreState(SaveGame *state) {
 	_lookAtRate = state->readFloat();
 	_head->restoreState(state);
 	_head->loadJoints(getModelNodes());
+
+	// Older savegames did not inherit the head from the previous costume
+	if (g_grim->getGameType() == GType_GRIM && state->saveMinorVersion() < 33 &&
+			static_cast<Head *>(_head)->getJoint1() < 0)
+		inheritHead();
 
 	return true;
 }

@@ -1437,8 +1437,11 @@ void Actor::setCostume(const char *n) {
 
 void Actor::popCostume() {
 	if (!_costumeStack.empty()) {
-		freeCostume(_costumeStack.back());
+		Costume *popped = _costumeStack.back();
 		_costumeStack.pop_back();
+		if (g_grim->getGameType() == GType_GRIM && !_costumeStack.empty())
+			_costumeStack.back()->copyHeadLookState(popped);
+		freeCostume(popped);
 
 		if (_costumeStack.empty()) {
 			Debug::debug(Debug::Actors, "Popped (freed) the last costume for an actor.\n");
@@ -1775,9 +1778,10 @@ void Actor::update(uint frameTime) {
 			_lookAtVector = actor->getHeadPos();
 	}
 
-	for (Common::List<Costume *>::iterator i = _costumeStack.begin(); i != _costumeStack.end(); ++i) {
-		(*i)->moveHead(_lookingMode, _lookAtVector);
-	}
+	// Only the costume on top moves the head, as the ones below may share its model
+	if (c)
+		c->moveHead(_lookingMode, _lookAtVector);
+
 }
 
 // Not all the talking actors are in the current set, and so on not all the talking actors
