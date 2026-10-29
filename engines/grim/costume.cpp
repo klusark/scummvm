@@ -494,6 +494,14 @@ int Costume::getHeadJoint() const {
 	return static_cast<Head *>(_head)->getJoint3();
 }
 
+int Costume::getHeadFirstJoint() const {
+	return static_cast<Head *>(_head)->getJoint1();
+}
+
+float Costume::getHeadMaxRoll() const {
+	return static_cast<Head *>(_head)->getMaxRoll();
+}
+
 void Costume::setHead(int joint1, int joint2, int joint3, float maxRoll, float maxPitch, float maxYaw) {
 	Head *head = static_cast<Head *>(_head);
 	head->setJoints(joint1, joint2, joint3);
