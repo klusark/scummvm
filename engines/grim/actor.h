@@ -590,6 +590,7 @@ public:
 	void setCollisionScale(float scale);
 
 	bool handleCollisionWith(Actor *actor, CollisionMode mode, Math::Vector3d *vec) const;
+	bool handleBoxCollision(Actor *actor, const Math::Vector3d &p1, float size1, const Math::Vector3d &p2, float size2, Math::Vector3d *vec) const;
 
 	static void saveStaticState(SaveGame *state);
 	static void restoreStaticState(SaveGame *state);
