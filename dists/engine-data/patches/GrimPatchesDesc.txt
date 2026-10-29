@@ -63,6 +63,11 @@ List of fixed bugs in GF scripts:
 	the inventory is open. This patch adds another check (with inInventorySet()) and waits
 	the close of the inventory before starting the cutscene.
 
+	Skipping the kitchen cutscene with Olivia (Lola's snapshot) doesn't start Olivia's dialog - bi.lua.patchr
+	bi.snapshot_override is called when the cutscene is skipped. It sets the scene up as it is after the
+	cutscene, but it never starts the dialog with Olivia (ol1) which the cutscene runs after it. This patch
+	runs Dialog:run("ol1", "dlg_olivia.lua") at the end of the override, as the cutscene does.
+
 	-Fix bug #81 "Year 1 - Bone disappears from spider web - Glitch" - sp.lua.patchr
 	In the sp set, the variable sp.web.has_bone is used to signal if there is a bone in the web,
 	but it's not cleaned after that the Glottis' hearts has been launched.
