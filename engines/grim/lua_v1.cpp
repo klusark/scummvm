@@ -1015,6 +1015,9 @@ struct luaL_reg grimMainOpcodes[] = {
 	{ "RestoreIMuse", LUA_OPCODE(Lua_V1, RestoreIMuse) },
 	{ "GetMemoryUsage", LUA_OPCODE(Lua_V1, GetMemoryUsage) },
 	{ "dofile", LUA_OPCODE(Lua_V1, new_dofile) },
+	// the saved games refer to the opcodes by number, so new ones go to the end
+	{ "IsSectorActive", LUA_OPCODE(Lua_V1, IsSectorActive) },
+	{ "GetActorTurnRate", LUA_OPCODE(Lua_V1, GetActorTurnRate) },
 };
 
 static struct luaL_reg grimTextOpcodes[] = {
@@ -1095,6 +1098,9 @@ void Lua_V1::boot() {
 }
 
 void Lua_V1::postRestoreHandle() {
+	// the save does not know the builtins added after it was made
+	lua_register("IsSectorActive", LUA_OPCODE(Lua_V1, IsSectorActive));
+
 	if (g_grim->getGameType() == GType_GRIM) {
 		lua_beginblock();
 		// Set the developerMode, since the save contains the value of
