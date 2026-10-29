@@ -455,6 +455,14 @@ public:
 	bool canSee(const Actor *other) const;
 
 	void setPuckOrient(bool orient);
+	/**
+	 * EMI: the "puck" is the body an actor is walked and turned with (EnableActorPuck). An actor without one does not walk
+	 * (the original does no path or step for it) until something makes it again (EnableActorPuck, TurnActorTo).
+	 */
+	void enablePuck(bool enable) { _puck = enable; }
+	bool hasPuck() const { return _puck; }
+	void setFov(float degrees);
+	bool canSeeEmi(const Actor *other) const;
 
 	/**
 	 * Makes the actor say the given line.
@@ -731,6 +739,8 @@ private:
 	float _collisionScale;
 
 	bool _puckOrient;
+	bool _puck;
+	float _fovCos; // EMI: cosine of half the field of view (SetActorFOV), for what the actor can see (GetVisibleThings)
 
 	static bool _isTalkingBackground;
 	int _talkDelay;

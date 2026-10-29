@@ -56,8 +56,16 @@ void Lua_V1::SetSelectedActor() {
 	lua_Object actorObj = lua_getparam(1);
 	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R'))
 		return;
-	// TODO there is missing some check here: else lua_pushnil()
+	// (Lua_SetSelectedActor, 0x499360: gives back the actor that was selected before)
+	// EMI: the actor the player walks (the raft of Mysts o' Tyme, whose puck the set destroys) is walked with a puck
+	if (g_grim->getGameType() == GType_MONKEY4)
+		getactor(actorObj)->enablePuck(true);
+	Actor *previous = g_grim->getSelectedActor();
 	g_grim->setSelectedActor(getactor(actorObj));
+	if (previous)
+		lua_pushusertag(previous->getId(), MKTAG('A','C','T','R'));
+	else
+		lua_pushnil();
 }
 
 /* Get the currently selected actor, this is used in
@@ -1199,6 +1207,9 @@ void Lua_V1::TurnActorTo() {
 	}
 
 	Math::Vector3d turnToVector(x, y, z);
+	// (the original makes the actor's puck here when it has none)
+	if (g_grim->getGameType() == GType_MONKEY4)
+		actor->enablePuck(true);
 	// Return true if the actor is still turning
 	// This allows manny to have the right yaw when he exits the elevator in the garage
 	pushbool(!actor->singleTurnTo(turnToVector));
@@ -1442,7 +1453,7 @@ void Lua_V1::GetVisibleThings() {
 	} else if (actor->isInSet(g_grim->getCurrSet()->getName())) {
 		for (Actor *a : g_grim->getActiveActors()) {
 			// Consider the active actor visible
-			if (actor == a || actor->getYawTo(a) < 90) {
+			if (actor == a || actor->canSeeEmi(a)) {
 				lua_pushobject(result);
 				lua_pushusertag(a->getId(), MKTAG('A','C','T','R'));
 				lua_pushnumber(1);

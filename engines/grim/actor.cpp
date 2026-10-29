@@ -113,7 +113,7 @@ Actor::Actor() :
 		_attachedActor(0), _attachedJoint(""),
 		_globalAlpha(1.f), _alphaMode(AlphaOff),
 		 _mustPlaceText(false),
-		_puckOrient(false), _talking(false),
+		_puckOrient(false), _puck(true), _fovCos(0.5f), _talking(false),
 		_inOverworld(false), _drawnToClean(false), _backgroundTalk(false),
 		_sortOrder(0), _useParentSortOrder(false),
 		_sectorSortOrder(0), _hasSectorSortOrder(false), _fakeUnbound(false), _lightMode(LightFastDyn),
@@ -617,7 +617,10 @@ void Actor::walkTo(const Math::Vector3d &p) {
 		return;
 	}
 
-	if (p == _pos)
+	// EMI: an actor without a puck gets no path (the original's WalkActorTo does nothing for it)
+	if (g_grim->getGameType() == GType_MONKEY4 && !_puck)
+		_walking = false;
+	else if (p == _pos && g_grim->getGameType() != GType_GRIM)
 		_walking = false;
 	else {
 		_walking = true;
@@ -1032,9 +1035,29 @@ Math::Vector3d Actor::getPuckVector() const {
 		return sector->getProjectionToPuckVector(forwardVec);
 }
 
+void Actor::setFov(float degrees) {
+	// As the original: the cosine of half the angle (SetActorFOV, 0x412ff0)
+	_fovCos = cosf(degrees * (float)M_PI / 180.0f * 0.5f);
+}
+
+// What an actor sees, in the original (0x427eb0): the unit vector in the horizontal plane from the actor to the other one, dotted
+// with the way the actor faces, is at least the cosine of half the field of view. (Without a field of view set an actor sees nothing
+// there; the player's actor has one of 120 degrees from its script, which is the default here, as it is not saved.)
+bool Actor::canSeeEmi(const Actor *other) const {
+	Math::Vector3d delta = other->getWorldPos() - getWorldPos();
+	delta.y() = 0.f;
+	if (delta.getMagnitude() < Math::epsilon)
+		return true;
+	delta.normalize();
+	Math::Vector3d forward = getSimplePuckVector();
+	forward.y() = 0.f;
+	forward.normalize();
+	return forward.dotProduct(delta) >= _fovCos;
+}
+
 void Actor::setPuckOrient(bool orient) {
+	// (calculateOrientation() lets the actor follow the normal of the sector it stands on)
 	_puckOrient = orient;
-	warning("Actor::setPuckOrient() not implemented");
 }
 
 void Actor::setRestChore(int chore, Costume *cost) {
@@ -1189,6 +1212,8 @@ Math::Angle Actor::getYawTo(const Math::Vector3d &p) const {
 
 	if (g_grim->getGameType() == GType_MONKEY4) {
 		dpos.y() = dpos.z();
+		// EMI yaws turn the other way (the puck vector is (sin, cos)), as in calculateOrientation()
+		dpos.x() = -dpos.x();
 	}
 	if (dpos.x() == 0 && dpos.y() == 0)
 		return 0;
@@ -2052,6 +2077,9 @@ void Actor::putInSet(const Common::String &set) {
 		}
 	}
 	_fakeUnbound = false;
+	// EMI: an actor put into a set gets a puck there (the scripts destroy it when they take the actor out, e.g. the raft of Mysts o' Tyme)
+	if (g_grim->getGameType() == GType_MONKEY4 && set != "")
+		_puck = true;
 	// The set should change immediately, otherwise a very rapid set change
 	// for an actor will be recognized incorrectly and the actor will be lost.
 	_setName = set;
