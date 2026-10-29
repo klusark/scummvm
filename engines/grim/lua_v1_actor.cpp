@@ -1250,8 +1250,7 @@ void Lua_V1::WalkActorVector() {
 	// The second parameter is the camera actor, which only provides the
 	// orientation of the camera. That is taken from the current setup instead.
 	//lua_Object cameraActorObj = lua_getparam(2);
-	//lua_Object zObj = lua_getparam(5);
-	//lua_Object param6Obj = lua_getparam(6);
+	lua_Object adjustObj = lua_getparam(6);
 
 	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R'))
 		return;
@@ -1274,6 +1273,11 @@ void Lua_V1::WalkActorVector() {
 	Math::Vector3d adjustVector(moveHoriz, moveVert, 0);
 	// find the angle the adjust vector is around the unit circle
 	Math::Angle adjustYaw = adjustVector.unitCircleAngle();
+
+	// The sixth parameter turns the movement, to correct cameras that are not
+	// aligned with the controls
+	if (lua_isnumber(adjustObj))
+		adjustYaw += lua_getnumber(adjustObj);
 
 	Math::Angle yaw = cameraYaw + adjustYaw;
 	// yaw is offset from forward by 180 degrees
