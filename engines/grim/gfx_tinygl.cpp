@@ -1329,8 +1329,8 @@ void GfxTinyGL::irisAroundRegion(int x1, int y1, int x2, int y2) {
 	float fx2 = x2;
 	float fy1 = y1;
 	float fy2 = y2;
-	float width = _screenWidth;
-	float height = _screenHeight;
+	float width = _gameWidth;
+	float height = _gameHeight;
 	float points[20] = {
 		0.0f, 0.0f,
 		0.0f, fy1,

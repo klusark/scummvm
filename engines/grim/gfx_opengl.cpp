@@ -2112,10 +2112,10 @@ void GfxOpenGL::irisAroundRegion(int x1, int y1, int x2, int y2) {
 	glColor4f(0.0f, 0.0f, 0.0f, 1.0f);
 
 	// Explicitly cast to avoid problems with C++11
-	float fx1 = x1;
-	float fx2 = x2;
-	float fy1 = y1;
-	float fy2 = y2;
+	float fx1 = x1 * _scaleW;
+	float fx2 = x2 * _scaleW;
+	float fy1 = y1 * _scaleH;
+	float fy2 = y2 * _scaleH;
 	float width = _screenWidth;
 	float height = _screenHeight;
 	float points[20] = {
