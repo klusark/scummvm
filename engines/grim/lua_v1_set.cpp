@@ -55,7 +55,7 @@ void Lua_V1::GetPointSector() {
 	float z = lua_getnumber(zObj);
 
 	Math::Vector3d point(x, y, z);
-	Sector *result = g_grim->getCurrSet()->findPointSector(point, sectorType);
+	Sector *result = g_grim->getCurrSet()->findPointSector(point, sectorType, true);
 	if (result) {
 		lua_pushnumber(result->getSectorId());
 		lua_pushstring(result->getName().c_str());
@@ -77,7 +77,7 @@ void Lua_V1::GetActorSector() {
 	Actor *actor = getactor(actorObj);
 	Sector::SectorType sectorType = (Sector::SectorType)(int)lua_getnumber(typeObj);
 	Math::Vector3d pos = actor->getWorldPos();
-	Sector *result = g_grim->getCurrSet()->findPointSector(pos, sectorType);
+	Sector *result = g_grim->getCurrSet()->findPointSector(pos, sectorType, true);
 	if (result) {
 		lua_pushnumber(result->getSectorId());
 		lua_pushstring(result->getName().c_str());
@@ -102,7 +102,7 @@ void Lua_V1::IsActorInSector() {
 
 	Sector *sector;
 	if (g_grim->getGameType() == GType_GRIM) {
-		sector = g_grim->getCurrSet()->getSectorBySubstring(name, actor->getPos());
+		sector = g_grim->getCurrSet()->getSectorBySubstring(name, actor->getPos(), true);
 	} else {
 		sector = g_grim->getCurrSet()->getSectorByName(name);
 		if (!(sector && sector->isPointInSector(actor->getPos()))) {
@@ -136,7 +136,7 @@ void Lua_V1::IsPointInSector() {
 	float z = lua_getnumber(zObj);
 	Math::Vector3d pos(x, y, z);
 
-	Sector *sector = g_grim->getCurrSet()->getSectorBySubstring(name, pos);
+	Sector *sector = g_grim->getCurrSet()->getSectorBySubstring(name, pos, true);
 	if (sector) {
 		lua_pushnumber(sector->getSectorId());
 		lua_pushstring(sector->getName().c_str());
@@ -227,7 +227,7 @@ void Lua_V1::LockSet() {
 		return;
 
 	const char *name = lua_getstring(nameObj);
-	// TODO implement proper locking
+	// (the original takes a lock on the resource of the set, FUN_00482070, so that the set stays loaded when another one is made current)
 	g_grim->setSetLock(name, true);
 }
 
@@ -237,7 +237,7 @@ void Lua_V1::UnLockSet() {
 		return;
 
 	const char *name = lua_getstring(nameObj);
-	// TODO implement proper unlocking
+	// (the lock on the resource of the set is given back: FUN_00482110)
 	g_grim->setSetLock(name, false);
 }
 

@@ -99,11 +99,15 @@ public:
 	Sector *getSectorBase(int id);
 	Sector *getSectorByName(const Common::String &name);
 	Sector *getSectorBySubstring(const Common::String &str);
-	Sector *getSectorBySubstring(const Common::String &str, const Math::Vector3d &pos);
+	Sector *getSectorBySubstring(const Common::String &str, const Math::Vector3d &pos, bool exact = false);
 
-	Sector *findPointSector(const Math::Vector3d &p, Sector::SectorType type);
+	Sector *findPointSector(const Math::Vector3d &p, Sector::SectorType type, bool exact = false, const Common::Array<Sector *> *exclude = nullptr);
+	Sector *findPointSector(const Math::Vector3d &p, Sector::SectorType type, const Sector *exclude);
+	Sector *findStepSector(const Math::Vector3d &p, Sector::SectorType type, const Sector *exclude, float maxStep);
+	int getSearchCount() const { return _searchOrder.empty() ? _numSectors : (int)_searchOrder.size(); }
+	Sector *getSearchSector(int i) const { return _searchOrder.empty() ? _sectors[i] : _searchOrder[i]; }
 	Common::Pair<bool, int> findSectorSortOrder(const Math::Vector3d &p, Sector::SectorType type);
-	void findClosestSector(const Math::Vector3d &p, Sector **sect, Math::Vector3d *closestPt);
+	void findClosestSector(const Math::Vector3d &p, Sector **sect, Math::Vector3d *closestPt, const Sector *exclude = nullptr);
 	void shrinkBoxes(float radius);
 	void unshrinkBoxes();
 
@@ -164,6 +168,11 @@ private:
 	int _numSetups, _numLights, _numSectors, _numObjectStates, _numShadows;
 	bool _enableLights;
 	Sector **_sectors;
+	/** The sectors of a set of the original in the order they are searched in: the last one that was loaded first (the chain of FUN_004a6490); empty: by id */
+	Common::Array<Sector *> _searchOrder;
+	/** The vertices of the sectors, joined where they are closer than 1e-4 (the pool of FUN_004a7ab0), and the ones the shrinking of the boxes added */
+	Common::Array<Math::Vector3d> _weldPool;
+	void rebuildSearchOrder();
 	Light *_lights;
 	Common::List<Light *> _lightsList;
 	Common::List<Light *> _overworldLightsList;

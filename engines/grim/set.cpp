@@ -183,13 +183,21 @@ void Set::loadText(TextSplitter &ts) {
 	// Allocate and fill an array of sector info
 	_sectors = new Sector*[_numSectors];
 	ts.setLineNumber(sectorStart);
+	Common::Array<Math::Vector3d> &weldPool = _weldPool;
+	weldPool.clear();
+	_searchOrder.clear();
 	for (int i = 0; i < _numSectors; i++) {
 		// Use the ids as index for the sector in the array.
 		// This way when looping they are checked from the id 0 sto the last,
 		// which seems important for sets with overlapping camera sectors, like ga.set.
 		Sector *s = new Sector();
 		s->load(ts);
+		// The original joins the vertices that lie closer than 1e-4 to one another (the first one loaded is used) and searches the sectors from the
+		// last one loaded to the first
+		s->weldVertices(weldPool);
 		_sectors[s->getSectorId()] = s;
+		if (g_grim->getGameType() == GType_GRIM)
+			_searchOrder.insert_at(0, s);
 	}
 }
 
@@ -288,6 +296,41 @@ void Set::saveState(SaveGame *savedState) const {
 	}
 }
 
+// The sectors are searched from the last one of the set file to the first (SectorList_FindByPoint), the order that loadText keeps: a restored set has the
+// sectors by their ids only, so the order is read from the set file again (the ids in the order of the file); a set file that is not there gives the ids
+// from the last to the first, the order of the files of the game
+void Set::rebuildSearchOrder() {
+	_searchOrder.clear();
+	Common::Array<int> ids;
+	Common::SeekableReadStream *stream = g_resourceloader->openNewStreamFile(_name.c_str(), true);
+	if (stream) {
+		bool inSector = false;
+		while (!stream->eos()) {
+			Common::String line = stream->readLine();
+			line.trim();
+			if (line.hasPrefix("sector") && !line.hasPrefix("sectors") && line.size() > 6 && Common::isSpace(line[6])) {
+				inSector = true;
+			} else if (inSector && line.hasPrefix("ID")) {
+				ids.push_back(atoi(line.c_str() + 2));
+				inSector = false;
+			}
+		}
+		delete stream;
+	}
+	if (ids.size() != (uint)_numSectors) {
+		ids.clear();
+		for (int i = _numSectors - 1; i >= 0; i--)
+			ids.push_back(i);
+	}
+	for (uint i = 0; i < ids.size(); i++) {
+		const int id = ids[i];
+		if (id >= 0 && id < _numSectors && _sectors[id])
+			_searchOrder.insert_at(0, _sectors[id]);
+	}
+	if (_searchOrder.size() != (uint)_numSectors)
+		_searchOrder.clear();
+}
+
 bool Set::restoreState(SaveGame *savedState) {
 	_name = savedState->readString();
 	if (g_grim->getGameType() == GType_GRIM) {
@@ -332,6 +375,8 @@ bool Set::restoreState(SaveGame *savedState) {
 	} else {
 		_sectors = nullptr;
 	}
+	if (g_grim->getGameType() == GType_GRIM)
+		rebuildSearchOrder();
 
 	_numLights = savedState->readLESint32();
 	_lights = new Light[_numLights];
@@ -933,13 +978,49 @@ void Set::setupCamera() {
 	_frustum.setup(g_driver->getProjection() * g_driver->getModelView());
 }
 
-Sector *Set::findPointSector(const Math::Vector3d &p, Sector::SectorType type) {
-	for (int i = 0; i < _numSectors; i++) {
-		Sector *sector = _sectors[i];
-		if (sector && (sector->getType() & type) && sector->isVisible() && sector->isPointInSector(p))
+Sector *Set::findPointSector(const Math::Vector3d &p, Sector::SectorType type, bool exact, const Common::Array<Sector *> *exclude) {
+	// (the scripts see the sectors in the order of the original, the last one loaded first, and by its test; the walk of the actors by the order of the ids)
+	const int n = exact ? getSearchCount() : _numSectors;
+	for (int i = 0; i < n; i++) {
+		Sector *sector = exact ? getSearchSector(i) : _sectors[i];
+		bool skip = false;
+		for (uint e = 0; exclude && e < exclude->size(); ++e) {
+			if ((*exclude)[e] == sector)
+				skip = true;
+		}
+		if (sector && !skip && (sector->getType() & type) && sector->isVisible() && sector->isPointInSector(p, exact))
 			return sector;
 	}
 	return nullptr;
+}
+
+Sector *Set::findPointSector(const Math::Vector3d &p, Sector::SectorType type, const Sector *exclude) {
+	for (int i = 0; i < _numSectors; i++) {
+		Sector *sector = _sectors[i];
+		if (sector && sector != exclude && (sector->getType() & type) && sector->isVisible() && sector->isPointInSector(p))
+			return sector;
+	}
+	return nullptr;
+}
+
+// A sector that the point lies over (or under) seen from above, whose plane is at most maxStep away in height: the next piece of floor
+// when the floor goes up or down by a step. The test of findPointSector wants the point on the plane of the sector, which it never is
+// at the foot of a stair.
+Sector *Set::findStepSector(const Math::Vector3d &p, Sector::SectorType type, const Sector *exclude, float maxStep) {
+	Sector *best = nullptr;
+	float bestDist = maxStep + 1.f;
+	for (int i = 0; i < _numSectors; i++) {
+		Sector *sector = _sectors[i];
+		float planeY = 0.f;
+		if (!sector || sector == exclude || !(sector->getType() & type) || !sector->isVisible() || !sector->containsXZ(p, &planeY))
+			continue;
+		float d = fabsf(planeY - p.y());
+		if (d <= maxStep && d < bestDist) {
+			bestDist = d;
+			best = sector;
+		}
+	}
+	return best;
 }
 
 Common::Pair<bool, int> Set::findSectorSortOrder(const Math::Vector3d &p, Sector::SectorType type) {
@@ -964,14 +1045,14 @@ Common::Pair<bool, int> Set::findSectorSortOrder(const Math::Vector3d &p, Sector
 	return Common::Pair<bool, int>(found, sortOrder);
 }
 
-void Set::findClosestSector(const Math::Vector3d &p, Sector **sect, Math::Vector3d *closestPoint) {
+void Set::findClosestSector(const Math::Vector3d &p, Sector **sect, Math::Vector3d *closestPoint, const Sector *exclude) {
 	Sector *resultSect = nullptr;
 	Math::Vector3d resultPt = p;
 	float minDist = 0.0;
 
 	for (int i = 0; i < _numSectors; i++) {
 		Sector *sector = _sectors[i];
-		if ((sector->getType() & Sector::WalkType) == 0 || !sector->isVisible())
+		if ((sector->getType() & Sector::WalkType) == 0 || !sector->isVisible() || sector == exclude)
 			continue;
 		Math::Vector3d closestPt = sector->getClosestPoint(p);
 		float thisDist = (closestPt - p).getMagnitude();
@@ -1255,6 +1336,14 @@ Sector *Set::getSectorBase(int id) {
 }
 
 Sector *Set::getSectorByName(const Common::String &name) {
+	// (the original searches the list of its sectors, the last one loaded first: FUN_004a7230; two sectors of a set can have the same name)
+	if (g_grim->getGameType() == GType_GRIM && !_searchOrder.empty()) {
+		for (uint i = 0; i < _searchOrder.size(); i++) {
+			if (_searchOrder[i]->getName() == name)
+				return _searchOrder[i];
+		}
+		return nullptr;
+	}
 	for (int i = 0; i < _numSectors; i++) {
 		Sector *sector = _sectors[i];
 		if (sector->getName() == name) {
@@ -1274,10 +1363,12 @@ Sector *Set::getSectorBySubstring(const Common::String &str) {
 	return nullptr;
 }
 
-Sector *Set::getSectorBySubstring(const Common::String &str, const Math::Vector3d &pos) {
-	for (int i = 0; i < _numSectors; i++) {
-		Sector *sector = _sectors[i];
-		if (strstr(sector->getName().c_str(), str.c_str()) && sector->isPointInSector(pos)) {
+Sector *Set::getSectorBySubstring(const Common::String &str, const Math::Vector3d &pos, bool exact) {
+	const int n = exact ? getSearchCount() : _numSectors;
+	for (int i = 0; i < n; i++) {
+		Sector *sector = exact ? getSearchSector(i) : _sectors[i];
+		// like the original (FUN_004a6980 with flag 1) a sector that is switched off never contains a point
+		if (strstr(sector->getName().c_str(), str.c_str()) && sector->isVisible() && sector->isPointInSector(pos, exact)) {
 			return sector;
 		}
 	}
