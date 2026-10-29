@@ -19,6 +19,8 @@
  *
  */
 
+#include "common/config-manager.h"
+
 #include "math/line3d.h"
 #include "math/rect2d.h"
 
@@ -33,6 +35,7 @@
 #include "engines/grim/resource.h"
 #include "engines/grim/savegame.h"
 #include "engines/grim/set.h"
+#include "engines/grim/sincos.h"
 #include "engines/grim/gfx_base.h"
 #include "engines/grim/model.h"
 #include "engines/grim/emi/emi.h"
@@ -89,7 +92,14 @@ static int animTurnEased(float turnAmt, const Math::Angle &dest, Math::Angle *cu
 	return -1;
 }
 
+// Switches for the rules of the original that were ported to the walk of the actors, to find which of them a script cannot take yet (development):
+// exact_edges and turn_key_rule in the configuration, on unless set to false
+static bool grimRuleOn(const char *key) {
+	return !ConfMan.hasKey(key) || ConfMan.getBool(key);
+}
+
 bool Actor::_isTalkingBackground = false;
+int Actor::s_wsDepth = 0;
 
 void Actor::saveStaticState(SaveGame *state) {
 	state->writeBool(_isTalkingBackground);
@@ -104,8 +114,8 @@ Actor::Actor() :
 		_lookingMode(false), _followBoxes(false), _running(false),
 		_pitch(0), _yaw(0), _roll(0), _walkRate(0.3f),
 		_talkAnim(0),
-		_reflectionAngle(80), _scale(1.f), _timeScale(1.f),
-		_visible(true), _lipSync(nullptr), _turning(false), _singleTurning(false), _walking(false),
+		_reflectionAngle(80), _constrained(false), _wsDist(0.f), _turnKey(0), _scale(1.f), _timeScale(1.f),
+		_visible(true), _lipSync(nullptr), _turning(false), _rotPending(false), _hPlane(false), _hAxisA(0), _hAxisB(1), _hSector(nullptr), _headingSet(false), _yawSnap(false), _singleTurning(false), _walking(false),
 		_walkedLast(false), _walkedCur(false),
 		_collisionMode(CollisionOff), _collisionScale(1.f),
 		_lastTurnDir(0), _currTurnDir(0),
@@ -119,11 +129,24 @@ Actor::Actor() :
 		_sectorSortOrder(0), _hasSectorSortOrder(false), _fakeUnbound(false), _lightMode(LightFastDyn),
 		_hasFollowedBoxes(false), _lookAtActor(0) {
 
-	// Some actors don't set walk and turn rates, so we default the
-	// _turnRate so Doug at the cat races can turn and we set the
-	// _walkRate so Glottis at the demon beaver entrance can walk and
-	// so Chepito in su.set
-	_turnRate = 100.0f;
+	// Some actors don't set walk and turn rates, so they use the defaults
+	// of the original: Doug at the cat races, Glottis at the demon beaver
+	// entrance and Chepito in su.set
+	if (g_grim->getGameType() == GType_GRIM) {
+		_walkRate = 0.4f;
+		_turnRate = 135.0f;
+	} else {
+		_turnRate = 100.0f;
+	}
+
+	_clipActive = 0;
+	_invClipNode = -1;
+	_frustumCull = true;
+	_hRight[0] = 1.f; _hRight[1] = 0.f; _hRight[2] = 0.f;
+	_hFwd[0] = 0.f; _hFwd[1] = 1.f; _hFwd[2] = 0.f;
+	_hUp[0] = 0.f; _hUp[1] = 0.f; _hUp[2] = 1.f;
+	_hPlaneN[0] = _hPlaneN[1] = _hPlaneN[2] = 0.f;
+	_hPlaneV0[0] = _hPlaneV0[1] = _hPlaneV0[2] = 0.f;
 
 	_activeShadowSlot = -1;
 	_shadowArray = new Shadow[MAX_SHADOWS];
@@ -366,6 +389,10 @@ bool Actor::restoreState(SaveGame *savedState) {
 		_singleTurning = savedState->readBool();
 	}
 	_moveYaw = savedState->readFloat();
+	if (g_grim->getGameType() == GType_GRIM) {
+		// (the frame is made again at its first use, from the angle that was saved, as the original makes the walker of a loaded actor)
+		_headingSet = false;
+	}
 	if (savedState->saveMinorVersion() > 6) {
 		_movePitch = savedState->readFloat();
 		_moveRoll = savedState->readFloat();
@@ -514,10 +541,47 @@ void Actor::setRot(const Math::Vector3d &pos) {
 	setRot(p, y, r);
 }
 
+
+// (the arithmetic of the original: every expression in extended precision, stored as a float where the original stores one)
+typedef long double LD;
+
+static inline float toF(LD v) {
+	return (float)v;
+}
+
+// Timer_GetFrameSeconds (FUN_004a3c00): the time of the frame in seconds as the timer of the original keeps it, a float made from the milliseconds (at most 300) times
+// 0.001f (FUN_004a3c80)
+static inline LD origFrameSeconds() {
+	unsigned ms = g_grim->getFrameTime();
+	if (ms > 300)
+		ms = 300;
+	return (LD)(float)((LD)ms * (LD)0.001f);
+}
+
+static LD origNormalize3(float *v);
+static void headingGround(const float *f, float &x, float &y);
+static void origActorMatrix(float *m, float e0, float e1, float e2, const Math::Vector3d &pos);
+static void origToLocal(float *o, const float *v, const float *m);
+static void origTurn(float *o, const float *v, const float *m, bool withPos);
+static void origAxisMatrix(float *m, const float *axis, float degrees);
+
 void Actor::setRot(const Math::Angle &pitchParam, const Math::Angle &yawParam, const Math::Angle &rollParam) {
 	_pitch = pitchParam;
-	_yaw = yawParam;
-	_moveYaw = _yaw;
+	if (g_grim->getGameType() == GType_GRIM && !_headingSet && !_followBoxes) {
+		// An actor that has never walked, turned or followed boxes has no walker in the original (FUN_00490730 makes it on the first
+		// of those), and SetActorRot sets its angles as they are asked (the tumblers of the safe in vd read them back and compare them
+		// as whole numbers)
+		_yaw = yawParam;
+		_moveYaw = _yaw;
+	} else if (g_grim->getGameType() == GType_GRIM) {
+		// (Actor_SetRot: the angle that is still to turn, IsActorTurning, is the one the frame was turned by)
+		_turnLeft = faceHeading(yawParam, pitchParam, rollParam);
+		// (the heading that is seen follows the frame of the walker in the next frame, not at once: GetActorRot reads the old angle until then)
+		_yawSnap = true;
+	} else {
+		_yaw = yawParam;
+		_moveYaw = _yaw;
+	}
 	_roll = rollParam;
 	_turning = false;
 }
@@ -529,7 +593,12 @@ void Actor::setPos(const Math::Vector3d &position) {
 	// Don't allow positions outside the sectors.
 	// This is necessary after solving the tree pump puzzle, when the bone
 	// wagon returns to the signopost set.
-	if (_followBoxes) {
+	if (g_grim->getGameType() == GType_GRIM) {
+		// Actor_SetPositionClamped (FUN_00490870): an actor that has a walker takes the sector for the place (FUN_004a82c0: moved onto it only when it is not
+		// in it by the test of the sector), one that has none is put where it is asked
+		if (_followBoxes && _headingSet)
+			updateHeadingSector();
+	} else if (_followBoxes) {
 		g_grim->getCurrSet()->findClosestSector(_pos, nullptr, &_pos);
 	}
 
@@ -590,7 +659,10 @@ bool Actor::singleTurnTo(const Math::Vector3d &pos) {
 	bool done = animTurn(turnAmt, y, &_yaw) == 0;
 	done = animTurn(turnAmt, p, &_pitch) == 0 && done;
 	done = animTurn(turnAmt, r, &_roll) == 0 && done;
-	_moveYaw = _yaw;
+	if (g_grim->getGameType() == GType_GRIM)
+		faceHeading(_yaw);
+	else
+		_moveYaw = _yaw;
 	_movePitch = _pitch;
 	_moveRoll = _roll;
 	_singleTurning = !done;
@@ -601,7 +673,10 @@ bool Actor::singleTurnTo(const Math::Vector3d &pos) {
 void Actor::turnTo(const Math::Angle &pitchParam, const Math::Angle &yawParam, const Math::Angle &rollParam) {
 	_movePitch = pitchParam;
 	_moveRoll = rollParam;
-	_moveYaw = yawParam;
+	if (g_grim->getGameType() == GType_GRIM)
+		_turnLeft = faceHeading(yawParam, pitchParam, rollParam); // (Actor_SetRot without the negative turn rate: the angle that is still to turn is the one the frame was turned by)
+	else
+		_moveYaw = yawParam;
 	if (_yaw != yawParam || _pitch != pitchParam || _roll != rollParam) {
 		_turning = true;
 	} else
@@ -796,10 +871,16 @@ bool Actor::isWalking() const {
 }
 
 bool Actor::isTurning() const {
+	// IsActorTurning of the original (FUN_00499be0): the angle that is still to turn, which Walker_UpdateYaw makes zero below half a degree
+	if (g_grim->getGameType() == GType_GRIM)
+		return _turnLeft != 0.f;
 	if (g_grim->getGameType() == GType_MONKEY4)
 		if (_singleTurning)
 			return true;
 	if (_turning)
+		return true;
+
+	if (_rotPending && g_grim->getGameType() == GType_GRIM)
 		return true;
 
 	if (_lastTurnDir != 0 || _currTurnDir != 0)
@@ -832,14 +913,42 @@ void Actor::moveTo(const Math::Vector3d &pos) {
 	}
 
 	Math::Vector3d moveVec = pos - _pos;
-	for (Actor *a : g_grim->getActiveActors()) {
-		handleCollisionWith(a, mode, &moveVec);
+	const Math::Vector3d askedVec = moveVec;
+	// (not ported yet: an actor that walks a path and is pushed by another one makes the path again around the one that pushed it, from the place it
+	// was pushed to: FUN_004939f0 -> Walker_ReplanPath with the actor, FUN_004917e0. Without that the push and the next step of the path repeat for ever
+	// at a box that is in the way of the end of the path, as at the signpost, so the steps of a path are not pushed, as they were not before.)
+	if (!(g_grim->getGameType() == GType_GRIM && _walking)) {
+		for (Actor *a : g_grim->getActiveActors())
+			handleCollisionWith(a, mode, &moveVec);
 	}
-	_pos += moveVec;
+	// (the original sets the place that was asked for; the sum of the position and the difference to it is not the same float)
+	if (g_grim->getGameType() == GType_GRIM && moveVec == askedVec)
+		_pos = pos;
+	else
+		_pos += moveVec;
 }
 
 void Actor::walkForward() {
+	if (g_grim->getGameType() == GType_GRIM) {
+		// Actor_WalkForward (FUN_0048fc80) only asks for the step (the flag at +0xc of the state); Actor_UpdateWalker makes it at the end of the
+		// frame, when every script has run. A script that reads the position after the call gets the old one.
+		_walking = false;
+		_walkPending = true;
+		return;
+	}
+	doWalkForward();
+}
+
+void Actor::doWalkForward() {
 	float dist = g_grim->getPerSecond(_walkRate) * _timeScale;
+	if (g_grim->getGameType() == GType_GRIM)
+		dist = toF(origFrameSeconds() * _timeScale * _walkRate); // (Actor_UpdateWalker: seconds * time scale * walk rate)
+	if (g_grim->getGameType() == GType_GRIM && Debug::isChannelEnabled(Debug::Actors)) {
+		// the state the original's Walker_WalkSectors starts from (position, the frame), to be compared with a trace of its breakpoints
+		ensureHeading();
+		Debug::debug(Debug::Actors, "WSTATE %s dist %.9g pos %.9g %.9g %.9g right %.9g %.9g %.9g fwd %.9g %.9g %.9g up %.9g %.9g %.9g",
+		             _name.c_str(), dist, _pos.x(), _pos.y(), _pos.z(), _hRight[0], _hRight[1], _hRight[2], _hFwd[0], _hFwd[1], _hFwd[2], _hUp[0], _hUp[1], _hUp[2]);
+	}
 	// Limit the amount of the movement per frame, otherwise with low fps
 	// scripts that use WalkActorForward and proximity may break.
 	const float maxDist = _walkRate / 5.f * _timeScale;
@@ -856,8 +965,8 @@ void Actor::walkForward() {
 	_walking = false;
 
 	if (!_followBoxes) {
-		Math::Vector3d forwardVec(-_moveYaw.getSine() * _pitch.getCosine(),
-		                           _moveYaw.getCosine() * _pitch.getCosine(), _pitch.getSine());
+		Math::Vector3d forwardVec(-moveSine() * _pitch.getCosine(),
+		                           moveCosine() * _pitch.getCosine(), _pitch.getSine());
 
 		// EMI: Y is up-down, actors use an X-Z plane for movement
 		if (g_grim->getGameType() == GType_MONKEY4) {
@@ -885,8 +994,8 @@ void Actor::walkForward() {
 
 		g_grim->getCurrSet()->findClosestSector(_pos, &currSector, &_pos);
 		if (!currSector) { // Shouldn't happen...
-			Math::Vector3d forwardVec(-_moveYaw.getSine() * _pitch.getCosine(),
-			                           _moveYaw.getCosine() * _pitch.getCosine(), _pitch.getSine());
+			Math::Vector3d forwardVec(-moveSine() * _pitch.getCosine(),
+			                           moveCosine() * _pitch.getCosine(), _pitch.getSine());
 
 			// EMI: Y is up-down, actors use an X-Z plane for movement
 			if (g_grim->getGameType() == GType_MONKEY4) {
@@ -914,18 +1023,18 @@ void Actor::walkForward() {
 				Math::Angle ax = Math::Vector2d(normal.x(), normal.z()).getAngle();
 				Math::Angle ay = Math::Vector2d(normal.y(), normal.z()).getAngle();
 
-				float z1 = -_moveYaw.getCosine() * (ay - _pitch).getCosine();
-				float z2 = _moveYaw.getSine() * (ax - _pitch).getCosine();
-				forwardVec = Math::Vector3d(-_moveYaw.getSine() * ax.getSine() * _pitch.getCosine(),
-				                             _moveYaw.getCosine() * ay.getSine() * _pitch.getCosine(), z1 + z2);
+				float z1 = -moveCosine() * (ay - _pitch).getCosine();
+				float z2 = moveSine() * (ax - _pitch).getCosine();
+				forwardVec = Math::Vector3d(-moveSine() * ax.getSine() * _pitch.getCosine(),
+				                             moveCosine() * ay.getSine() * _pitch.getCosine(), z1 + z2);
 			} else {
 				Math::Angle ax = Math::Vector2d(normal.x(), normal.y()).getAngle();
 				Math::Angle az = Math::Vector2d(normal.z(), normal.y()).getAngle();
 
-				float y1 = _moveYaw.getCosine() * (az - _pitch).getCosine();
-				float y2 = _moveYaw.getSine() * (ax - _pitch).getCosine();
-				forwardVec = Math::Vector3d(-_moveYaw.getSine() * ax.getSine() * _pitch.getCosine(), y1 + y2,
-				                            -_moveYaw.getCosine() * az.getSine() * _pitch.getCosine());
+				float y1 = moveCosine() * (az - _pitch).getCosine();
+				float y2 = moveSine() * (ax - _pitch).getCosine();
+				forwardVec = Math::Vector3d(-moveSine() * ax.getSine() * _pitch.getCosine(), y1 + y2,
+				                            -moveCosine() * az.getSine() * _pitch.getCosine());
 			}
 
 			if (backwards)
@@ -993,7 +1102,12 @@ void Actor::walkTowards(const Math::Angle &heading) {
 	// The original turns the heading by twice the turn rate every frame and
 	// does not wait until it is aligned before walking.
 	const float maxTurn = fabsf(g_grim->getPerSecond(_turnRate)) * 2.f;
-	if (fabsf(diff.getDegrees()) <= maxTurn) {
+	if (g_grim->getGameType() == GType_GRIM) {
+		if (fabsf(diff.getDegrees()) <= maxTurn)
+			faceHeading(heading);
+		else
+			turnHeadingBy(diff > 0 ? maxTurn : -maxTurn);
+	} else if (fabsf(diff.getDegrees()) <= maxTurn) {
 		_moveYaw = heading;
 	} else if (diff > 0) {
 		_moveYaw += maxTurn;
@@ -1016,6 +1130,11 @@ Math::Vector3d Actor::getSimplePuckVector() const {
 			a = Actor::getPool().getObject(a->_attachedActor);
 		}
 		return Math::Vector3d(yaw.getSine(), 0, yaw.getCosine());
+	} else if (_headingSet) {
+		// (the way the walker faces, which is what the original gives: the angle that is seen follows it a frame later)
+		float x, y;
+		headingGround(_hFwd, x, y);
+		return Math::Vector3d(x, y, 0);
 	} else {
 		return Math::Vector3d(-_yaw.getSine(), _yaw.getCosine(), 0);
 	}
@@ -1184,11 +1303,36 @@ void Actor::stopAllChores(bool ignoreLoopingChores) {
 
 void Actor::turn(int dir) {
 	_walking = false;
+	if (g_grim->getGameType() == GType_GRIM) {
+		// The key is taken only when the heading that is seen has caught up with the heading of the walker to within two steps of the turn: the angle
+		// that is still to turn (the heading after a turn along an edge is far ahead of what is seen) makes the original ignore TurnActor (FUN_0048fbd0)
+		ensureHeading();
+		// Actor_TurnKey (FUN_0048fbd0): rate * (float)(seconds * time scale) * dir, taken when the angle still to turn is not more than twice that
+		float step = toF((LD)_turnRate * (LD)(float)(origFrameSeconds() * _timeScale) * dir);
+		if (step < 0.f)
+			step = -step;
+		step = step + step;
+		if (grimRuleOn("turn_key_rule") && _turnLeft > step)
+			return;
+	}
+	// (the turn rate of the walker is negative after an immediate SetActorRot until the heading that is seen has been brought to the frame (FUN_00491230), the
+	// turn of the key is the other way until then)
 	float delta = g_grim->getPerSecond(_turnRate) * dir * _timeScale;
+	if (g_grim->getGameType() == GType_GRIM) {
+		// (Actor_UpdateWalker: key * rate * (float)(seconds * time scale))
+		delta = toF((LD)dir * _turnRate * (LD)(float)(origFrameSeconds() * _timeScale));
+		if (_yawSnap)
+			delta = -delta;
+	}
+	if (g_grim->getGameType() == GType_GRIM)
+		_turnKey = dir > 0 ? 1 : -1;
 	if (g_grim->getGameType() == GType_MONKEY4) {
 		delta = -delta;
 	}
-	_moveYaw = _moveYaw + delta;
+	if (g_grim->getGameType() == GType_GRIM)
+		turnHeadingBy(delta);
+	else
+		_moveYaw = _moveYaw + delta;
 	_turning = true;
 	_currTurnDir = dir;
 }
@@ -1583,12 +1727,414 @@ Costume *Actor::findCostume(const Common::String &n) {
 
 void Actor::setFollowBoxes(bool follow) {
 	_followBoxes = follow;
+	if (follow && g_grim->getGameType() == GType_GRIM) {
+		ensureHeading();
+		updateHeadingSector();
+	} else if (follow && g_grim->getCurrSet() && isInSet(g_grim->getCurrSet()->getName())) {
+		// The originals (EMI: 0x428eb0 -> 0x444b90) put the actor into the walkboxes the moment it starts to follow them, as SetActorPos does for an actor
+		// that already follows them. A script that places an actor with setpos and then calls follow_boxes relies on that: the walk of an actor that is
+		// outside of them is ignored (see walkTo()).
+		g_grim->getCurrSet()->findClosestSector(_pos, nullptr, &_pos);
+	}
 	if (follow)
 		_hasFollowedBoxes = true;
 }
 
+// ---- The heading of a Grim actor, as the original keeps it ----
+// The original does not keep an angle for the way an actor faces when it moves but the frame of its walker (a right, a forward and an up
+// vector, and the plane of the sector it is in), and turns it only by relative angles: the rotation matrix of an angle comes from a table
+// (sincos.cpp) and the angle that is needed to face a direction from an arcsine series. Both are a little off the true values, so that an
+// actor that was told to face 90 degrees faces 89.98 and walks a line that drifts by 3e-4 of its length. Where that decides things (to which
+// side an actor that walks head on into a box is slid) ScummVM has to do the same. In a sector that is tilted (a ramp, a stair) the frame is
+// tilted with it, and the angles between the heading that is seen and the frame are those in the plane of the sector: they differ from the
+// angles on the ground.
+
+// The forward vector on the ground, as a unit vector: a frame that is flat gives it as it is, a tilted one has to be shortened
+static void headingGround(const float *f, float &x, float &y) {
+	x = f[0];
+	y = f[1];
+	if (fabsf(f[2]) > 1e-4f)
+		originalNormalize2(x, y);
+}
+
+void Actor::syncMoveYaw() {
+	if (_hFwd[0] == 0.f && _hFwd[1] == 0.f)
+		return;
+	_moveYaw = Math::Angle::arcTangent2(-_hFwd[0], _hFwd[1]);
+}
+
+// The frame of an actor that has none yet: the original makes the frame of the walker facing 0 and turns it to the direction the actor
+// faces (the visible one) by a relative turn
+void Actor::ensureHeading() const {
+	if (_headingSet)
+		return;
+	_headingSet = true;
+	_hFwd[0] = 0.f;
+	_hFwd[1] = 1.f;
+	_hFwd[2] = 0.f;
+	_hRight[0] = 1.f;
+	_hRight[1] = 0.f;
+	_hRight[2] = 0.f;
+	_hUp[0] = 0.f;
+	_hUp[1] = 0.f;
+	_hUp[2] = 1.f;
+	_hPlane = false;
+	_hSector = nullptr;
+	Actor *self = const_cast<Actor *>(this);
+	self->faceHeading(_moveYaw);
+	if (_followBoxes)
+		self->updateHeadingSector();
+}
+
+// Walker_RebuildRightVector (FUN_004a8a90): the forward vector normalized, the right vector is forward x up, normalized
+void Actor::rebuildHeadingRight() const {
+	origNormalize3(_hFwd);
+	_hRight[0] = toF((LD)_hFwd[1] * _hUp[2] - (LD)_hUp[1] * _hFwd[2]);
+	_hRight[1] = toF((LD)_hFwd[2] * _hUp[0] - (LD)_hFwd[0] * _hUp[2]);
+	_hRight[2] = toF((LD)_hFwd[0] * _hUp[1] - (LD)_hFwd[1] * _hUp[0]);
+	origNormalize3(_hRight);
+}
+
+// FUN_004a7000: the coordinate of a point that is not one of the two axes of the plane of the sector, as the plane has it
+void Actor::headingFixPlane(float *p) const {
+	const int a = _hAxisA, b = _hAxisB;
+	int k;
+	if (a == 1 && b == 0)
+		k = 2;
+	else if (a == 0 && b == 2)
+		k = 1;
+	else
+		k = 0;
+	const LD plane = (LD)_hPlaneN[2] * _hPlaneV0[2] + (LD)_hPlaneN[0] * _hPlaneV0[0] + (LD)_hPlaneN[1] * _hPlaneV0[1];
+	p[k] = (float)(((LD)_hPlaneN[a] * p[a] + (LD)_hPlaneN[b] * p[b] + -plane) / -(LD)_hPlaneN[k]);
+}
+
+// Walker_SetSectorFrame (FUN_004a89b0): the up vector is the normal of the sector, the right vector forward x up (normalized), the forward
+// vector up x right (normalized): the heading goes onto the plane of the sector
+void Actor::setHeadingSector(const Sector *sector) {
+	ensureHeading();
+	_hSector = sector;
+	if (!sector) {
+		_hPlane = false;
+		return;
+	}
+	sector->grimPlane(_hPlaneN, _hPlaneV0, _hAxisA, _hAxisB);
+	_hPlane = true;
+	_hUp[0] = _hPlaneN[0];
+	_hUp[1] = _hPlaneN[1];
+	_hUp[2] = _hPlaneN[2];
+	_hRight[0] = toF((LD)_hUp[2] * _hFwd[1] - (LD)_hUp[1] * _hFwd[2]);
+	_hRight[1] = toF((LD)_hFwd[2] * _hUp[0] - (LD)_hUp[2] * _hFwd[0]);
+	_hRight[2] = toF((LD)_hUp[1] * _hFwd[0] - (LD)_hUp[0] * _hFwd[1]);
+	origNormalize3(_hRight);
+	_hFwd[0] = toF((LD)_hUp[1] * _hRight[2] - (LD)_hUp[2] * _hRight[1]);
+	_hFwd[1] = toF((LD)_hRight[0] * _hUp[2] - (LD)_hUp[0] * _hRight[2]);
+	_hFwd[2] = toF((LD)_hRight[1] * _hUp[0] - (LD)_hUp[1] * _hRight[0]);
+	origNormalize3(_hFwd);
+	syncMoveYaw();
+}
+
+// FUN_004a82c0: the sector the walker is in (the one that has the position, else the nearest) gives the frame its plane
+// FUN_004a82c0: the sector for the place of the walker (the one that has it, else the nearest); a place that is not in it by the test of the sector is moved
+// onto it, and the frame takes its plane
+void Actor::updateHeadingSector() {
+	Set *set = g_grim->getCurrSet();
+	if (!set) {
+		return;
+	}
+	Sector *sector = set->grimNearestSector(_pos);
+	if (!sector) {
+		_hSector = nullptr;
+		return;
+	}
+	float p[3] = { _pos.x(), _pos.y(), _pos.z() };
+	if (!sector->grimContains(p, true)) {
+		sector->grimClampPoint(p);
+		_pos.set(p[0], p[1], p[2]);
+	}
+	setHeadingSector(sector);
+}
+
+void Actor::setHeadingVector(float x, float y, float z) {
+	ensureHeading();
+	_hFwd[0] = x;
+	_hFwd[1] = y;
+	_hFwd[2] = z;
+	rebuildHeadingRight();
+	syncMoveYaw();
+}
+
+// FUN_004a83c0: the frame turned by an angle in degrees about its up vector
+void Actor::turnHeadingBy(float degrees) {
+	ensureHeading();
+	float m[12];
+	origAxisMatrix(m, _hUp, degrees);
+	const float v[3] = { _hFwd[0], _hFwd[1], _hFwd[2] };
+	// FUN_0044ffc0: the forward vector with the columns of the matrix
+	float f[3];
+	f[0] = toF((LD)v[0] * m[0] + (LD)v[1] * m[3] + (LD)v[2] * m[6]);
+	f[1] = toF((LD)m[1] * v[0] + (LD)v[1] * m[4] + (LD)v[2] * m[7]);
+	f[2] = toF((LD)m[2] * v[0] + (LD)v[2] * m[8] + (LD)m[5] * v[1]);
+	// the vector goes through the position of the walker and the plane of the sector, which rounds it to the floats of the position
+	const float pos[3] = { _pos.x(), _pos.y(), _pos.z() };
+	float q[3];
+	for (int i = 0; i < 3; i++)
+		q[i] = toF((LD)f[i] + pos[i]);
+	if (_hPlane) {
+		// FUN_004a6fa0: the point onto the plane of the sector
+		const float d = toF(((LD)q[1] - _hPlaneV0[1]) * _hPlaneN[1] + ((LD)q[2] - _hPlaneV0[2]) * _hPlaneN[2] + ((LD)q[0] - _hPlaneV0[0]) * _hPlaneN[0]);
+		for (int i = 0; i < 3; i++)
+			q[i] = toF((LD)q[i] - (LD)d * _hPlaneN[i]);
+	}
+	for (int i = 0; i < 3; i++)
+		_hFwd[i] = toF((LD)q[i] - pos[i]);
+	rebuildHeadingRight();
+	Debug::debug(Debug::Actors, "TURNH %s deg %.9g in %.9g %.9g %.9g out %.9g %.9g %.9g", _name.c_str(), degrees, v[0], v[1], v[2], _hFwd[0], _hFwd[1], _hFwd[2]);
+	syncMoveYaw();
+}
+
+// SetActorRot / TurnActorTo of the original: the frame is turned by the angle that takes its forward vector to the direction of the angle
+float Actor::faceHeading(const Math::Angle &yaw, const Math::Angle &pitch, const Math::Angle &roll) {
+	ensureHeading();
+	// the forward row of the matrix of the three angles (FUN_0044f080) as a point next to the actor, in the frame of the walker (FUN_004a8370: the point
+	// minus the position, then the transpose of the frame), flat, normalized
+	const float px = _pos.x();
+	const float py = _pos.y();
+	const float pz = _pos.z();
+	float am[12];
+	origActorMatrix(am, pitch.getDegrees(), yaw.getDegrees(), roll.getDegrees(), Math::Vector3d());
+	float v[3];
+	v[0] = (float)((LD)(float)((LD)am[3] + px) - (LD)px);
+	v[1] = (float)((LD)(float)((LD)am[4] + py) - (LD)py);
+	v[2] = (float)((LD)(float)((LD)am[5] + pz) - (LD)pz);
+	const float fr[9] = { _hRight[0], _hRight[1], _hRight[2], _hFwd[0], _hFwd[1], _hFwd[2], _hUp[0], _hUp[1], _hUp[2] };
+	float l[3];
+	origToLocal(l, v, fr);
+	l[2] = 0.f;
+	origNormalize3(l);
+	float rel = (float)(90.0L - (LD)originalAsinDeg(l[1]));
+	const float angle = rel;
+	if (l[0] > 0.f)
+		rel = -rel;
+	turnHeadingBy(rel);
+	return angle;
+}
+
+// FUN_004a8450: the frame is turned toward a point (put on the plane of the sector first), by the angle to it in the frame or by at most maxAngle
+float Actor::turnHeadingToPoint(const Math::Vector3d &target, float maxAngle) {
+	ensureHeading();
+	float q[3] = { target.x(), target.y(), target.z() };
+	if (_hPlane)
+		headingFixPlane(q);
+	float v[3] = { toF((LD)q[0] - _pos.x()), toF((LD)q[1] - _pos.y()), toF((LD)q[2] - _pos.z()) };
+	const float fr[9] = { _hRight[0], _hRight[1], _hRight[2], _hFwd[0], _hFwd[1], _hFwd[2], _hUp[0], _hUp[1], _hUp[2] };
+	float l[3];
+	origToLocal(l, v, fr);
+	origNormalize3(l);
+	float rel = (float)(90.0L - (LD)originalAsinDeg(l[1]));
+	if (maxAngle < rel)
+		rel = maxAngle;
+	if (0.f < l[0])
+		rel = rel * -1.f;
+	turnHeadingBy(rel);
+	return rel;
+}
+
+// Actor_GetYawToPoint (FUN_004a8500): the angle in the frame of the walker to the point, added to the yaw that the frame has (FUN_0044f650: from its forward vector on
+// the ground)
+float Actor::grimYawToPoint(const Math::Vector3d &target) {
+	ensureHeading();
+	float q[3] = { target.x(), target.y(), target.z() };
+	if (_hSector && _hPlane)
+		headingFixPlane(q);
+	const float v[3] = { toF((LD)q[0] - _pos.x()), toF((LD)q[1] - _pos.y()), toF((LD)q[2] - _pos.z()) };
+	const float fr[9] = { _hRight[0], _hRight[1], _hRight[2], _hFwd[0], _hFwd[1], _hFwd[2], _hUp[0], _hUp[1], _hUp[2] };
+	float l[3];
+	origToLocal(l, v, fr);
+	origNormalize3(l);
+	float rel = (float)(90.0L - (LD)originalAsinDeg(l[1]));
+	if (0.f < l[0])
+		rel = rel * -1.f;
+	const float m3 = _hFwd[0], m4 = _hFwd[1];
+	const float hyp = toF(sqrtl((LD)toF((LD)m4 * m4 + (LD)m3 * m3)));
+	float yaw = 0.f;
+	if (0.001f <= hyp) {
+		LD a = 90.0L - (LD)originalAsinDeg(toF((LD)m4 / hyp));
+		if (0.f < m3)
+			a = -a;
+		yaw = (float)a;
+	}
+	return (float)((LD)yaw + (LD)rel);
+}
+
+// FUN_004931f0 (GetSectorOppositeEdge): FUN_004a7390 puts the walker on the opposite edge of a sector of four sides (the place where the line from the walker, 10 m
+// along its backward direction, leaves the sector, on the edge two further, at the same distance along it from the other end); Actor_SetPositionClamped then
+// takes the place for the actor. The builtin gives no values to the script.
+void Actor::grimOppositeEdge(Sector *sector) {
+	if (!_headingSet)
+		return;
+	Math::Vector3d newPos = _pos;
+	if (sector->getNumVertices() == 4) {
+		const float pos[3] = { _pos.x(), _pos.y(), _pos.z() };
+		float target[3];
+		for (int i = 0; i < 3; i++)
+			target[i] = toF((LD)_hFwd[i] * -10.0f + pos[i]);
+		float exitPt[3];
+		sector->grimFindExitPoint(pos, target, exitPt);
+		const int edge = sector->grimExitEdge();
+		if (edge != -1) {
+			const int n = sector->getNumVertices();
+			const Math::Vector3d *vs = sector->getVertices();
+			const Math::Vector3d &v0 = vs[edge];
+			const Math::Vector3d &v1 = vs[edge - 1 > -1 ? edge - 1 : n - 1];
+			const LD dx = (LD)v1.x() - v0.x();
+			LD frac;
+			if (fabsl(dx) > (LD)1e-05f)
+				frac = ((LD)exitPt[0] - v0.x()) / dx;
+			else
+				frac = ((LD)exitPt[1] - v0.y()) / ((LD)v1.y() - v0.y());
+			frac = 1.0L - frac;
+			const int e2 = (edge + 2) % n;
+			const Math::Vector3d &a = vs[e2];
+			const Math::Vector3d &b = vs[e2 - 1 > -1 ? e2 - 1 : n - 1];
+			newPos.set(toF(((LD)b.x() - a.x()) * frac + a.x()), toF(((LD)b.y() - a.y()) * frac + a.y()), toF(((LD)b.z() - a.z()) * frac + a.z()));
+		}
+	}
+	setPos(newPos);
+}
+
+// TurnActorTo (FUN_0049fc60): the frame of the walker is turned toward the point by at most the turn rate of the frame (FUN_004a8450), at once; true when that
+// was all the turn rate allowed (there may be more to turn), else it is done
+bool Actor::grimTurnActorTo(const Math::Vector3d &target) {
+	ensureHeading();
+	const float maxAngle = toF(origFrameSeconds() * fabsf(_turnRate));
+	float rel = turnHeadingToPoint(target, maxAngle);
+	if (rel < 0.f)
+		rel = -rel;
+	return maxAngle <= rel;
+}
+
+// Walker_UpdateYaw (FUN_00491230): the forward vector of the heading that is seen (from its three angles) in the frame of the walker, flat: the
+// angle between that and the forward vector of the frame is what is left to turn. A turn of less than half a degree is none. Else the heading that
+// is seen turns by the turn rate of the frame plus a tenth of the rest (all of it when snap), toward the frame.
+int Actor::grimUpdateYaw(bool snap) {
+	ensureHeading();
+	float m[12];
+	origActorMatrix(m, _pitch.getDegrees(), _yaw.getDegrees(), _roll.getDegrees(), _pos);
+	const float pos[3] = { _pos.x(), _pos.y(), _pos.z() };
+	float v[3];
+	for (int i = 0; i < 3; i++)
+		v[i] = (float)((LD)(float)((LD)m[3 + i] + pos[i]) - (LD)pos[i]);
+	const float fr[9] = { _hRight[0], _hRight[1], _hRight[2], _hFwd[0], _hFwd[1], _hFwd[2], _hUp[0], _hUp[1], _hUp[2] };
+	float l[3];
+	origToLocal(l, v, fr);
+	l[2] = 0.f;
+	const float l0pre = l[0], l1pre = l[1];
+	origNormalize3(l);
+	if (Debug::isChannelEnabled(Debug::Actors)) {
+		uint32 bits;
+		memcpy(&bits, &l[1], 4);
+		Debug::debug(Debug::Actors, "UPDYAW %s l1 %08x yaw %.9g pos %.9g %.9g pre %.9g %.9g v %.9g %.9g %.9g m %.9g %.9g %.9g sum %.9g %.9g %.9g right %.9g %.9g %.9g fwd %.9g %.9g %.9g", _name.c_str(), bits, _yaw.getDegrees(), _pos.x(), _pos.y(), l0pre, l1pre, v[0], v[1], v[2], m[3], m[4], m[5], (float)((LD)m[3] + pos[0]), (float)((LD)m[4] + pos[1]), (float)((LD)m[5] + pos[2]), fr[0], fr[1], fr[2], fr[3], fr[4], fr[5]);
+	}
+	const LD angle = 90.0L - (LD)originalAsinDeg(l[1]);
+	if (angle < 0.5L) {
+		_turnLeft = 0.f;
+		return 0;
+	}
+	const float a = (float)angle;
+	_turnLeft = a;
+	// (the turn rate of the walker is negative after an immediate SetActorRot, until an update gets here: the step of that one is unlimited and makes the rate
+	// positive again. An update that finds less than half a degree to turn returns before that, and leaves the rate negative.)
+	LD step;
+	if (_yawSnap) {
+		step = (LD)3.4028235e+38f;
+		_yawSnap = false;
+	} else {
+		// (seconds * time scale * rate, kept in extended precision)
+		step = origFrameSeconds() * _timeScale * _turnRate;
+	}
+	float turn = a;
+	if (step < (LD)a)
+		turn = (float)(((LD)a - step) * (LD)0.1f + step);
+	if (l[0] <= 0.f) {
+		_yaw -= turn;
+		return -1;
+	}
+	_yaw += turn;
+	return 1;
+}
+
+float Actor::moveSine() const {
+	if (g_grim->getGameType() != GType_GRIM)
+		return _moveYaw.getSine();
+	ensureHeading();
+	float x, y;
+	headingGround(_hFwd, x, y);
+	return -x;
+}
+
+float Actor::moveCosine() const {
+	if (g_grim->getGameType() != GType_GRIM)
+		return _moveYaw.getCosine();
+	ensureHeading();
+	float x, y;
+	headingGround(_hFwd, x, y);
+	return y;
+}
+
+// Actor_SetPositionClamped (FUN_00490870) for a waypoint: the walker is put there, and takes the plane of the sector there
+void Actor::placeOnWaypoint(const Math::Vector3d &p) {
+	_pos = p;
+	if (_followBoxes && _headingSet)
+		updateHeadingSector();
+}
+
+// FUN_00493230: the walk along the points of a path. A point is reached when the actor is nearer to it than a step and a quarter (the actor is
+// put on it then, and the next point is looked at in the same way); the frame is turned toward the next point at once and a step is asked for.
+void Actor::updateWalkGrim() {
+	const float rate = fabsf(_walkRate);
+	const float step = toF(origFrameSeconds() * _timeScale * rate * 1.25L);
+	Math::Vector3d wp = _path.back();
+	auto nearer = [&](const Math::Vector3d &point) {
+		// (the points of a path lie on the plane of the sector of the walker, as the planner of the original makes them; a script's own point
+		// can have any height, and the actor stands on the plane)
+		Math::Vector3d w = point;
+		if (_hPlane) {
+			float q[3] = { point.x(), point.y(), point.z() };
+			headingFixPlane(q);
+			w.set(q[0], q[1], q[2]);
+		}
+		const float dx = _pos.x() - w.x();
+		const float dy = _pos.y() - w.y();
+		const float dz = _pos.z() - w.z();
+		return (float)sqrtl((LD)dz * dz + (LD)dy * dy + (LD)dx * dx) < step;
+	};
+	if (nearer(wp)) {
+		do {
+			_path.pop_back();
+			placeOnWaypoint(wp);
+			if (_path.empty())
+				break;
+			wp = _path.back();
+		} while (nearer(wp));
+		if (_path.empty()) {
+			// (the heading that is seen goes on turning to the frame; the last point is where the actor is)
+			_walking = false;
+			return;
+		}
+	}
+	_walking = true;
+	turnHeadingToPoint(wp, 3.4028235e+38f);
+	_walkPending = true;
+}
+
 void Actor::updateWalk() {
 	if (_path.empty()) {
+		return;
+	}
+
+	if (g_grim->getGameType() == GType_GRIM) {
+		updateWalkGrim();
 		return;
 	}
 
@@ -1611,7 +2157,16 @@ void Actor::updateWalk() {
 		}
 	}
 
-	turnTo(destPos);
+	if (g_grim->getGameType() == GType_GRIM) {
+		Math::Angle y, p, r;
+		calculateOrientation(destPos, &p, &y, &r);
+		_movePitch = p;
+		_moveRoll = r;
+		turnHeadingToPoint(destPos, 3.4028235e+38f);
+		_turning = _yaw != y || _pitch != p || _roll != r;
+	} else {
+		turnTo(destPos);
+	}
 
 	// The EMI original only moves the actor while the body is within 80 degrees
 	// of the walking direction, otherwise it turns on the spot first.
@@ -1627,7 +2182,87 @@ void Actor::updateWalk() {
 	_pos += dir * walkAmt;
 }
 
+// FUN_0044fc60: the matrix m times the matrix p (the rows of m turned by p; the position is not needed here)
+static void origMatrixMul(float *m, const float *p) {
+	const float o[9] = { m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8] };
+	for (int r = 0; r < 3; r++) {
+		const float *q = o + r * 3;
+		m[r * 3] = toF((LD)q[0] * p[0] + (LD)p[6] * q[2] + (LD)p[3] * q[1]);
+		m[r * 3 + 1] = toF((LD)p[4] * q[1] + (LD)p[1] * q[0] + (LD)p[7] * q[2]);
+		m[r * 3 + 2] = toF((LD)p[8] * q[2] + (LD)p[2] * q[0] + (LD)p[5] * q[1]);
+	}
+}
+
+// FUN_0044f650: the three angles (pitch, yaw, roll) of the matrix
+static void origMatrixAngles(const float *m, float *a) {
+	const float m3sq = toF((LD)m[3] * m[3]);
+	const float f6 = toF((LD)m[4] * m[4] + m3sq);
+	const float f7 = toF(sqrtl((LD)f6));
+	const float f8 = -m[1];
+	if (0.001f <= f7) {
+		LD y = 90.0L - (LD)originalAsinDeg(toF((LD)m[4] / f7));
+		if (0.f < m[3])
+			y = -y;
+		a[1] = toF(y);
+	} else {
+		LD r = 90.0L - (LD)originalAsinDeg(m[0]);
+		if ((0.f < f8 && 0.f < m[5]) || (f8 < 0.f && m[5] < 0.f))
+			r = -r;
+		a[2] = toF(r);
+		a[1] = 0.f;
+	}
+	if (0.001f <= f7) {
+		const float q = toF((LD)f6 / f7);
+		a[0] = q < 1.f ? toF(90.0L - (LD)originalAsinDeg(q)) : 0.f;
+	} else {
+		a[0] = 90.f;
+	}
+	if (m[5] < 0.f)
+		a[0] = -a[0];
+	const float f5 = -m[4];
+	if (0.001f <= f7) {
+		const float q = toF(((LD)f8 * m[3] + (LD)f5 * -m[0]) / sqrtl((LD)f5 * f5 + m3sq));
+		if (q < 1.f)
+			a[2] = -1.f < q ? toF(90.0L - (LD)originalAsinDeg(q)) : 180.f;
+		else
+			a[2] = 0.f;
+		if (-m[2] < 0.f)
+			a[2] = -a[2];
+	}
+}
+
+// FUN_00490f50: an actor that is oriented to the sector (ActorPuckOrient) turns its up row toward the up vector of the walker, at the turn rate of the
+// frame, when they are more than two degrees apart; the three angles are then those of the turned matrix
+void Actor::grimPuckOrient() {
+	ensureHeading();
+	float m[12];
+	origActorMatrix(m, _pitch.getDegrees(), _yaw.getDegrees(), _roll.getDegrees(), _pos);
+	const float up[3] = { m[6], m[7], m[8] };
+	const float n[3] = { _hUp[0], _hUp[1], _hUp[2] };
+	const LD dot = (LD)up[0] * n[0] + (LD)up[2] * n[2] + (LD)up[1] * n[1];
+	const float rel = toF(90.0L - (LD)originalAsinDeg((float)dot));
+	if (!((LD)2.0 < (rel < 0.f ? -(LD)rel : (LD)rel)))
+		return;
+	const LD maxStep = origFrameSeconds() * _turnRate;
+	float step = rel;
+	if (0.f < rel && maxStep < (LD)rel)
+		step = (float)maxStep;
+	if (step < 0.f && (LD)step < -maxStep)
+		step = (float)-maxStep;
+	float axis[3] = { toF((LD)n[2] * up[1] - (LD)n[1] * up[2]), toF((LD)n[0] * up[2] - (LD)n[2] * up[0]), toF((LD)n[1] * up[0] - (LD)n[0] * up[1]) };
+	origNormalize3(axis);
+	float p[12];
+	origAxisMatrix(p, axis, step);
+	origMatrixMul(m, p);
+	float a[3] = { _pitch.getDegrees(), _yaw.getDegrees(), _roll.getDegrees() };
+	origMatrixAngles(m, a);
+	_pitch = Math::Angle(a[0]);
+	_yaw = Math::Angle(a[1]);
+	_roll = Math::Angle(a[2]);
+}
+
 void Actor::update(uint frameTime) {
+	_rotPending = false;
 	Set *set = g_grim->getCurrSet();
 
 	if (g_grim->getGameType() == GType_MONKEY4) {
@@ -1647,21 +2282,42 @@ void Actor::update(uint frameTime) {
 		}
 	}
 
-	if (_turning) {
-		float turnAmt = g_grim->getPerSecond(_turnRate) * _timeScale;
-		_currTurnDir = animTurnEased(turnAmt, _moveYaw, &_yaw);
-		if (g_grim->getGameType() == GType_MONKEY4) {
+	if (g_grim->getGameType() == GType_GRIM) {
+		// The order of the original (FUN_0048fd90): the walk along a path turns the frame toward the next point and asks for a step, the step is made
+		// (Actor_UpdateWalker), then the heading that is seen follows the frame (Walker_UpdateYaw)
+		if (_walking)
+			updateWalk();
+		if (_walkPending) {
+			_walkPending = false;
+			doWalkForward();
+		}
+		if (_headingSet) {
+			// (the update runs in every frame for an actor that has a walker: what turns the heading that is seen is the frame, not a request)
+			// (the original never eases the pitch and the roll toward a target: they stay as they were set, apart from ActorPuckOrient)
+			_currTurnDir = grimUpdateYaw(false);
+			_turning = _currTurnDir != 0;
+		} else {
+			_turnLeft = 0.f;
+		}
+		// (the key of TurnActor is for one frame: FUN_004913f0 clears it at the end of the update)
+		_turnKey = 0;
+		if (_puckOrient)
+			grimPuckOrient();
+	} else {
+		if (_turning) {
+			float turnAmt = g_grim->getPerSecond(_turnRate) * _timeScale;
+			_currTurnDir = animTurnEased(turnAmt, _moveYaw, &_yaw);
 			_currTurnDir = -_currTurnDir;
+			int p = animTurn(turnAmt, _movePitch, &_pitch);
+			int r = animTurn(turnAmt, _moveRoll, &_roll);
+			if (_currTurnDir == 0 && p == 0 && r == 0) {
+				_turning = false;
+			}
 		}
-		int p = animTurn(turnAmt, _movePitch, &_pitch);
-		int r = animTurn(turnAmt, _moveRoll, &_roll);
-		if (_currTurnDir == 0 && p == 0 && r == 0) {
-			_turning = false;
-		}
-	}
 
-	if (_walking) {
-		updateWalk();
+		if (_walking) {
+			updateWalk();
+		}
 	}
 
 	if (_walkChore.isValid()) {
@@ -2259,6 +2915,118 @@ bool Actor::getSphereInfo(bool adjustZ, float &size, Math::Vector3d &p) const {
 		size = model->_radius * _collisionScale;
 	}
 	return true;
+}
+
+// The way the original keeps a walking actor (a sphere) out of the box of another one (FUN_004939f0, FUN_00494100, FUN_004922d0),
+// with its arithmetic: the floats of the matrices of the two actors (from the angles, by the tables of the original), every
+// expression kept in extended precision until it is stored. A head-on move into a face has no side to slide to but the one that the
+// last digits of the floats give (the axis of the turn is the cross product of two nearly parallel vectors), so the digits are the
+// behaviour.
+// FUN_0044eeb0: the matrix of an actor, the three rows of its angles (pitch, yaw, roll) and its position
+static void origActorMatrix(float *m, float e0, float e1, float e2, const Math::Vector3d &pos) {
+	float s0, c0, s1, c1, s2, c2;
+	originalSinCos(e0, s0, c0);
+	originalSinCos(e1, s1, c1);
+	originalSinCos(e2, s2, c2);
+	m[0] = toF(-((LD)s2 * s1) * s0 + (LD)c2 * c1);
+	m[1] = toF((LD)s2 * c1 * s0 + (LD)c2 * s1);
+	m[2] = toF(-(LD)s2 * c0);
+	m[3] = toF(-(LD)s1 * c0);
+	m[4] = toF((LD)c1 * c0);
+	m[5] = s0;
+	m[6] = toF((LD)c2 * s1 * s0 + (LD)s2 * c1);
+	m[7] = toF(-(LD)s0 * c2 * c1 + (LD)s2 * s1);
+	m[8] = toF((LD)c2 * c0);
+	m[9] = pos.x();
+	m[10] = pos.y();
+	m[11] = pos.z();
+}
+
+// FUN_0044fee0 (without the position) and FUN_00450060 / FUN_004500d0 (with it): a vector turned by the matrix
+static void origTurn(float *o, const float *v, const float *m, bool withPos) {
+	const float x = toF((LD)v[0] * m[0] + (LD)v[1] * m[3] + (LD)v[2] * m[6] + (withPos ? (LD)m[9] : 0.L));
+	const float y = toF((LD)m[1] * v[0] + (LD)m[4] * v[1] + (LD)v[2] * m[7] + (withPos ? (LD)m[10] : 0.L));
+	const float z = toF((LD)m[2] * v[0] + (LD)m[8] * v[2] + (LD)v[1] * m[5] + (withPos ? (LD)m[11] : 0.L));
+	o[0] = x;
+	o[1] = y;
+	o[2] = z;
+}
+
+// FUN_0044ff50: the rows of the matrix with the vector (to the frame of the actor)
+static void origToLocal(float *o, const float *v, const float *m) {
+	const float x = toF((LD)v[0] * m[0] + (LD)v[1] * m[1] + (LD)v[2] * m[2]);
+	const float y = toF((LD)m[3] * v[0] + (LD)m[4] * v[1] + (LD)v[2] * m[5]);
+	const float z = toF((LD)m[6] * v[0] + (LD)m[8] * v[2] + (LD)v[1] * m[7]);
+	o[0] = x;
+	o[1] = y;
+	o[2] = z;
+}
+
+// FUN_004469a0: the vector divided by its length, which is returned
+static LD origNormalize3(float *v) {
+	const LD len = sqrtl((LD)v[0] * v[0] + (LD)v[2] * v[2] + (LD)v[1] * v[1]);
+	if (len != 0.L) {
+		const LD inv = 1.L / len;
+		v[0] = toF(inv * v[0]);
+		v[1] = toF(v[1] * inv);
+		v[2] = toF(v[2] * inv);
+	}
+	return len;
+}
+
+// FUN_0044f210: the matrix of a turn about an axis
+static void origAxisMatrix(float *m, const float *axis, float degrees) {
+	float s, c;
+	originalSinCos(degrees, s, c);
+	float d1 = toF(1.L - axis[2]);
+	if (fabsf(d1) <= 1e-05f)
+		d1 = 0.f;
+	if (d1 == 0.f) {
+		m[0] = c;
+		m[4] = c;
+		m[3] = -s;
+		m[1] = s;
+	} else {
+		float d2 = toF((LD)axis[2] - -1.L);
+		if (fabsf(d2) <= 1e-05f)
+			d2 = 0.f;
+		if (d2 != 0.f) {
+			const float f6 = toF((LD)axis[0] * axis[0]);
+			const float f8 = toF((LD)axis[1] * axis[1]);
+			const float f7 = toF((LD)f6 * c);
+			const float f9 = toF((1.L - f6) - f8);
+			const float f10 = toF((LD)f8 * c);
+			const float oc = toF(1.L - c);
+			const float f11 = toF((LD)axis[2] * axis[0] * oc);
+			const float f12 = toF((LD)axis[1] * axis[2] * oc);
+			m[0] = toF(((LD)f7 * f9 + f10) / (1.L - f9) + f6);
+			const float t = toF((LD)axis[1] * axis[0] * oc);
+			m[9] = 0.f;
+			m[10] = 0.f;
+			m[4] = toF(((LD)f10 * f9 + f7) / (1.L - f9) + f8);
+			m[8] = toF((LD)f10 + f7 + f9);
+			m[1] = toF((LD)axis[2] * s + t);
+			m[3] = toF((LD)t - (LD)axis[2] * s);
+			m[2] = toF((LD)f11 - (LD)axis[1] * s);
+			m[5] = toF((LD)f12 + (LD)s * axis[0]);
+			m[6] = toF((LD)f11 + (LD)axis[1] * s);
+			m[7] = toF((LD)f12 - (LD)s * axis[0]);
+			m[11] = 0.f;
+			return;
+		}
+		m[0] = c;
+		m[4] = c;
+		m[1] = -s;
+		m[3] = s;
+	}
+	m[2] = 0.f;
+	m[5] = 0.f;
+	m[6] = 0.f;
+	m[7] = 0.f;
+	m[8] = 1.f;
+	m[9] = 0.f;
+	m[10] = 0.f;
+	m[11] = 0.f;
 }
 
 bool Actor::handleCollisionWith(Actor *actor, CollisionMode mode, Math::Vector3d *vec) const {

@@ -83,6 +83,7 @@ protected:
 	DECLARE_LUA_OPCODE(SetActorWalkRate);
 	DECLARE_LUA_OPCODE(GetActorWalkRate);
 	DECLARE_LUA_OPCODE(SetActorTurnRate);
+	DECLARE_LUA_OPCODE(GetActorTurnRate);
 	DECLARE_LUA_OPCODE(WalkActorForward);
 	DECLARE_LUA_OPCODE(SetActorReflection);
 	DECLARE_LUA_OPCODE(GetActorPuckVector);
@@ -150,6 +151,7 @@ protected:
 	DECLARE_LUA_OPCODE(IsActorInSector);
 	DECLARE_LUA_OPCODE(IsPointInSector);
 	DECLARE_LUA_OPCODE(MakeSectorActive);
+	DECLARE_LUA_OPCODE(IsSectorActive);
 	DECLARE_LUA_OPCODE(LockSet);
 	DECLARE_LUA_OPCODE(UnLockSet);
 	DECLARE_LUA_OPCODE(MakeCurrentSet);

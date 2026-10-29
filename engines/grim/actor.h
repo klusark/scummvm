@@ -231,6 +231,11 @@ public:
 	 * @see turnTo
 	 */
 	bool isTurning() const;
+	// SetActorRot without a turn leaves the original's actor "turning" until its next update (IsActorTurning reads the pending angle it
+	// stores): a script that waits for the actor right after puts it in a place yields once
+	void setRotPending() { _rotPending = true; }
+	/** True when the actor neither walked nor turned during the last update */
+	bool isResting() const { return !_walkedLast && _lastTurnDir == 0; }
 	/**
 	 * Stops the actor from turning
 	 */
@@ -530,6 +535,28 @@ public:
 
 	void setFollowBoxes(bool follow);
 	bool hasFollowBoxes() const { return _followBoxes; }
+	void setConstrain(bool constrain);
+
+	// The heading frame (Grim): turned to an angle the way the original does it (a relative turn of the frame), turned by an angle, set
+	// from a direction, and the sine and cosine of the heading for the code that moves the actor
+	float faceHeading(const Math::Angle &yaw, const Math::Angle &pitch = Math::Angle(), const Math::Angle &roll = Math::Angle());
+	void turnHeadingBy(float degrees);
+	void setHeadingVector(float x, float y, float z = 0.f);
+	/** Walker_SetSectorFrame (FUN_004a89b0): the frame of the walker takes the plane of a sector (no sector: none) */
+	void setHeadingSector(const Sector *sector);
+	/** FUN_004a82c0: the frame takes the plane of the sector the actor is in (the actors that follow boxes, when they are put somewhere) */
+	void updateHeadingSector();
+	/** FUN_004a8450: the frame is turned toward a point, by at most an angle */
+	float turnHeadingToPoint(const Math::Vector3d &target, float maxAngle);
+	/** TurnActorTo of the original: true while the actor still has to turn */
+	bool grimTurnActorTo(const Math::Vector3d &target);
+	/** Actor_GetYawToPoint (FUN_004a8500): the yaw of the frame of the walker plus the angle in the frame to the point */
+	float grimYawToPoint(const Math::Vector3d &target);
+	/** GetSectorOppositeEdge of the original (FUN_004931f0, FUN_004a7390): the actor is put on the opposite edge of a four sided sector, the place where a line
+	 * from it 10 m backward leaves the sector is, mirrored (the edge two further) */
+	void grimOppositeEdge(Sector *sector);
+	float moveSine() const;
+	float moveCosine() const;
 	bool hasFollowedBoxes() const { return _hasFollowedBoxes; }
 	void update(uint frameTime);
 	/**
@@ -642,6 +669,8 @@ private:
 	bool _followBoxes;  // Constrain to walkboxes
 	bool _hasFollowedBoxes;
 	float _reflectionAngle; // Maximum angle to turn by at walls
+	bool _constrained; // Walks forward only along _constrainDir (stairs and curbs)
+	Math::Vector3d _constrainDir;
 	bool _visible;
 	float _scale;
 	float _timeScale;
@@ -654,6 +683,9 @@ private:
 
 	// Variables for gradual turning
 	bool _turning;
+	bool _rotPending;
+	void ensureHeading() const;
+	void syncMoveYaw();
 	bool _singleTurning;
 	// NOTE: The movement direction is separate from the direction
 	// the actor's model is facing. The model's direction is gradually
@@ -661,6 +693,38 @@ private:
 	// turning animation while still allowing the actor to move in a
 	// new direction immediately after reflecting off a wall.
 	Math::Angle _moveYaw;
+	// The heading of a Grim actor as the original keeps it: the forward and right vectors of the frame of its walker, turned only by
+	// relative angles through the tables of the original (see sincos.h). _moveYaw is their angle, for the code that wants an angle.
+	mutable float _hRight[3], _hFwd[3], _hUp[3];
+	/** The plane of the sector the walker is in (+0x5c): the normal, the first vertex, the two axes; the sector itself is only compared */
+	mutable bool _hPlane;
+	mutable float _hPlaneN[3], _hPlaneV0[3];
+	mutable int _hAxisA, _hAxisB;
+	mutable const Sector *_hSector;
+	mutable bool _headingSet;
+	bool _yawSnap;
+	/** The angle between the heading that is seen and the heading of the walker as it was before the last update moved the first toward the second (+0x28 of the walker) */
+	float _turnLeft = 0.f;
+	/** The step of WalkActorForward is made in the update of the actor, after all the scripts of the frame have run (Actor_UpdateWalker), not in the call */
+	bool _walkPending = false;
+	void doWalkForward();
+	void updateWalkGrim();
+	void placeOnWaypoint(const Math::Vector3d &p);
+	/** Walker_UpdateYaw (FUN_00491230): the heading that is seen follows the frame of the walker; returns the direction of the turn (0: done) */
+	int grimUpdateYaw(bool snap);
+	void grimPuckOrient();
+	/** Walker_WalkSectors (FUN_004a8610): the walk of one step over the sectors; false when the step could not be walked whole */
+	bool grimWalkSectors(float dist, bool turnLeft, bool turnRight);
+	void grimSetWalkerPos(const float *p);
+	/** FUN_004a7520: the direction along the box the walker stands in (stairs, curbs) */
+	bool grimConstraintLine(float *out) const;
+	float _wsDist;
+	/** The key of TurnActor in this frame (+0x10 of the walker), taken by Actor_TurnKey and cleared at the end of the update (FUN_004913f0) */
+	int _turnKey;
+	float _cvec[3];
+	static int s_wsDepth;
+	void rebuildHeadingRight() const;
+	void headingFixPlane(float *p) const;
 	Math::Angle _movePitch;
 	Math::Angle _moveRoll;
 
@@ -709,6 +773,11 @@ private:
 	ActionChore _mumbleChore;
 
 	Shadow *_shadowArray;
+	int _clipActive;
+	Math::Vector3d _clipNormal, _clipPoint;
+	int _invClipNode;
+	bool _frustumCull;
+	static const Actor *s_drawnActor;
 	int _activeShadowSlot;
 
 	static ObjectPtr<Font> _sayLineFont;
