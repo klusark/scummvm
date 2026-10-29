@@ -31,6 +31,25 @@
 namespace Grim {
 
 // Sector functions
+
+// Debug aid for the autorun scripts: logs the sectors of the current set
+void Lua_V1::DumpSectors() {
+	Set *set = g_grim->getCurrSet();
+	if (!set)
+		return;
+	for (int i = 0; i < set->getSectorCount(); i++) {
+		Sector *sector = set->getSectorBase(i);
+		if (!sector)
+			continue;
+		Common::String line = Common::String::format("SECTOR %d %s type=%d visible=%d:", sector->getSectorId(), sector->getName().c_str(), (int)sector->getType(), sector->isVisible() ? 1 : 0);
+		for (int v = 0; v < sector->getNumVertices(); v++) {
+			Math::Vector3d p = sector->getVertices()[v];
+			line += Common::String::format(" (%.3f,%.3f,%.3f)", p.x(), p.y(), p.z());
+		}
+		warning("%s", line.c_str());
+	}
+}
+
 /* Find the sector (of any type) which contains
  * the requested coordinate (x,y,z).
  */

@@ -108,6 +108,7 @@ protected:
 	DECLARE_LUA_OPCODE(ClearSpecialtyTexture);
 	DECLARE_LUA_OPCODE(ClearOverworld);
 	DECLARE_LUA_OPCODE(EnableActorPuck);
+	DECLARE_LUA_OPCODE(GetFloorHeights);
 	DECLARE_LUA_OPCODE(GetActorSortOrder);
 	DECLARE_LUA_OPCODE(IsChoreLooping);
 	DECLARE_LUA_OPCODE(SetChoreLooping);

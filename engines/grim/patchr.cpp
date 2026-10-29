@@ -24,6 +24,7 @@
 #include "common/file.h"
 #include "common/compression/deflate.h"
 #include "common/bufferedstream.h"
+#include "common/config-manager.h"
 
 #include "engines/grim/patchr.h"
 #include "engines/grim/debug.h"
@@ -323,6 +324,7 @@ bool PatchedFile::seek(int64 offset, int whence) {
 		Debug::debug(Debug::Patchr, "Seeking back to start %s", _patchName.toString().c_str());
 		_file->seek(0, SEEK_SET);
 		_ctrl->seek(0, SEEK_SET);
+		_diff->seek(0, SEEK_SET);
 		_extra->seek(0, SEEK_SET);
 		_instrLeft = _ctrl->size() / (3 * sizeof(uint32));
 		readNextInst();
@@ -365,13 +367,42 @@ Common::SeekableReadStream *wrapPatchedFile(Common::SeekableReadStream *rs, cons
 	if (!rs)
 		return nullptr;
 
+	// Debug aid for the autorun scripts: with no_patchr set the scripts are the ones of the original game's v1.01 patch,
+	// without the fixes that ScummVM applies to them
 	Common::Path patchfile = filename.append(".patchr");
+	if (ConfMan.hasKey("no_patchr") && ConfMan.getBool("no_patchr")) {
+		if (SearchMan.hasFile(patchfile))
+			warning("PATCHR skipped for %s", filename.toString().c_str());
+		return rs;
+	}
 	int i = 1;
 	while (SearchMan.hasFile(patchfile)) {
 		Debug::debug(Debug::Patchr, "Patch requested for %s (patch filename %s)", filename.toString().c_str(), patchfile.toString().c_str());
 
 		PatchedFile *pf = new PatchedFile;
 		if (pf->load(rs, patchfile)) {
+			warning("PATCHR applied to %s", filename.toString().c_str());
+			if (ConfMan.hasKey("dump_patchr") && ConfMan.getBool("dump_patchr")) {
+				// Debug aid: the patched file is written out, to put it into a DATAUSR.LAB for the original game
+				int64 patchedSize = pf->size();
+				byte *patched = new byte[patchedSize];
+				pf->seek(0);
+				// (in blocks of 1024 bytes, as the engine reads it)
+				for (int64 done = 0; done < patchedSize;) {
+					uint32 got = pf->read(patched + done, (uint32)MIN<int64>(1024, patchedSize - done));
+					if (!got)
+						break;
+					done += got;
+				}
+				pf->seek(0);
+				Common::DumpFile dump;
+				if (dump.open(Common::Path("patched_dump/" + filename.baseName(), '/'), true)) {
+					dump.write(patched, patchedSize);
+					dump.finalize();
+					dump.close();
+				}
+				delete[] patched;
+			}
 			rs = Common::wrapBufferedSeekableReadStream(pf, 1024, DisposeAfterUse::YES);
 			Debug::debug(Debug::Patchr, "Patch for %s successfully loaded", filename.toString().c_str());
 			break;

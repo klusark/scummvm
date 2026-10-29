@@ -147,6 +147,7 @@ protected:
 	DECLARE_LUA_OPCODE(IsMessageGoing);
 	DECLARE_LUA_OPCODE(ShutUpActor);
 	DECLARE_LUA_OPCODE(GetPointSector);
+	DECLARE_LUA_OPCODE(DumpSectors);
 	DECLARE_LUA_OPCODE(GetActorSector);
 	DECLARE_LUA_OPCODE(IsActorInSector);
 	DECLARE_LUA_OPCODE(IsPointInSector);
@@ -229,6 +230,7 @@ protected:
 	DECLARE_LUA_OPCODE(SetObjectType);
 	DECLARE_LUA_OPCODE(GetCurrentScript);
 	DECLARE_LUA_OPCODE(ScreenShot);
+	DECLARE_LUA_OPCODE(DumpFrame);
 	DECLARE_LUA_OPCODE(GetSaveGameImage);
 	DECLARE_LUA_OPCODE(SubmitSaveGameData);
 	DECLARE_LUA_OPCODE(GetSaveGameData);

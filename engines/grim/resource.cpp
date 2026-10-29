@@ -19,6 +19,12 @@
  *
  */
 
+#define FORBIDDEN_SYMBOL_EXCEPTION_fopen
+#define FORBIDDEN_SYMBOL_EXCEPTION_fprintf
+#define FORBIDDEN_SYMBOL_EXCEPTION_fclose
+#define FORBIDDEN_SYMBOL_EXCEPTION_FILE
+#define FORBIDDEN_SYMBOL_EXCEPTION_getenv
+
 #include "gui/error.h"
 
 #include "engines/grim/resource.h"
@@ -218,6 +224,20 @@ ResourceLoader::ResourceLoader() {
 	}
 
 	files.clear();
+
+	// Debug aid for the autorun scripts: with dump_patchr every file that ScummVM patches is opened once, which writes
+	// the patched file out (see wrapPatchedFile)
+	if (ConfMan.hasKey("dump_patchr") && ConfMan.getBool("dump_patchr")) {
+		static const char *const patched[] = { "lo_os_door.cos", "nl.lua", "dlg_velasco.lua", "os.lua", "os_lo_door.cos", "sp.lua",
+			"fi.lua", "dlg_dom2.lua", "ma_use_baster.cos", "_system.lua", "sg.lua", "na.lua", "bd.lua", "ly.lua", "mo.lua",
+			"tg.lua", "si.lua", "cf.set", "dlg_lupe.lua", "dlg_glottis.lua", "ma_back_off.key", "ha.lua", "tr.lua", "_inventory.lua",
+			"do.lua", "cy.lua", "forklift.cos", "ts.lua", "lo.lua", "bi.lua" };
+		for (uint i = 0; i < ARRAYSIZE(patched); i++) {
+			Common::SeekableReadStream *rs = loadFile(Common::Path(patched[i]));
+			warning("PATCHR dump: %s present %d", patched[i], (int)(rs != nullptr));
+			delete rs;
+		}
+	}
 }
 
 template<typename T>
@@ -277,6 +297,20 @@ Common::SeekableReadStream *ResourceLoader::loadFile(const Common::Path &filenam
 		rs = SearchMan.createReadStreamForMember(filename);
 	else
 		return nullptr;
+
+	// Asset coverage (tools/asset_coverage.py): with GRIM_ASSET_LOG=<file>, every file name loaded for the first time is appended to it
+	static const char *assetLog = getenv("GRIM_ASSET_LOG");
+	if (assetLog) {
+		static Common::HashMap<Common::String, bool> seen;
+		const Common::String name = filename.toString('/');
+		if (!seen.contains(name)) {
+			seen[name] = true;
+			if (FILE *f = fopen(assetLog, "a")) {
+				fprintf(f, "%s\n", name.c_str());
+				fclose(f);
+			}
+		}
+	}
 
 	rs = wrapPatchedFile(rs, filename);
 	return rs;
