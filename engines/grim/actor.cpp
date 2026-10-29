@@ -711,6 +711,30 @@ void Actor::walkTo(const Math::Vector3d &p) {
 		_destPos = p;
 		_path.clear();
 
+		if (_followBoxes && g_grim->getGameType() == GType_GRIM && grimRuleOn("path_planner") && g_grim->getCurrSet()->getSearchCount() > 0) {
+			// Walker_ReplanPath (FUN_00491650): the destination goes to the nearest place of the walk sectors, the path is the one of the planner of the
+			// original (FUN_004a9430): the sectors searched depth first, the corners pulled straight. The first point is where the actor is.
+			Set *currSet = g_grim->getCurrSet();
+			Math::Vector3d dest = p;
+			currSet->grimNearestWalkPoint(dest);
+			Common::Array<Math::Vector3d> points;
+			if (!currSet->grimPlanPath(_pos, dest, points)) {
+				warning("Actor::walkTo(): No path found for %s", _name.c_str());
+				_walking = false;
+				return;
+			}
+			_destPos = dest;
+			for (int i = (int)points.size() - 1; i >= 1; --i)
+				_path.push_back(points[i]);
+			if (Debug::isChannelEnabled(Debug::Actors)) {
+				Common::String list;
+				for (Common::List<Math::Vector3d>::const_iterator i = _path.begin(); i != _path.end(); ++i)
+					list += Common::String::format(" (%.9g %.9g %.9g)", i->x(), i->y(), i->z());
+				Debug::debug(Debug::Actors, "WALKTO %s from %.9g %.9g %.9g to %.9g %.9g %.9g path (next last):%s", _name.c_str(), _pos.x(), _pos.y(), _pos.z(), p.x(), p.y(), p.z(), list.c_str());
+			}
+			return;
+		}
+
 		if (_followBoxes) {
 			bool pathFound = false;
 
@@ -872,6 +896,13 @@ void Actor::walkTo(const Math::Vector3d &p) {
 		}
 
 		_path.push_front(_destPos);
+		if (g_grim->getGameType() == GType_GRIM && Debug::isChannelEnabled(Debug::Actors)) {
+			// the points of the path, the next one last (the original keeps them from the start to the end of the walk)
+			Common::String points;
+			for (Common::List<Math::Vector3d>::const_iterator i = _path.begin(); i != _path.end(); ++i)
+				points += Common::String::format(" (%.9g %.9g %.9g)", i->x(), i->y(), i->z());
+			Debug::debug(Debug::Actors, "WALKTO %s from %.9g %.9g %.9g to %.9g %.9g %.9g path (next last):%s", _name.c_str(), _pos.x(), _pos.y(), _pos.z(), p.x(), p.y(), p.z(), points.c_str());
+		}
 	}
 }
 

@@ -374,9 +374,16 @@ void Lua_V1::GetShrinkPos() {
 	Math::Vector3d pos;
 	pos.set(x, y, z);
 
-	Sector *sector;
+	Sector *sector = nullptr;
 	g_grim->getCurrSet()->shrinkBoxes(r);
-	g_grim->getCurrSet()->findClosestSector(pos, &sector, &pos);
+	if (g_grim->getGameType() == GType_GRIM && g_grim->getCurrSet()->getSearchCount() > 0 && g_grim->getCurrSet()->boxesShrunk()) {
+		// (the nearest place by the routine of the original)
+		static Sector *anySector = nullptr;
+		anySector = g_grim->getCurrSet()->grimNearestWalkPoint(pos) ? g_grim->getCurrSet()->getSearchSector(0) : nullptr;
+		sector = anySector;
+	} else {
+		g_grim->getCurrSet()->findClosestSector(pos, &sector, &pos);
+	}
 	g_grim->getCurrSet()->unshrinkBoxes();
 
 	if (sector) {
