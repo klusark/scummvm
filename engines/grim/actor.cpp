@@ -3305,11 +3305,10 @@ bool Actor::getSphereInfo(bool adjustZ, float &size, Math::Vector3d &p) const {
 		Model *model = getCurrentCostume()->getModel();
 		assert(model);
 
-		p = _pos + model->_insertOffset;
-		// center the sphere on the model center.
-		if (adjustZ) {
-			p.z() += model->_bboxSize.z() / 2.f;
-		}
+		// The sphere is centred on the middle of the box of the model, which is turned with the actor.
+		Math::Vector2d c(model->_center.x(), model->_center.y());
+		c.rotateAround(Math::Vector2d(0.f, 0.f), _yaw);
+		p = _pos + Math::Vector3d(c.getX(), c.getY(), model->_center.z());
 		size = model->_radius * _collisionScale;
 	}
 	return true;
@@ -3427,6 +3426,159 @@ static void origAxisMatrix(float *m, const float *axis, float degrees) {
 	m[11] = 0.f;
 }
 
+// FUN_00494100: the point where the move came in through a face of the box, and the end of the move along that face. The box is
+// bmin[3], bmax[3]; cur is the end of the move, prev its start (both in the frame of the box).
+static bool origBoxSlide(const float *cur, const float *prev, const float *bmin, const float *bmax, float *out) {
+	float d[3], far[3];
+	for (int i = 0; i < 3; i++) {
+		d[i] = cur[i] - prev[i];
+		far[i] = toF((LD)d[i] * -10.0 + prev[i]);
+	}
+	float best = 3.4028235e+38f;
+	int face = 0;
+	float normal[3] = { 0.f, 0.f, 0.f };
+	for (int k = 0; k < 6; k++) {
+		const int axis = k / 2;
+		const bool isMax = (k % 2) == 0;
+		const float limit = isMax ? bmax[axis] : bmin[axis];
+		const bool beyond = isMax ? ((LD)limit - 0.002 < far[axis]) : ((LD)far[axis] < (LD)limit - -0.002);
+		if (!beyond)
+			continue;
+		const float ad = d[axis] < 0.f ? -d[axis] : d[axis];
+		const float t = toF(((LD)limit - cur[axis]) / ad);
+		const float at = t < 0.f ? -t : t;
+		const float ab = best < 0.f ? -best : best;
+		const bool better = face == 0 ? at < 3.4028235e+38f : at < ab;
+		if (better) {
+			best = isMax ? -t : t;
+			face = k + 1;
+			normal[0] = normal[1] = normal[2] = 0.f;
+			normal[axis] = isMax ? 1.f : -1.f;
+		}
+	}
+	if (face == 0)
+		return false;
+	for (int i = 0; i < 3; i++)
+		out[i] = toF((LD)best * d[i] + cur[i]);
+	const float ab = best < 0.f ? -best : best;
+	float rest[3];
+	for (int i = 0; i < 3; i++)
+		rest[i] = toF((LD)d[i] * ab);
+	const float len = (float)origNormalize3(rest);
+	const LD dot = (LD)rest[0] * normal[0] + (LD)normal[2] * rest[2] + (LD)rest[1] * normal[1];
+	const LD asinDot = originalAsinDeg((float)dot);
+	if (90.L - asinDot < 90.L)
+		return false;
+	float axis[3];
+	axis[0] = toF((LD)normal[2] * rest[1] - (LD)normal[1] * rest[2]);
+	axis[1] = toF((LD)normal[0] * rest[2] - (LD)normal[2] * rest[0]);
+	axis[2] = toF((LD)normal[1] * rest[0] - (LD)normal[0] * rest[1]);
+	// (a head-on move with no noise at all in the floats has no axis: the original goes on with a zero vector and ends up with a position that
+	// is not a number; the actor is put out through the nearest side then)
+	if (axis[0] == 0.f && axis[1] == 0.f && axis[2] == 0.f)
+		return false;
+	origNormalize3(axis);
+	float m[12];
+	origAxisMatrix(m, axis, toF((LD)toF(90.L - asinDot) - 90.L));
+	// FUN_0044ffc0: the vector with the columns of the matrix
+	const float x = toF((LD)rest[0] * m[0] + (LD)rest[1] * m[3] + (LD)rest[2] * m[6]);
+	const float y = toF((LD)m[1] * rest[0] + (LD)rest[1] * m[4] + (LD)rest[2] * m[7]);
+	const float z = toF((LD)m[2] * rest[0] + (LD)rest[2] * m[8] + (LD)m[5] * rest[1]);
+	out[0] = toF((LD)len * x + out[0]);
+	out[1] = toF((LD)len * y + out[1]);
+	out[2] = toF((LD)len * z + out[2]);
+	return true;
+}
+
+bool Actor::handleBoxCollision(Actor *actor, const Math::Vector3d &p1, float size1, const Math::Vector3d &p2, float size2,
+                               Math::Vector3d *vec) const {
+	if (!actor->getCurrentCostume() || !getCurrentCostume())
+		return false;
+	Model *model = actor->getCurrentCostume()->getModel();
+	Model *model1 = getCurrentCostume()->getModel();
+	if (!model || !model1)
+		return false;
+
+	float m1[12], m2[12];
+	const Math::Vector3d curPos = _pos + *vec;
+	origActorMatrix(m1, _pitch.getDegrees(), _yaw.getDegrees(), _roll.getDegrees(), curPos);
+	origActorMatrix(m2, actor->_pitch.getDegrees(), actor->_yaw.getDegrees(), actor->_roll.getDegrees(), actor->_pos);
+
+	// the centres of the two spheres: the middle of the box of each model, turned with its actor
+	const float c1m[3] = { model1->_center.x(), model1->_center.y(), model1->_center.z() };
+	const float c2m[3] = { model->_center.x(), model->_center.y(), model->_center.z() };
+	float off1[3], c2w[3];
+	origTurn(off1, c1m, m1, false);
+	origTurn(c2w, c2m, m2, true);
+	const float cur1[3] = { toF((LD)off1[0] + curPos.x()), toF((LD)off1[1] + curPos.y()), toF((LD)off1[2] + curPos.z()) };
+	const float diff[3] = { cur1[0] - c2w[0], cur1[1] - c2w[1], cur1[2] - c2w[2] };
+	const float r1 = model1->_radius * _collisionScale;
+	const float r2 = model->_radius * actor->_collisionScale;
+	const LD dist = sqrtl((LD)diff[2] * diff[2] + (LD)diff[1] * diff[1] + (LD)diff[0] * diff[0]);
+	// (the spheres of the two do not touch: the box is not looked at)
+	if (!(dist < (LD)toF((LD)r2 + r1)))
+		return false;
+
+	const float scale = actor->_collisionScale;
+	const Math::Vector3d boxMin = model->_hasFileBox ? model->_fileMin : model->_bboxPos;
+	const Math::Vector3d boxMax = model->_hasFileBox ? model->_fileMax : model->_bboxPos + model->_bboxSize;
+	const float bmin[3] = { toF((LD)boxMin.x() * scale - r1), toF((LD)boxMin.y() * scale - r1), toF((LD)boxMin.z() * scale - r1) };
+	const float bmax[3] = { toF((LD)boxMax.x() * scale + r1), toF((LD)boxMax.y() * scale + r1), toF((LD)boxMax.z() * scale + r1) };
+
+	float loc[3];
+	origToLocal(loc, diff, m2);
+	for (int i = 0; i < 3; i++)
+		loc[i] = loc[i] + c2m[i];
+	if (loc[2] <= bmin[2] || loc[1] <= bmin[1] || bmax[1] <= loc[1] || bmax[0] <= loc[0] || loc[0] <= bmin[0] || bmax[2] <= loc[2])
+		return false;
+
+	// the start of the move, in the same frame
+	const float prev1[3] = { toF((LD)off1[0] + _pos.x()), toF((LD)off1[1] + _pos.y()), toF((LD)off1[2] + _pos.z()) };
+	const float pdiff[3] = { prev1[0] - c2w[0], prev1[1] - c2w[1], prev1[2] - c2w[2] };
+	float prev[3];
+	origToLocal(prev, pdiff, m2);
+	for (int i = 0; i < 3; i++)
+		prev[i] = prev[i] + c2m[i];
+
+	float res[3];
+	if (!origBoxSlide(loc, prev, bmin, bmax, res)) {
+		// FUN_004922d0: out through the nearest of the four sides, a centimetre past it
+		res[0] = loc[0];
+		res[1] = loc[1];
+		res[2] = loc[2];
+		float best = 3.4028235e+38f;
+		float v = fabsf(bmax[1] - loc[1]);
+		if (v < best) {
+			best = v;
+			res[1] = toF(bmax[1] - -0.01);
+		}
+		v = fabsf(bmin[1] - loc[1]);
+		if (v < best) {
+			best = v;
+			res[1] = toF(bmin[1] - 0.01);
+		}
+		v = fabsf(bmax[0] - loc[0]);
+		if (v < best) {
+			best = v;
+			res[0] = toF(bmax[0] - -0.01);
+			res[1] = loc[1];
+		}
+		v = fabsf(bmin[0] - loc[0]);
+		if (v < best) {
+			res[0] = toF(bmin[0] - 0.01);
+			res[1] = loc[1];
+		}
+	}
+
+	// back to the world, and from the centre of the sphere to the position of the actor
+	float world[3];
+	origTurn(world, res, m2, true);
+	const Math::Vector3d newPos(world[0] - off1[0], world[1] - off1[1], world[2] - off1[2]);
+	*vec = newPos - _pos;
+	collisionHandlerCallback(actor);
+	return true;
+}
+
 bool Actor::handleCollisionWith(Actor *actor, CollisionMode mode, Math::Vector3d *vec) const {
 	if (actor->_collisionMode == CollisionOff || actor == this) {
 		return false;
@@ -3438,16 +3590,21 @@ bool Actor::handleCollisionWith(Actor *actor, CollisionMode mode, Math::Vector3d
 
 	Math::Vector3d p1, p2;
 	float size1, size2;
-	// you may ask: why center the sphere of the first actor only (by setting adjustZ to true)?
-	// because it seems the original does so.
-	// if you change this code test this places: the rocks in lb and bv (both when booting directly in the
-	// set and when coming in from another one) and the poles in xb.
-	if (!this->getSphereInfo(true, size1, p1) || !actor->getSphereInfo(false, size2, p2)) {
+	// Both spheres are centred on the middle of the box of the model, as the original does (the rocks in lb and bv, and the poles in xb,
+	// are the places that tell if this is wrong).
+	if (!this->getSphereInfo(false, size1, p1) || !actor->getSphereInfo(false, size2, p2)) {
 		return false;
 	}
 
 	CollisionMode mode1 = mode;
 	CollisionMode mode2 = actor->_collisionMode;
+
+	// (FUN_004939f0: the actor that moves is a sphere whatever its own mode is, only the mode of the other one counts)
+	if (g_grim->getGameType() == GType_GRIM)
+		mode1 = CollisionSphere;
+
+	if (g_grim->getGameType() == GType_GRIM && mode2 == CollisionBox)
+		return handleBoxCollision(actor, p1, size1, p2, size2, vec);
 
 	if (mode1 == CollisionSphere && mode2 == CollisionSphere) {
 		Math::Vector3d pos = p1 + *vec;
