@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/array.h"
 #include "common/endian.h"
 #include "common/savefile.h"
 
@@ -39,9 +40,36 @@
 
 namespace Grim {
 
+// The screen can be dimmed more than once, each dim has an id that is used to remove it.
+// The strongest one that is left is shown.
+struct DimEntry {
+	int _id;
+	float _level;
+};
+
+static Common::Array<DimEntry> g_dimRegions;
+static int g_nextDimId = 1;
+
+static void updateDimLevel() {
+	float level = 0.0f;
+	for (uint i = 0; i < g_dimRegions.size(); i++) {
+		level = MAX(level, g_dimRegions[i]._level);
+	}
+	g_driver->setDimLevel(level);
+}
+
+// The dim regions live in this file, not in the saved game: a game loaded into a process that has dimmed the screen since
+// (the start of the game does) would stay dim, black with the regions that the loaded game never undims. A loaded game
+// starts undimmed, as the dim of a scene that was saved dimmed is set again by its own script.
+void Lua_V2::postRestoreHandle() {
+	Lua_V1::postRestoreHandle();
+	g_dimRegions.clear();
+	updateDimLevel();
+}
+
 void Lua_V2::UndimAll() {
-	g_driver->setDimLevel(0);
-	warning("Lua_V2::UndimAll: stub");
+	g_dimRegions.clear();
+	updateDimLevel();
 }
 
 void Lua_V2::UndimRegion() {
@@ -49,13 +77,19 @@ void Lua_V2::UndimRegion() {
 
 	if (lua_isnumber(regionObj)) {
 		int region = (int)lua_getnumber(regionObj);
-		// FIXME func(region);
-		warning("Lua_V2::UndimRegion: region: %d", region);
+		for (uint i = 0; i < g_dimRegions.size(); i++) {
+			if (g_dimRegions[i]._id == region) {
+				g_dimRegions.remove_at(i);
+				break;
+			}
+		}
+		updateDimLevel();
 	} else {
 		lua_pushnil();
 		// HACK: The demo uses this to undim the intro-screen.
 		// thus UndimRegion(nil) might mean UndimScreen.
-		g_driver->setDimLevel(0);
+		g_dimRegions.clear();
+		updateDimLevel();
 	}
 }
 
@@ -66,9 +100,13 @@ void Lua_V2::DimScreen() {
 	if (lua_isnumber(dimObj))
 		dim = lua_getnumber(dimObj);
 
-	g_driver->setDimLevel(dim);
-	// FIXME func(dim);
-	warning("Lua_V2::DimScreen: dim: %f", dim);
+	DimEntry region;
+	region._id = g_nextDimId++;
+	region._level = dim;
+	g_dimRegions.push_back(region);
+	updateDimLevel();
+
+	lua_pushnumber(region._id);
 }
 
 void Lua_V2::MakeCurrentSetup() {
