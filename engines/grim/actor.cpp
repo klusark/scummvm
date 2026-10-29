@@ -315,6 +315,19 @@ void Actor::saveState(SaveGame *savedState) const {
 	savedState->writeBool(_constrained);
 	savedState->writeVector3d(_constrainDir);
 
+	savedState->writeLESint32(_clipActive);
+	savedState->writeVector3d(_clipNormal);
+	savedState->writeVector3d(_clipPoint);
+	savedState->writeLESint32(_invClipNode);
+	savedState->writeBool(_frustumCull);
+	for (int i = 0; i < MAX_SHADOWS; ++i) {
+		const Shadow &shadow = _shadowArray[i];
+		savedState->writeLESint32(shadow.valid);
+		for (int j = 0; j < 3; ++j)
+			savedState->writeFloat(shadow.planeNormal[j]);
+		savedState->writeFloat(shadow.planeDist);
+	}
+	savedState->writeBool(_puck);
 }
 
 bool Actor::restoreState(SaveGame *savedState) {
@@ -541,6 +554,26 @@ bool Actor::restoreState(SaveGame *savedState) {
 		_constrainDir = savedState->readVector3d();
 	} else {
 		_constrained = false;
+	}
+	if (savedState->saveMinorVersion() >= 35) {
+		_clipActive = savedState->readLESint32();
+		_clipNormal = savedState->readVector3d();
+		_clipPoint = savedState->readVector3d();
+		_invClipNode = savedState->readLESint32();
+		_frustumCull = savedState->readBool();
+		for (int i = 0; i < MAX_SHADOWS; ++i) {
+			Shadow &shadow = _shadowArray[i];
+			shadow.valid = savedState->readLESint32();
+			for (int j = 0; j < 3; ++j)
+				shadow.planeNormal[j] = savedState->readFloat();
+			shadow.planeDist = savedState->readFloat();
+		}
+		_puck = savedState->readBool();
+	} else {
+		_clipActive = 0;
+		_invClipNode = -1;
+		_frustumCull = true;
+		_puck = true;
 	}
 
 	return true;
