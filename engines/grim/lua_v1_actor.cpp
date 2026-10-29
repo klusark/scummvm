@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/lua_v1.h"
 #include "engines/grim/actor.h"
@@ -356,10 +357,14 @@ void Lua_V1::SetActorRot() {
 	float pitch = lua_getnumber(p);
 	float yaw = lua_getnumber(y);
 	float roll = lua_getnumber(r);
+	// (Actor_SetRot clears the flag of the walk along a path first)
+	if (g_grim->getGameType() == GType_GRIM)
+		actor->stopWalking();
 	if (getbool(5)) {
 		actor->turnTo(pitch, yaw, roll);
 	} else {
 		actor->setRot(pitch, yaw, roll);
+		actor->setRotPending();
 	}
 }
 
@@ -405,7 +410,22 @@ void Lua_V1::GetAngleBetweenActors() {
 		return;
 	}
 
-	lua_pushnumber(actor1->getYawTo(actor2).getDegrees());
+	if (g_grim->getGameType() == GType_MONKEY4) {
+		lua_pushnumber(actor1->getYawTo(actor2).getDegrees());
+		return;
+	}
+
+	// The original measures the angle between the direction the first actor faces
+	// and the direction to the second one. The height of the vector to the other
+	// actor is taken from the facing vector, so it is not the real difference.
+	Math::Vector3d forward = actor1->getPuckVector();
+	Math::Vector3d delta = actor2->getPos() - actor1->getPos();
+	delta.z() = forward.z() - actor1->getPos().z();
+	forward.normalize();
+	delta.normalize();
+
+	float dot = CLIP(forward.dotProduct(delta), -1.0f, 1.0f);
+	lua_pushnumber(90.0f - asin(dot) * 180.0f / (float)M_PI);
 }
 
 void Lua_V1::GetActorYawToPoint() {
@@ -440,6 +460,10 @@ void Lua_V1::GetActorYawToPoint() {
 
 	Math::Vector3d yawVector(x, y, z);
 
+	if (g_grim->getGameType() == GType_GRIM) {
+		lua_pushnumber(actor->grimYawToPoint(yawVector));
+		return;
+	}
 	lua_pushnumber(actor->getYawTo(yawVector).getDegrees());
 }
 
@@ -501,8 +525,21 @@ void Lua_V1::SetActorTurnRate() {
 		return;
 
 	Actor *actor = getactor(actorObj);
-	float rate = lua_getnumber(rateObj); // FIXME verify negate values of rate
+	float rate = lua_getnumber(rateObj);
+	// The original keeps the sign of the rate that is stored (FUN_0049b1d0: a negative rate stays negative)
+	if (g_grim->getGameType() == GType_GRIM && actor->getTurnRate() < 0.0f)
+		rate = -rate;
 	actor->setTurnRate(rate);
+}
+
+void Lua_V1::GetActorTurnRate() {
+	lua_Object actorObj = lua_getparam(1);
+
+	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R'))
+		return;
+
+	Actor *actor = getactor(actorObj);
+	lua_pushnumber(actor->getTurnRate());
 }
 
 void Lua_V1::WalkActorForward() {
@@ -633,8 +670,7 @@ void Lua_V1::IsActorResting() {
 		return;
 
 	Actor *actor = getactor(actorObj);
-	// FIXME verify if exist one flag for resting mode
-	pushbool(!(actor->isWalking() || actor->isTurning()));
+	pushbool(actor->isResting());
 }
 
 /* Get the location of one of the actor's nodes, this is
@@ -724,7 +760,7 @@ void Lua_V1::TurnActor() {
 
 	Actor *actor = getactor(actorObj);
 	int dir = (int)lua_getnumber(dirObj);
-	// TODO verify. need clear mode walking
+	// (Lua_TurnActor, 0x49c180: clears the walking flag, then takes the key like Actor::turn)
 	actor->turn(dir);
 }
 
@@ -1212,6 +1248,10 @@ void Lua_V1::TurnActorTo() {
 		actor->enablePuck(true);
 	// Return true if the actor is still turning
 	// This allows manny to have the right yaw when he exits the elevator in the garage
+	if (g_grim->getGameType() == GType_GRIM && (!ConfMan.hasKey("turn_actor_to") || ConfMan.getBool("turn_actor_to"))) {
+		pushbool(actor->grimTurnActorTo(turnToVector));
+		return;
+	}
 	pushbool(!actor->singleTurnTo(turnToVector));
 }
 
