@@ -1810,6 +1810,56 @@ bool Actor::updateTalk(uint frameTime) {
 	return false;
 }
 
+bool Actor::canSee(const Actor *other) const {
+	if (g_grim->getGameType() != GType_GRIM || _setName.empty() || other->_setName != _setName)
+		return false;
+
+	Costume *costume = getCurrentCostume();
+	if (!costume)
+		return false;
+	int joint = costume->getHeadFirstJoint();
+	if (joint < 0 || !costume->getModelNodes())
+		return false;
+
+	ModelNode *node = costume->getModelNodes() + joint;
+	node->_needsUpdate = true;
+	ModelNode *root = node;
+	while (root->_parent) {
+		root = root->_parent;
+		root->_needsUpdate = true;
+	}
+
+	Math::Matrix4 matrix;
+	matrix.setPosition(_pos);
+	matrix.buildFromEuler(_yaw, _pitch, _roll, Math::EO_ZXY);
+	root->setMatrix(matrix);
+	root->update();
+
+	Math::Vector3d delta = other->_pos - node->_pivotMatrix.getPosition();
+	Math::Vector3d direction(delta.x(), delta.y(), 0.0f);
+	direction.normalize();
+	// The original takes the second axis of the orientation matrix of the actor (so a pitched actor sees less in front of
+	// it: the x and y of the axis are scaled by the cosine of the pitch) and the test is on x and y only
+	Math::Vector3d forward = getSimplePuckVector();
+	float pitchScale = _pitch.getCosine();
+	float dot = pitchScale * (forward.x() * direction.x() + forward.y() * direction.y());
+	return dot >= cosf(fabsf(costume->getHeadMaxRoll()) * 0.5f * (float)M_PI / 180.0f);
+}
+
+bool Actor::getScreenRect(int *x1, int *y1, int *x2, int *y2) {
+	if (_costumeStack.empty() || !_visible || !g_grim->getCurrSet() || !isInSet(g_grim->getCurrSet()->getName()))
+		return false;
+
+	*x1 = 1000;
+	*y1 = 1000;
+	*x2 = -1000;
+	*y2 = -1000;
+	g_driver->startActorDraw(this);
+	_costumeStack.back()->getBoundingBox(x1, y1, x2, y2);
+	g_driver->finishActorDraw();
+	return *x1 != 1000 && *x2 != -1000 && *y1 != 1000 && *y2 != -1000;
+}
+
 void Actor::draw() {
 	// FIXME: if isAttached(), factor in the joint rotation as well.
 	const Math::Vector3d &absPos = getWorldPos();
