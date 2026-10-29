@@ -82,6 +82,8 @@ Model::Model(const Common::String &filename, Common::SeekableReadStream *data, C
 	}
 
 	_bboxSize = max - _bboxPos;
+	if (!_hasCenter)
+		_center = _bboxPos + _bboxSize / 2.f;
 }
 
 Model::~Model() {
@@ -122,7 +124,12 @@ void Model::loadBinary(Common::SeekableReadStream *data) {
 		_rootHierNode[i].loadBinary(data, _rootHierNode, &_geosets[0]);
 	}
 	_radius = data->readFloatLE();
-	data->seek(36, SEEK_CUR);
+	// (the box of the model as the original keeps it: the corners, then the centre of the box; the insert offset comes after)
+	_fileMin.readFromStream(data);
+	_fileMax.readFromStream(data);
+	_hasFileBox = true;
+	_center.readFromStream(data);
+	_hasCenter = true;
 	_insertOffset.readFromStream(data);
 }
 
