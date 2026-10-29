@@ -40,6 +40,17 @@ void Iris::play(Iris::Direction dir, int x, int y, int length) {
 	_targetY = y;
 	_length = length;
 	_currTime = 0;
+
+	// The original works out the region when it draws, so the very first frame
+	// already shows the start of the animation.
+	setRegion(dir == Open ? 1.0f : 0.0f);
+}
+
+void Iris::setRegion(float factor) {
+	_y1 = (int)(_targetY * factor);
+	_x1 = (int)(_targetX * factor);
+	_y2 = (int)(480 - (480 - _targetY) * factor);
+	_x2 = (int)(640 - (640 - _targetX) * factor);
 }
 
 void Iris::draw() {
@@ -69,10 +80,7 @@ void Iris::update(int frameTime) {
 		factor = 1 - factor;
 	}
 
-	_y1 = (int)(_targetY * factor);
-	_x1 = (int)(_targetX * factor);
-	_y2 = (int)(480 - (480 - _targetY) * factor);
-	_x2 = (int)(640 - (640 - _targetX) * factor);
+	setRegion(factor);
 }
 
 void Iris::saveState(SaveGame *state) const {
@@ -84,6 +92,8 @@ void Iris::saveState(SaveGame *state) const {
 	state->writeLESint32(_y1);
 	state->writeLESint32(_x2);
 	state->writeLESint32(_y2);
+	state->writeLESint32(_targetX);
+	state->writeLESint32(_targetY);
 	state->writeLESint32(_length);
 	state->writeLESint32(_currTime);
 
@@ -99,6 +109,13 @@ void Iris::restoreState(SaveGame *state) {
 	_y1 = state->readLESint32();
 	_x2 = state->readLESint32();
 	_y2 = state->readLESint32();
+	if (state->saveMinorVersion() >= 31) {
+		_targetX = state->readLESint32();
+		_targetY = state->readLESint32();
+	} else {
+		_targetX = 320;
+		_targetY = 240;
+	}
 	_length = state->readLESint32();
 	_currTime = state->readLESint32();
 
