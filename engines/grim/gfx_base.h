@@ -284,6 +284,9 @@ public:
 	Texture *getSpecialtyTexturePtr(Common::String name);
 
 	virtual void setBlendMode(bool additive) = 0;
+
+	/** The screenshots of Grim are grey, as the original makes them; the frames of the comparison with the original (DumpFrame) are not. */
+	bool _screenshotColor = false;
 protected:
 	Bitmap *createScreenshotBitmap(Graphics::Surface *src, int w, int h, bool flipOrientation);
 	virtual void setupLight(Light *light, int lightId) = 0;
