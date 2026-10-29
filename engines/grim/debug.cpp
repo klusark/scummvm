@@ -29,7 +29,12 @@ void Debug::registerDebugChannels() {
 }
 
 bool Debug::isChannelEnabled(DebugChannel chan) {
-	return DebugMan.isDebugChannelEnabled(chan);
+	// The channels can be combined, and the message is shown if any of them is enabled
+	for (uint32 bit = 1; bit != 0; bit <<= 1) {
+		if ((chan & bit) && DebugMan.isDebugChannelEnabled(bit))
+			return true;
+	}
+	return false;
 }
 
 void Debug::debug(DebugChannel channel, const char *s, ...) {
