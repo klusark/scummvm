@@ -31,11 +31,21 @@ struct shadow_info {
 
 uniform shadow_info shadow;
 
+// The plane an actor is clipped by (SetActorClipPlane): in the world, what is on the side of the normal is kept
+uniform UBOOL clipActive;
+uniform vec4 clipPlane;
+
 out vec2 Texcoord;
 out vec4 Color;
+out float ClipDist;
 
 void main() {
 	vec4 pos = modelMatrix * extraMatrix * vec4(position, 1.0);
+
+	ClipDist = 1.0;
+	if (UBOOL_TEST(clipActive) && !UBOOL_TEST(shadow._active)) {
+		ClipDist = dot(clipPlane.xyz, pos.xyz) + clipPlane.w;
+	}
 
 	// See http://en.wikipedia.org/wiki/Line-plane_intersection
 	if (UBOOL_TEST(shadow._active)) {
