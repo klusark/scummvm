@@ -78,6 +78,8 @@ public:
 	float getLookAtRate() const;
 	virtual void moveHead(bool entering, const Math::Vector3d &lookAt);
 	int getHeadJoint() const;
+	int getHeadFirstJoint() const;
+	float getHeadMaxRoll() const;
 
 	CMap *getCMap() { return _cmap; }
 
