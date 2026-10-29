@@ -163,26 +163,28 @@ void Lua_V1::GetSectorOppositeEdge() {
 	Actor *actor = getactor(actorObj);
 	const char *name = lua_getstring(nameObj);
 
-	Sector *sector = g_grim->getCurrSet()->getSectorBySubstring(name);
-	if (sector) {
-		if (sector->getNumVertices() != 4)
-			warning("GetSectorOppositeEdge(): cheat box with %d (!= 4) edges!", sector->getNumVertices());
-		Math::Vector3d *vertices = sector->getVertices();
-		Sector::ExitInfo e;
-
-		sector->getExitInfo(actor->getPos(), -actor->getPuckVector(), &e);
-		float frac = (e.exitPoint - vertices[e.edgeVertex + 1]).getMagnitude() / e.edgeDir.getMagnitude();
-		e.edgeVertex -= 2;
-		if (e.edgeVertex < 0)
-			e.edgeVertex += sector->getNumVertices();
-		Math::Vector3d edge = vertices[e.edgeVertex + 1] - vertices[e.edgeVertex];
-		Math::Vector3d p = vertices[e.edgeVertex] + edge * frac;
-		lua_pushnumber(p.x());
-		lua_pushnumber(p.y());
-		lua_pushnumber(p.z());
-	} else {
+	// (the original looks the sector up by its whole name, puts the actor on the opposite edge itself and gives the script no values: FUN_004931f0)
+	Sector *sector = g_grim->getCurrSet()->getSectorByName(name);
+	if (sector)
+		actor->grimOppositeEdge(sector);
+	else
 		lua_pushnil();
+}
+
+// Is the sector (by name) switched on? The original's own function, which scripts use to test the walkboxes
+void Lua_V1::IsSectorActive() {
+	lua_Object sectorObj = lua_getparam(1);
+
+	if (!lua_isstring(sectorObj) || !g_grim->getCurrSet()) {
+		lua_pushnil();
+		return;
 	}
+
+	Sector *sector = g_grim->getCurrSet()->getSectorByName(lua_getstring(sectorObj));
+	if (sector && sector->isVisible())
+		pushbool(true);
+	else
+		lua_pushnil();
 }
 
 void Lua_V1::MakeSectorActive() {
