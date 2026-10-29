@@ -1152,6 +1152,255 @@ void Set::shrinkBoxesGrim(float radius) {
 	}
 }
 
+bool Set::grimOwnsSector(const Sector *sector) const {
+	for (int i = 0; i < _numSectors; i++) {
+		if (_sectors[i] == sector)
+			return true;
+	}
+	return false;
+}
+
+// SectorList_FindByPoint (FUN_004a71e0) with the mask of the walk sectors: the first sector of the list that contains the point and is not marked
+Sector *Set::planFind(const float *p) {
+	for (uint i = 0; i < _searchOrder.size(); i++) {
+		Sector *sector = _searchOrder[i];
+		if ((sector->getType() & Sector::WalkType) && sector->grimContains(p, true))
+			return sector;
+	}
+	return nullptr;
+}
+
+// FUN_004a7a90
+void Set::planResetFree() {
+	for (uint i = 0; i < _searchOrder.size(); i++)
+		_searchOrder[i]->grimSetFree(true);
+}
+
+// FUN_004a9ca0: a sector that has both points (the sectors that have the first but not the second are marked on the way, all are free again at the end)
+Sector *Set::planShared(const float *a, const float *b) {
+	Sector *sector = planFind(a);
+	while (sector && !sector->grimContains(b, true)) {
+		sector->grimSetFree(false);
+		sector = planFind(a);
+	}
+	planResetFree();
+	return sector;
+}
+
+static inline float planDist2(const float *a, const float *b) {
+	typedef long double LD;
+	const LD dx = (LD)a[0] - b[0], dy = (LD)a[1] - b[1], dz = (LD)a[2] - b[2];
+	return (float)(dz * dz + dy * dy + dx * dx);
+}
+
+// FUN_004a96f0: the points of the sectors that are not marked that lie in the sector (corners that the sectors have in common), each once, the nearest to the
+// destination first. out: four floats for each point (x, y, z, squared distance)
+int Set::planNeighbours(Sector *s, const float *dest, float *out) {
+	float tmp[32 * 4];
+	int n = 0;
+	for (uint i = 0; i < _searchOrder.size(); i++) {
+		Sector *o = _searchOrder[i];
+		if (o == s || !o->grimFree() || !(o->getType() & Sector::WalkType))
+			continue;
+		const Math::Vector3d *vs = o->getVertices();
+		for (int k = 0; k < o->getNumVertices(); k++) {
+			const float v[3] = { vs[k].x(), vs[k].y(), vs[k].z() };
+			if (!s->grimContains(v, false))
+				continue;
+			int j = 0;
+			for (; j < n; j++) {
+				if (tmp[j * 4] == v[0] && tmp[j * 4 + 1] == v[1] && tmp[j * 4 + 2] == v[2])
+					break;
+			}
+			if (j == n && n < 32) {
+				tmp[n * 4] = v[0];
+				tmp[n * 4 + 1] = v[1];
+				tmp[n * 4 + 2] = v[2];
+				tmp[n * 4 + 3] = planDist2(dest, v);
+				n++;
+			}
+		}
+	}
+	// (insertion sort, a point goes behind the ones that are not further away)
+	for (int i = 0; i < n; i++) {
+		int j = i - 1;
+		while (j >= 0 && out[j * 4 + 3] > tmp[i * 4 + 3]) {
+			for (int c = 0; c < 4; c++)
+				out[(j + 1) * 4 + c] = out[j * 4 + c];
+			j--;
+		}
+		for (int c = 0; c < 4; c++)
+			out[(j + 1) * 4 + c] = tmp[i * 4 + c];
+	}
+	return n;
+}
+
+// FUN_004a9920: the corner of the two sectors that lies in the other one and is nearest to the destination
+bool Set::planPortal(Sector *s, Sector *t, const float *dest, float *out) {
+	float best = 3.4028235e+38f;
+	for (int pass = 0; pass < 2; pass++) {
+		Sector *from = pass == 0 ? s : t;
+		Sector *in = pass == 0 ? t : s;
+		const Math::Vector3d *vs = from->getVertices();
+		for (int k = 0; k < from->getNumVertices(); k++) {
+			const float v[3] = { vs[k].x(), vs[k].y(), vs[k].z() };
+			if (!in->grimContains(v, false))
+				continue;
+			const float d = planDist2(v, dest);
+			if (d < best) {
+				out[0] = v[0];
+				out[1] = v[1];
+				out[2] = v[2];
+				best = d;
+			}
+		}
+	}
+	return best != 3.4028235e+38f;
+}
+
+// FUN_004a94d0: a search through the sectors, depth first. The points of the path are kept in _planPts.
+bool Set::planDfs(const float *p, const float *dest, Sector *s) {
+	if (29 < _planN + 1) {
+		if (s)
+			s->grimSetFree(false);
+		return true;
+	}
+	if (!s)
+		s = planFind(p);
+	if (!s)
+		return false;
+	_planPts[_planN][0] = p[0];
+	_planPts[_planN][1] = p[1];
+	_planPts[_planN][2] = p[2];
+	_planN++;
+	if (s->grimContains(dest, true))
+		return true;
+	const int keep = _planN;
+	float exitPt[3];
+	s->grimFindExitPoint(p, dest, exitPt);
+	s->grimSetFree(false);
+	Sector *next;
+	if (planDist2(exitPt, p) <= 0.0001f)
+		next = nullptr;
+	else
+		next = planFind(exitPt);
+	if (next) {
+		if (planDfs(exitPt, dest, next))
+			return true;
+		next->grimSetFree(false);
+	}
+	float cand[32 * 4];
+	const int count = planNeighbours(s, dest, cand);
+	for (int i = 0; i < count; i++) {
+		Sector *t = planFind(&cand[i * 4]);
+		if (!t)
+			continue;
+		_planN = keep;
+		float portal[3];
+		if (planPortal(s, t, dest, portal) && planDfs(portal, dest, t))
+			return true;
+	}
+	s->grimSetFree(true);
+	if (next)
+		next->grimSetFree(true);
+	return false;
+}
+
+// FUN_004a9aa0: the corners of the path are moved onto the line between their neighbours where the sectors allow it, points that lie on each other are left
+// out, until nothing changes
+void Set::planSmooth() {
+	for (;;) {
+		bool changed = false;
+		static float e[3];
+		e[0] = e[1] = e[2] = 1e30f;
+		for (int i = 0; _planN > 3 && i < _planN - 3; i++) {
+			float *a = _planPts[i], *b = _planPts[i + 1], *c = _planPts[i + 2];
+			Sector *ab = planShared(a, b);
+			Sector *bc = planShared(b, c);
+			if (!ab || !bc)
+				return;
+			ab->grimFindExitPoint(a, c, e);
+			Sector *ea = planShared(e, a);
+			Sector *ec = planShared(e, c);
+			if (ec && ea && 0.0025000002f < planDist2(e, b)) {
+				b[0] = e[0];
+				b[1] = e[1];
+				b[2] = e[2];
+				changed = true;
+			}
+		}
+		for (int k = 1; _planN > 2 && k - 1 < _planN - 2; k++) {
+			const float *a = _planPts[k - 1], *b = _planPts[k];
+			if (planDist2(a, b) < 0.0001f && planShared(a, b)) {
+				changed = true;
+				_planN--;
+				for (int j = k; j < _planN; j++) {
+					_planPts[j][0] = _planPts[j + 1][0];
+					_planPts[j][1] = _planPts[j + 1][1];
+					_planPts[j][2] = _planPts[j + 1][2];
+				}
+			}
+		}
+		if (!changed)
+			return;
+	}
+}
+
+bool Set::grimPlanPath(const Math::Vector3d &start, const Math::Vector3d &dest, Common::Array<Math::Vector3d> &points) {
+	const float s[3] = { start.x(), start.y(), start.z() };
+	const float d[3] = { dest.x(), dest.y(), dest.z() };
+	planResetFree();
+	_planN = 0;
+	bool ok = false;
+	if (planFind(s) && planFind(d) && planDfs(s, d, nullptr)) {
+		_planPts[_planN][0] = d[0];
+		_planPts[_planN][1] = d[1];
+		_planPts[_planN][2] = d[2];
+		_planN++;
+		planSmooth();
+		ok = true;
+	}
+	planResetFree();
+	points.clear();
+	if (ok) {
+		for (int i = 0; i < _planN; i++)
+			points.push_back(Math::Vector3d(_planPts[i][0], _planPts[i][1], _planPts[i][2]));
+	}
+	return ok;
+}
+
+bool Set::grimNearestWalkPoint(Math::Vector3d &pos) {
+	Sector *found = grimNearestSector(pos);
+	if (!found)
+		return false;
+	float p[3] = { pos.x(), pos.y(), pos.z() };
+	found->grimClampPoint(p);
+	pos.set(p[0], p[1], p[2]);
+	return true;
+}
+
+// SectorList_FindNearestPoint (FUN_004a72b0): the walk sector that contains the point, else the active one whose nearest place to the point is the nearest
+Sector *Set::grimNearestSector(const Math::Vector3d &pos) {
+	Sector *found = findPointSector(pos, Sector::WalkType, true);
+	if (!found) {
+		float best = 3.4028235e+38f;
+		for (uint i = 0; i < _searchOrder.size(); i++) {
+			Sector *sector = _searchOrder[i];
+			if (!(sector->getType() & Sector::WalkType) || !sector->isActive())
+				continue;
+			float p[3] = { pos.x(), pos.y(), pos.z() };
+			sector->grimClampPoint(p);
+			const float dx = p[0] - pos.x(), dy = p[1] - pos.y(), dz = p[2] - pos.z();
+			const float d2 = dx * dx + dz * dz + dy * dy;
+			if (d2 < best) {
+				found = sector;
+				best = d2;
+			}
+		}
+	}
+	return found;
+}
+
 void Set::shrinkBoxes(float radius) {
 	if (g_grim->getGameType() == GType_GRIM && !_searchOrder.empty()) {
 		unshrinkBoxes();

@@ -175,7 +175,29 @@ private:
 	/** The vertices of the sectors, joined where they are closer than 1e-4 (the pool of FUN_004a7ab0), and the ones the shrinking of the boxes added */
 	Common::Array<Math::Vector3d> _weldPool;
 	void shrinkBoxesGrim(float radius);
+public:
+	/** Whether the sector is one of this set (the frame of a walker keeps a sector between frames) */
+	bool grimOwnsSector(const Sector *sector) const;
+	/** GetShrinkPos of the original: the place of the walk sectors that is nearest to the point (FUN_004a72b0); false when there is none */
+	bool grimNearestWalkPoint(Math::Vector3d &pos);
+	/** SectorList_FindByPoint (FUN_004a71e0) for the walk sectors: the first that has the point and is not marked */
+	Sector *grimSectorAt(const float *p) { return planFind(p); }
+	/** SectorList_FindNearestPoint (FUN_004a72b0) */
+	Sector *grimNearestSector(const Math::Vector3d &pos);
+	/** The path of the walk of the original (FUN_004a9430 with its smoothing): the points from the start to the destination over the walk sectors, the start
+	 * first; false when the start or the destination is in no sector */
+	bool grimPlanPath(const Math::Vector3d &start, const Math::Vector3d &dest, Common::Array<Math::Vector3d> &points);
+private:
+	float _planPts[32][3];
+	int _planN;
+	Sector *planFind(const float *p);
 	void rebuildSearchOrder();
+	void planResetFree();
+	bool planDfs(const float *p, const float *dest, Sector *s);
+	int planNeighbours(Sector *s, const float *dest, float *out);
+	bool planPortal(Sector *s, Sector *t, const float *dest, float *out);
+	Sector *planShared(const float *a, const float *b);
+	void planSmooth();
 	Light *_lights;
 	Common::List<Light *> _lightsList;
 	Common::List<Light *> _overworldLightsList;
