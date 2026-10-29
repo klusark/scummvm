@@ -109,6 +109,8 @@ public:
 	Common::Pair<bool, int> findSectorSortOrder(const Math::Vector3d &p, Sector::SectorType type);
 	void findClosestSector(const Math::Vector3d &p, Sector **sect, Math::Vector3d *closestPt, const Sector *exclude = nullptr);
 	void shrinkBoxes(float radius);
+	/** Any walk sector of the set shrunk */
+	bool boxesShrunk() const;
 	void unshrinkBoxes();
 
 	void addObjectState(const ObjectState::Ptr &s);
@@ -172,6 +174,7 @@ private:
 	Common::Array<Sector *> _searchOrder;
 	/** The vertices of the sectors, joined where they are closer than 1e-4 (the pool of FUN_004a7ab0), and the ones the shrinking of the boxes added */
 	Common::Array<Math::Vector3d> _weldPool;
+	void shrinkBoxesGrim(float radius);
 	void rebuildSearchOrder();
 	Light *_lights;
 	Common::List<Light *> _lightsList;

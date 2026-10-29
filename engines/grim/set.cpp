@@ -1070,7 +1070,94 @@ void Set::findClosestSector(const Math::Vector3d &p, Sector **sect, Math::Vector
 		*closestPoint = resultPt;
 }
 
+bool Set::boxesShrunk() const {
+	for (int i = 0; i < _numSectors; i++) {
+		if (_sectors[i] && _sectors[i]->isShrunk())
+			return true;
+	}
+	return false;
+}
+
+// ShrinkBoxes of the original (FUN_004a9d00): every walk sector that is on moves each of its vertices inward along the bisector of its two edges until it is the
+// radius away from both; a sector in which a vertex does not fit has its shortest edge joined (the vertices between its ends become one) and is tried again,
+// and one that cannot be made smaller is switched off. The vertices are shared by the sectors of a set (the pool): the shift of a shared vertex is the mean of
+// the shifts that its sectors asked for, and it moves in all of them, also in the ones that are not walk sectors.
+void Set::shrinkBoxesGrim(float radius) {
+	if (radius < 0.f)
+		return;
+	for (uint i = 0; i < _searchOrder.size(); i++)
+		_searchOrder[i]->grimSaveForShrink(radius);
+
+	struct Shift {
+		float key[3];
+		float sum[3];
+		int count;
+	};
+	Common::Array<Shift> shifts;
+
+	for (uint i = 0; i < _searchOrder.size(); i++) {
+		Sector *sector = _searchOrder[i];
+		if (!(sector->getType() & Sector::WalkType) || !sector->isActive())
+			continue;
+		for (;;) {
+			float offsets[3 * 64];
+			if (sector->getNumVertices() > 64) {
+				sector->grimSwitchOff();
+				break;
+			}
+			if (sector->grimShrinkOffsets(radius, offsets)) {
+				for (int v = 0; v < sector->getNumVertices(); v++) {
+					const Math::Vector3d &vert = sector->getVertices()[v];
+					uint e = 0;
+					while (e < shifts.size() && !(shifts[e].key[0] == vert.x() && shifts[e].key[1] == vert.y() && shifts[e].key[2] == vert.z()))
+						e++;
+					if (e == shifts.size()) {
+						Shift fresh;
+						fresh.key[0] = vert.x();
+						fresh.key[1] = vert.y();
+						fresh.key[2] = vert.z();
+						fresh.sum[0] = fresh.sum[1] = fresh.sum[2] = 0.f;
+						fresh.count = 0;
+						shifts.push_back(fresh);
+					}
+					for (int c = 0; c < 3; c++)
+						shifts[e].sum[c] = shifts[e].sum[c] + offsets[v * 3 + c];
+					shifts[e].count++;
+				}
+				break;
+			}
+			if (!sector->grimCollapseShortestEdge(_weldPool)) {
+				sector->grimSwitchOff();
+				break;
+			}
+		}
+	}
+
+	// the shared vertices move: by the mean of the shifts, in every sector that has them
+	for (uint i = 0; i < _searchOrder.size(); i++) {
+		Sector *sector = _searchOrder[i];
+		for (int v = 0; v < sector->getNumVertices(); v++) {
+			const Math::Vector3d vert = sector->getVertices()[v];
+			for (uint e = 0; e < shifts.size(); e++) {
+				if (shifts[e].key[0] != vert.x() || shifts[e].key[1] != vert.y() || shifts[e].key[2] != vert.z())
+					continue;
+				const float inv = 1.0f / (float)shifts[e].count;
+				Math::Vector3d moved((float)((long double)shifts[e].sum[0] * inv + vert.x()),
+				                     (float)((long double)shifts[e].sum[1] * inv + vert.y()),
+				                     (float)((long double)shifts[e].sum[2] * inv + vert.z()));
+				sector->grimSetVertex(v, moved);
+				break;
+			}
+		}
+	}
+}
+
 void Set::shrinkBoxes(float radius) {
+	if (g_grim->getGameType() == GType_GRIM && !_searchOrder.empty()) {
+		unshrinkBoxes();
+		shrinkBoxesGrim(radius);
+		return;
+	}
 	for (int i = 0; i < _numSectors; i++) {
 		Sector *sector = _sectors[i];
 		sector->shrink(radius);
@@ -1080,7 +1167,8 @@ void Set::shrinkBoxes(float radius) {
 void Set::unshrinkBoxes() {
 	for (int i = 0; i < _numSectors; i++) {
 		Sector *sector = _sectors[i];
-		sector->unshrink();
+		if (sector)
+			sector->unshrink();
 	}
 }
 
