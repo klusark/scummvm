@@ -80,6 +80,10 @@ public:
 	Material **_materials;
 	bool *_materialsShared;
 	Math::Vector3d _insertOffset;
+	Math::Vector3d _center; // the centre of the bounding box (the collision spheres of the original are centred on it)
+	bool _hasCenter = false;
+	Math::Vector3d _fileMin, _fileMax; // the corners of the box as the model file has them (the collision boxes of the original)
+	bool _hasFileBox = false;
 	int _numGeosets;
 	Geoset *_geosets;
 	float _radius = 0.0f;

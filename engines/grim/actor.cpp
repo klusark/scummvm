@@ -2099,6 +2099,117 @@ float Actor::getLocalAlpha(unsigned int vertex) const {
 	}
 }
 
+// Moves from "prev" to "cur" (in the frame of the box) entered the box: put the actor on the face it came
+// through and let the rest of the move slide along that face.
+static bool boxSlide(const Math::Vector3d &cur, const Math::Vector3d &prev, const Math::Vector3d &bmin, const Math::Vector3d &bmax, Math::Vector3d &out) {
+	const Math::Vector3d d = cur - prev;
+	const Math::Vector3d behind = prev - d * 10.f;
+	float bestAbs = FLT_MAX, best = 0.f;
+	Math::Vector3d normal;
+	bool found = false;
+	for (int axis = 0; axis < 3; axis++) {
+		const float da = fabsf(d.getValue(axis));
+		if (da == 0.f)
+			continue;
+		for (int side = 0; side < 2; side++) {
+			const bool isMax = side == 0;
+			const float limit = isMax ? bmax.getValue(axis) : bmin.getValue(axis);
+			const bool beyond = isMax ? limit - 0.002f < behind.getValue(axis) : behind.getValue(axis) < limit + 0.002f;
+			const float t = (limit - cur.getValue(axis)) / da;
+			if (!beyond || fabsf(t) >= bestAbs)
+				continue;
+			bestAbs = fabsf(t);
+			best = isMax ? -t : t;
+			normal = Math::Vector3d();
+			normal.setValue(axis, isMax ? 1.f : -1.f);
+			found = true;
+		}
+	}
+	if (!found)
+		return false;
+
+	Math::Vector3d rest = d * bestAbs;
+	const float len = rest.getMagnitude();
+	if (len == 0.f)
+		return false;
+	rest /= len;
+	const float dot = Math::Vector3d::dotProduct(rest, normal);
+	rest -= normal * dot;
+	// Moving away from the face, or straight into it: nothing to slide along
+	if (dot > 0.f || rest.getMagnitude() == 0.f)
+		return false;
+	rest.normalize();
+	out = cur + d * best + rest * len;
+	return true;
+}
+
+bool Actor::handleBoxCollision(Actor *actor, const Math::Vector3d &p1, float size1, const Math::Vector3d &p2, float size2,
+                               Math::Vector3d *vec) const {
+	if (!actor->getCurrentCostume() || !getCurrentCostume())
+		return false;
+	Model *model = actor->getCurrentCostume()->getModel();
+	Model *model1 = getCurrentCostume()->getModel();
+	if (!model || !model1)
+		return false;
+
+	// The mover is a sphere centered on its model's center, the other actor is a box
+	const Math::Matrix4 rot1(_yaw, _pitch, _roll, Math::EO_ZXY);
+	Math::Matrix4 m2(actor->_yaw, actor->_pitch, actor->_roll, Math::EO_ZXY);
+	m2.setPosition(actor->_pos);
+
+	Math::Vector3d off1 = model1->_center;
+	rot1.transform(&off1, false);
+	Math::Vector3d center2 = model->_center;
+	m2.transform(&center2, true);
+
+	const Math::Vector3d curCenter = _pos + *vec + off1;
+	const float r1 = model1->_radius * _collisionScale;
+	const float r2 = model->_radius * actor->_collisionScale;
+	if (curCenter.getDistanceTo(center2) >= r1 + r2)
+		return false;
+
+	const float scale = actor->_collisionScale;
+	const Math::Vector3d boxMin = model->_hasFileBox ? model->_fileMin : model->_bboxPos;
+	const Math::Vector3d boxMax = model->_hasFileBox ? model->_fileMax : model->_bboxPos + model->_bboxSize;
+	const Math::Vector3d pad(r1, r1, r1);
+	const Math::Vector3d bmin = boxMin * scale - pad;
+	const Math::Vector3d bmax = boxMax * scale + pad;
+
+	Math::Matrix4 toBox = m2;
+	toBox.invertAffineOrthonormal();
+	Math::Vector3d loc = curCenter;
+	toBox.transform(&loc, true);
+	Math::Vector3d prev = _pos + off1;
+	toBox.transform(&prev, true);
+
+	for (int i = 0; i < 3; i++) {
+		if (loc.getValue(i) <= bmin.getValue(i) || loc.getValue(i) >= bmax.getValue(i))
+			return false;
+	}
+
+	Math::Vector3d res;
+	if (!boxSlide(loc, prev, bmin, bmax, res)) {
+		// Out through the nearest of the four sides, a centimetre past it
+		res = loc;
+		float best = FLT_MAX;
+		for (int i = 0; i < 4; i++) {
+			const int axis = i / 2;
+			const bool isMax = i % 2 == 0;
+			const float limit = isMax ? bmax.getValue(axis) : bmin.getValue(axis);
+			const float dist = fabsf(limit - loc.getValue(axis));
+			if (dist < best) {
+				best = dist;
+				res = loc;
+				res.setValue(axis, limit + (isMax ? 0.01f : -0.01f));
+			}
+		}
+	}
+
+	m2.transform(&res, true);
+	*vec = res - off1 - _pos;
+	collisionHandlerCallback(actor);
+	return true;
+}
 void Actor::getBBoxInfo(Math::Vector3d &bboxPos, Math::Vector3d &bboxSize) const {
 	if (g_grim->getGameType() == GType_MONKEY4) {
 		EMICostume *costume = static_cast<EMICostume *>(getCurrentCostume());
@@ -2156,6 +2267,13 @@ bool Actor::handleCollisionWith(Actor *actor, CollisionMode mode, Math::Vector3d
 
 	CollisionMode mode1 = mode;
 	CollisionMode mode2 = actor->_collisionMode;
+
+	// (FUN_004939f0: the actor that moves is a sphere whatever its own mode is, only the mode of the other one counts)
+	if (g_grim->getGameType() == GType_GRIM)
+		mode1 = CollisionSphere;
+
+	if (g_grim->getGameType() == GType_GRIM && mode2 == CollisionBox)
+		return handleBoxCollision(actor, p1, size1, p2, size2, vec);
 
 	if (mode1 == CollisionSphere && mode2 == CollisionSphere) {
 		Math::Vector3d pos = p1 + *vec;
