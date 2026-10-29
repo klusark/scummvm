@@ -937,10 +937,8 @@ void GrimEngine::drawNormalMode() {
 	// the closed door will be overdrawn by a movie used as background image.
 	_currSet->drawBitmaps(ObjectState::OBJSTATE_UNDERLAY);
 
-	// Draw Primitives
-	for (PrimitiveObject *p : PrimitiveObject::getPool()) {
-		p->draw();
-	}
+	// Draw the primitives of the first layer, they are below the actors
+	drawPrimitives(1);
 
 	for (Overlay *p : Overlay::getPool()) {
 		p->draw();
@@ -968,6 +966,17 @@ void GrimEngine::drawNormalMode() {
 	// The overlay objects should be drawn on top of everything else,
 	// including 3D objects such as Manny and the message tube
 	_currSet->drawBitmaps(ObjectState::OBJSTATE_OVERLAY);
+
+	// The primitives of the second layer, the default one, are above everything
+	drawPrimitives(2);
+}
+
+void GrimEngine::drawPrimitives(int layer) {
+	for (PrimitiveObject *p : PrimitiveObject::getPool()) {
+		// The layer works as a mask, a primitive can be on both of them
+		if (p->getLayer() & layer)
+			p->draw();
+	}
 }
 
 void GrimEngine::doFlip() {

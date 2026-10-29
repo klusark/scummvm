@@ -52,6 +52,8 @@ public:
 	Common::Point getP2() const { return _p2; }
 	Common::Point getP3() const { return _p3; }
 	Common::Point getP4() const { return _p4; }
+	int getLayer() const { return _layer; }
+	void setLayer(int layer) { _layer = layer; }
 	void setPos(int x, int y);
 	void setEndpoint(int x, int y);
 	void setColor(const Color &color) { _color = color; }
@@ -67,6 +69,7 @@ private:
 	Color _color;
 	bool _filled;
 	PrimType _type;
+	int _layer;
 };
 
 } // end of namespace Grim
