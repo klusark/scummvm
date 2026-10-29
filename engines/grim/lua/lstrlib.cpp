@@ -453,8 +453,9 @@ static void str_format() {
 			case 's':
 				{
 					const char *s = luaL_check_string(arg);
-					buff = luaL_openspace(strlen(s));
-					snprintf(buff, strlen(s), form, s);
+					int size = strlen(s) + 1000; // room for the string and for a padding width (< 1000, checked above)
+					buff = luaL_openspace(size);
+					snprintf(buff, size, form, s);
 					break;
 				}
 			case 'c':
