@@ -817,9 +817,23 @@ void GrimEngine::luaUpdate() {
 		_frameTime = 0;
 	}
 
+	// (the original does not update the actors in a frame that began with a movie: the scripts that end the movie, and set the angles of Manny
+	// right after, see the angles that are seen change one frame later than they would without the movie)
+	const bool movieFrame = _mode == SmushMode && getGameType() == GType_GRIM && (!ConfMan.hasKey("movie_frame") || ConfMan.getBool("movie_frame"));
+
 	LuaBase::instance()->update(_frameTime, _movieTime);
 
-	if (_currSet && (_mode == NormalMode || _mode == SmushMode)) {
+	// The original times the iris with the clock, whatever the mode is.
+	_iris->update(_frameTime);
+
+	if (_currSet && !movieFrame && (_mode == NormalMode || _mode == SmushMode)) {
+		// (the timer of the text of a line runs down in the update of the actor that says it in the original, and the line is over in the frame the timer
+		// runs out: the texts are updated first, so that the actor finds the text gone in the same frame)
+		if (getGameType() == GType_GRIM) {
+			for (TextObject *t : TextObject::getPool()) {
+				t->update();
+			}
+		}
 		// call updateTalk() before calling update(), since it may modify costumes state, and
 		// the costumes are updated in update().
 		for (Common::List<Actor *>::iterator i = _talkingActors.begin(); i != _talkingActors.end(); ++i) {
@@ -839,10 +853,10 @@ void GrimEngine::luaUpdate() {
 			a->update(_frameTime);
 		}
 
-		_iris->update(_frameTime);
-
-		for (TextObject *t : TextObject::getPool()) {
-			t->update();
+		if (getGameType() != GType_GRIM) {
+			for (TextObject *t : TextObject::getPool()) {
+				t->update();
+			}
 		}
 	}
 }
