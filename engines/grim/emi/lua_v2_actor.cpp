@@ -179,14 +179,16 @@ void Lua_V2::LockChoreSet() {
 	lua_Object choreObj = lua_getparam(1);
 
 	const char *choreName = lua_getstring(choreObj);
-	warning("Lua_V2::LockChoreSet: chore: %s", choreName);
+	// The original only keeps the resources of the chores loaded
+	Debug::debug(Debug::Scripts, "Lua_V2::LockChoreSet: chore: %s", choreName);
 }
 
 void Lua_V2::UnlockChoreSet() {
 	lua_Object choreObj = lua_getparam(1);
 
 	const char *choreName = lua_getstring(choreObj);
-	warning("Lua_V2::UnlockChoreSet: chore: %s", choreName);
+	// The original only keeps the resources of the chores loaded
+	Debug::debug(Debug::Scripts, "Lua_V2::UnlockChoreSet: chore: %s", choreName);
 }
 
 void Lua_V2::LockChore() {
@@ -200,8 +202,8 @@ void Lua_V2::LockChore() {
 
 	const char *name = lua_getstring(nameObj);
 	const char *filename = lua_getstring(filenameObj);
-	warning("Lua_V2::LockChore, name: %s, filename: %s", name, filename);
-	// FIXME: implement missing rest part of code
+	// The original only keeps the resources of the chore loaded
+	Debug::debug(Debug::Scripts, "Lua_V2::LockChore, name: %s, filename: %s", name, filename);
 }
 
 void Lua_V2::UnlockChore() {
@@ -215,8 +217,8 @@ void Lua_V2::UnlockChore() {
 
 	const char *name = lua_getstring(nameObj);
 	const char *filename = lua_getstring(filenameObj);
-	warning("Lua_V2::UnlockChore, name: %s, filename: %s", name, filename);
-	// FIXME: implement missing rest part of code
+	// The original only keeps the resources of the chore loaded
+	Debug::debug(Debug::Scripts, "Lua_V2::UnlockChore, name: %s, filename: %s", name, filename);
 }
 
 void Lua_V2::IsActorChoring() {
@@ -467,7 +469,6 @@ void Lua_V2::ActorStopMoving() {
 	actor->stopWalking();
 	actor->stopTurning();
 
-	warning("Lua_V2::ActorStopMoving, actor: %s", actor->getName().c_str());
 	// FIXME: Inspect the rest of the code to see if there's anything else missing
 }
 

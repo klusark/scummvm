@@ -25,6 +25,7 @@
 
 #include "graphics/surface.h"
 
+#include "engines/grim/debug.h"
 #include "engines/grim/emi/lua_v2.h"
 #include "engines/grim/emi/emi_registry.h"
 #include "engines/grim/emi/sound/emisound.h"
@@ -128,8 +129,8 @@ void Lua_V2::LockBackground() {
 		return;
 	}
 	const char *filename = lua_getstring(filenameObj);
-	warning("Lua_V2::LockBackground, filename: %s", filename);
-	// FIXME: implement missing rest part of code
+	// The original only keeps the background loaded
+	Debug::debug(Debug::Scripts, "Lua_V2::LockBackground, filename: %s", filename);
 }
 
 void Lua_V2::UnLockBackground() {
@@ -141,8 +142,8 @@ void Lua_V2::UnLockBackground() {
 	}
 
 	const char *filename = lua_getstring(filenameObj);
-	// FIXME: implement missin code
-	warning("Lua_V2::UnLockBackground: stub, filename: %s", filename);
+	// The original only keeps the background loaded
+	Debug::debug(Debug::Scripts, "Lua_V2::UnLockBackground, filename: %s", filename);
 }
 
 void Lua_V2::MakeScreenTextures() {
@@ -234,15 +235,13 @@ void Lua_V2::SetActiveCD() {
 	int cd = (int)lua_getnumber(cdObj);
 
 	if (cd == 1 || cd == 2) {
-		warning("Lua_V2::GetActiveCD: set to CD: %d", cd);
-		// FIXME
+		// There is only one set of data, so the CD can always be changed
 		lua_pushnumber(1.0);
 	}
 }
 
 void Lua_V2::GetActiveCD() {
-	// FIXME: return current CD number 1 or 2, original can also avoid push any numer
-	warning("Lua_V2::GetActiveCD: return const CD 1");
+	// There is only one set of data, so the first CD is always the one in use
 	lua_pushnumber(1);
 }
 
@@ -474,8 +473,7 @@ void Lua_V2::GetSectorName() {
 }
 
 void Lua_V2::GammaEnabled() {
-	warning("Lua_V2::GammaEnabled: implement opcode, pushing nil");
-	lua_pushnil();
+	lua_pushnumber(1);
 }
 
 void Lua_V2::FileFindFirst() {
@@ -772,7 +770,7 @@ static void stubError(const char *funcName) {
 // Stubbed functions with semi-known arguments:
 // TODO: Verify and implement these: (And add type-checking), also rename params
 void Lua_V2::NukeAllScriptLocks() {
-	warning("Lua_V2::NukeAllScriptLocks() - TODO: Implement opcode");
+	// The original frees the resources that the scripts keep loaded with the lock opcodes
 }
 
 void Lua_V2::FRUTEY_Begin() {
