@@ -92,6 +92,7 @@ MODULE_OBJS := \
 	update/lang_filter.o \
 	update/update.o \
 	actor.o \
+	sincos.o \
 	animation.o \
 	bitmap.o \
 	costume.o \
