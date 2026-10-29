@@ -1322,7 +1322,8 @@ void Actor::sayLine(const char *msgId, bool background, float x, float y) {
 		textObject->setFGColor(_talkColor);
 		textObject->setIsSpeech();
 		if (m == GrimEngine::TextOnly || g_grim->getMode() == GrimEngine::SmushMode) {
-			textObject->setDuration(500 + msg.size() * 15 * (11 - g_grim->getTextSpeed()));
+			// (the original: 640 ms and 15 ms for each character, as many times as the text speed is below 11; FUN_00492b30)
+			textObject->setDuration((g_grim->getGameType() == GType_GRIM ? 640 : 500) + msg.size() * 15 * (11 - g_grim->getTextSpeed()));
 		}
 		if (g_grim->getGameType() == GType_MONKEY4 && (x != -1 || y != -1)) {
 			textObject->setX(320 * (x + 1));

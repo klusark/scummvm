@@ -335,7 +335,9 @@ void TextObject::setupText() {
 	else
 		setupTextReal<Common::String>(msg, sConvert);
 
-	_elapsedTime = 0;
+	// (the timer of a text of the original runs from the call that made it, wherever the text is laid out again)
+	if (g_grim->getGameType() != GType_GRIM)
+		_elapsedTime = 0;
 }
 
 int TextObject::getLineX(int line) const {
@@ -395,7 +397,8 @@ void TextObject::draw() {
 }
 
 void TextObject::update() {
-	if (!_duration || !_created) {
+	// (the timer of a text of the original runs from the call that made it, whether the text has been drawn yet or not: FUN_00490210 counts it down in the update of the actor)
+	if (!_duration || (!_created && g_grim->getGameType() != GType_GRIM)) {
 		return;
 	}
 
