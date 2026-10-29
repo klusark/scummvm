@@ -66,8 +66,10 @@ void Lua_V1::ImStartSound() {
 
 void Lua_V1::ImStopSound() {
 	lua_Object nameObj = lua_getparam(1);
-	if (lua_isnumber(nameObj))
-		error("ImStopsound: name from value not supported");
+	if (lua_isnumber(nameObj)) {
+		warning("ImStopSound: name from value not supported");
+		return;
+	}
 
 	const char *soundName = lua_getstring(nameObj);
 	g_imuse->stopSound(soundName);
@@ -151,7 +153,7 @@ void Lua_V1::ImSetParam() {
 		g_imuse->setPan(soundName, value);
 		break;
 	default:
-		error("ImSetParam() Unimplemented %d", param);
+		warning("ImSetParam: parameter %d of %s is not supported", param, soundName);
 	}
 }
 
@@ -178,8 +180,12 @@ void Lua_V1::ImGetParam() {
 	case IM_SOUND_VOL:
 		lua_pushnumber(g_imuse->getVolume(soundName));
 		break;
+	case IM_SOUND_PAN:
+		lua_pushnumber(g_imuse->getPan(soundName));
+		break;
 	default:
-		error("ImGetParam() Unimplemented %d", param);
+		warning("ImGetParam: parameter %d of %s is not supported", param, soundName);
+		lua_pushnumber(-1.0);
 	}
 }
 
@@ -197,7 +203,8 @@ void Lua_V1::ImFadeParam() {
 		return;
 
 	if (lua_isnumber(nameObj)) {
-		error("ImFadeParam: getting name from number is not supported");
+		warning("ImFadeParam: getting name from number is not supported");
+		return;
 	}
 	const char *soundName = lua_getstring(nameObj);
 	int opcode = (int)lua_getnumber(opcodeObj);
@@ -206,11 +213,14 @@ void Lua_V1::ImFadeParam() {
 		value = 0;
 	int duration = (int)lua_getnumber(durationObj);
 	switch (opcode) {
+	case IM_SOUND_VOL:
+		g_imuse->setFadeVolume(soundName, value, duration);
+		break;
 	case IM_SOUND_PAN:
 		g_imuse->setFadePan(soundName, value, duration);
 		break;
 	default:
-		error("ImFadeParam(%s, %x, %d, %d)", soundName, opcode, value, duration);
+		warning("ImFadeParam(%s, %x, %d, %d) is not supported", soundName, opcode, value, duration);
 		break;
 	}
 }

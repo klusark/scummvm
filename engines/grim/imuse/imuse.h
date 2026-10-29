@@ -87,6 +87,7 @@ public:
 	void setPriority(const char *soundName, int priority);
 	void setVolume(const char *soundName, int volume);
 	int getVolume(const char *soundName);
+	int getPan(const char *soundName);
 	void setPan(const char *soundName, int pan); /* pan: 0 .. 127 */
 	void setFadePan(const char *soundName, int destPan, int duration);
 	void setFadeVolume(const char *soundName, int destVolume, int duration);

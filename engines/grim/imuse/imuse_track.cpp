@@ -234,6 +234,16 @@ int Imuse::getVolume(const char *soundName) {
 	return getTrack->vol / 1000;
 }
 
+int Imuse::getPan(const char *soundName) {
+	Common::StackLock lock(_mutex);
+	Track *getTrack = findTrack(soundName);
+	if (getTrack == nullptr) {
+		Debug::warning(Debug::Sound, "Unable to find track '%s' to get pan", soundName);
+		return 0;
+	}
+	return getTrack->pan / 1000;
+}
+
 void Imuse::setHookId(const char *soundName, int hookId) {
 	Common::StackLock lock(_mutex);
 	Track *changeTrack;
