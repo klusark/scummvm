@@ -54,6 +54,8 @@ private:
 	int _targetY;
 	int _length;
 	int _currTime;
+
+	void setRegion(float factor);
 };
 
 } // end of namespace Grim
