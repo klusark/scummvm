@@ -16,6 +16,7 @@ namespace Grim {
 #define nhash(t)	((t)->nhash)
 
 Hash *luaH_new(int32 nhash);
+uint32 luaH_newSerial();
 void luaH_free(Hash *frees);
 TObject *luaH_get(Hash *t, TObject *r);
 TObject *luaH_set(Hash *t, TObject *r);

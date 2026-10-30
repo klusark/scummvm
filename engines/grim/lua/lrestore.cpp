@@ -281,6 +281,7 @@ void lua_Restore(SaveGame *savedState) {
 		tempHash->nhash = savedState->readLESint32();
 		tempHash->nuse = savedState->readLESint32();
 		tempHash->htag = savedState->readLESint32();
+		tempHash->serial = luaH_newSerial();
 		tempHash->node = hashnodecreate(tempHash->nhash);
 		luaO_insertlist(prevHash, (GCnode *)tempHash);
 		prevHash = (GCnode *)tempHash;
