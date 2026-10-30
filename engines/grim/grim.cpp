@@ -177,10 +177,11 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 	if (speed == 0) {
 		_speedLimitMs = 0;
 	} else if (speed < 0 || speed > 100) {
-		_speedLimitMs = 1000 / 60;
-		ConfMan.setInt("engine_speed", 1000 / _speedLimitMs);
+		// (rounded up, so that the loop is never faster than the speed it was asked for)
+		_speedLimitMs = (1000 + 59) / 60;
+		ConfMan.setInt("engine_speed", 60);
 	} else {
-		_speedLimitMs = 1000 / speed;
+		_speedLimitMs = (1000 + speed - 1) / speed;
 	}
 	_listFilesIter = nullptr;
 	_savedState = nullptr;
@@ -1285,6 +1286,25 @@ void GrimEngine::mainLoop() {
 			} else {
 				renderFrame = false;
 			}
+		}
+
+		// Never more than 60 pictures a second, by the clock of the run: the simulated one when there is one, so that a run stays the same every time.
+		// (A loop that is held to a speed limit is slower than that already.)
+		if (renderFrame && (_simFps || !_speedLimitMs)) {
+			const unsigned nowMs = _simFps ? (_simMs ? _simFrame * _simMs : (unsigned)((uint64)_simFrame * 1000 / _simFps)) : g_system->getMillis();
+			if (_drawn && nowMs > _drawStartMs + (unsigned)((uint64)_drawCount * 1000 / 60) + 1000) {
+				// (far behind the schedule: begin again)
+				_drawn = false;
+			}
+			if (!_drawn) {
+				_drawn = true;
+				_drawStartMs = nowMs;
+				_drawCount = 0;
+			}
+			if (nowMs < _drawStartMs + (unsigned)((uint64)_drawCount * 1000 / 60))
+				renderFrame = false;
+			else
+				_drawCount++;
 		}
 
 		if (_mode != PauseMode && renderFrame) {

@@ -118,6 +118,8 @@ public:
 	void mainLoop();
 	unsigned getFrameStart() const { return _frameStart; }
 	unsigned getFrameTime() const { return _frameTime; }
+	/** Whether the game clock is simulated (--sim-fps) */
+	bool isSimulated() const { return _simFps != 0; }
 	float getClockScale() const { return _clockScale; }
 
 	// perSecond should allow rates of zero, some actors will accelerate
@@ -291,6 +293,10 @@ protected:
 	Common::Array<byte> _dumpFramesLast;
 	EngineMode _lastSimRenderMode = NormalMode;
 	Set *_lastSimRenderSet = nullptr;
+	/** The pictures are drawn on a schedule of 60 a second, by the clock of the run (the simulated one when there is one): the first picture and how many came since */
+	unsigned _drawStartMs = 0;
+	unsigned _drawCount = 0;
+	bool _drawn = false;
 	unsigned _fpsReports = 0;
 	int _prevSmushFrame = 0;
 	unsigned int _frameCounter = 0;
