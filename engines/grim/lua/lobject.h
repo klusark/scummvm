@@ -136,6 +136,8 @@ typedef struct Hash {
 	int32 nhash;
 	int32 nuse;
 	int32 htag;
+	// Hash of a table used as a key; the address would change the order of next() between runs
+	uint32 serial;
 } Hash;
 
 extern const char *luaO_typenames[];
