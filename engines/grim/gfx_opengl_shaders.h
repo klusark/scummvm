@@ -219,6 +219,9 @@ protected:
 	void turnOffLight(int lightId) override;
 
 private:
+	void addToScreenBoundingBox(const Math::Matrix4 &mvpMatrix, const Math::Vector3d &obj, double &left, double &top, double &right, double &bottom) const;
+	void finishScreenBoundingBox(double left, double top, double right, double bottom, int *x1, int *y1, int *x2, int *y2) const;
+
 	const Actor *_currentActor;
 	float _alpha;
 	GLuint _emergTexture;
