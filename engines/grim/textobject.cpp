@@ -190,7 +190,25 @@ void TextObject::setupTextReal(S msg, Common::String (*convert)(const S &s)) {
 
 	// If the speaker is too close to the edge of the screen we have to make
 	// some room for the subtitles.
-	if (_isSpeech) {
+	if (_isSpeech && g_grim->getGameType() == GType_GRIM) {
+		// The original keeps the middle of the text 40 pixels and half of its longest word away from the edges
+		int longestWord = 0;
+		int wordWidth = 0;
+		for (uint i = 0; i < msg.size(); i++) {
+			if (msg[i] == ' ' || msg[i] == '\n' || msg[i] == 13) {
+				longestWord = MAX(longestWord, wordWidth);
+				wordWidth = 0;
+			} else {
+				wordWidth += _font->getCharKernedWidth(msg[i]);
+			}
+		}
+		longestWord = MAX(longestWord, wordWidth);
+		const int halfWord = longestWord / 2;
+		if (_x - halfWord < 40)
+			_x = halfWord + 40;
+		if (SCREEN_WIDTH - 40 < halfWord + _x)
+			_x = SCREEN_WIDTH - halfWord - 40;
+	} else if (_isSpeech) {
 		if (_x < SCREEN_MARGIN) {
 			_x = SCREEN_MARGIN;
 		} else if (SCREEN_WIDTH - _x < SCREEN_MARGIN) {
@@ -273,8 +291,16 @@ void TextObject::setupTextReal(S msg, Common::String (*convert)(const S &s)) {
 	// printed further down the screen.
 	const int SCREEN_TOP_MARGIN = _font->getKernedHeight();
 	if (_isSpeech) {
-		_y -= _numberLines * _font->getKernedHeight();
-		if (_y < SCREEN_TOP_MARGIN) {
+		const int blockHeight = _numberLines * _font->getKernedHeight();
+		_y -= blockHeight;
+		if (g_grim->getGameType() == GType_GRIM) {
+			// The original keeps the block 10 pixels away from the top and the bottom of the screen
+			const int screenHeight = _height ? _height : 480;
+			if (_y < 10)
+				_y = 10;
+			if (_y + blockHeight > screenHeight - 10)
+				_y = screenHeight - blockHeight - 10;
+		} else if (_y < SCREEN_TOP_MARGIN) {
 			_y = SCREEN_TOP_MARGIN;
 		}
 	}
