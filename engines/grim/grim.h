@@ -241,7 +241,7 @@ protected:
 	virtual void storeSaveGameImage(SaveGame *savedState);
 
 	bool _autorunPending = false;
-	int _remotePoll = 0;
+	uint32 _remotePoll = 0;
 	void pollRemoteLua();
 	bool _autorunLoaded = false;
 	bool _savegameLoadRequest = false;

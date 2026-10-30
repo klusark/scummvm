@@ -1811,8 +1811,12 @@ void GrimEngine::debugLua(const Common::String &str) {
 // deleted), the global string R is then written to <dir>/cmd.out ("done" marks the end).
 void GrimEngine::pollRemoteLua() {
 	static const char *dir = getenv("SCUMMVM_LUA_REMOTE");
-	if (!dir || (++_remotePoll % 6) != 0)
+	if (!dir)
 		return;
+	const uint32 now = g_system->getMillis();
+	if (now - _remotePoll < 100)
+		return;
+	_remotePoll = now;
 	Common::FSNode cmd(Common::Path(Common::String(dir) + "/cmd.lua"));
 	if (!cmd.exists())
 		return;
