@@ -1483,7 +1483,7 @@ void Lua_V1::GetVisibleThings() {
 	if (g_grim->getGameType() == GType_GRIM) {
 		// The actors of the set of the observer, but itself, that it can see
 		Actor::Sight sight;
-		for (Actor *a : Actor::getPool()) {
+		for (Actor *a : Actor::getActorsInSet(actor->getSetName())) {
 			if (a != actor && actor->canSee(a, sight)) {
 				lua_pushobject(result);
 				lua_pushusertag(a->getId(), MKTAG('A','C','T','R'));
