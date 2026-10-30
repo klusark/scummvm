@@ -1220,11 +1220,11 @@ void GrimEngine::mainLoop() {
 
 		// A simulated run goes through thousands of frames a second, drawing them all is most of what it costs: draw one frame
 		// in _simRenderEvery (by the count of frames, not by the clock, so that a run stays the same every time), and every
-		// frame when what is on the screen changes (a set, a camera setup, the mode) or a movie plays, as the scripts that
-		// follow the camera react to the drawing and the time of a movie comes from it
+		// frame when what is on the screen changes (a set, a camera setup, the mode) or a movie has a new picture, as the scripts that
+		// follow the camera react to the drawing
 		bool renderFrame = true;
 		if (_simFps && _simRenderEvery > 1) {
-			if (_setupChanged || _mode != _lastSimRenderMode || _currSet != _lastSimRenderSet || _mode == SmushMode || (g_movie && g_movie->isPlaying()) || _simFrame % _simRenderEvery == 0) {
+			if (_setupChanged || _mode != _lastSimRenderMode || _currSet != _lastSimRenderSet || (g_movie && g_movie->isPlaying() && g_movie->isUpdateNeeded()) || _simFrame % _simRenderEvery == 0) {
 				_lastSimRenderMode = _mode;
 				_lastSimRenderSet = _currSet;
 			} else {
