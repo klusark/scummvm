@@ -81,6 +81,102 @@ void luaV_closure(int32 nelems) {
 	}
 }
 
+// The "index" fallback of the game's scripts is system.IndexFB of _system.lua: for a key that a table does not have it looks in the table that is
+// the "parent" of the table. It is called for every key that is not there, and in the interpreter that takes a dozen instructions and three calls.
+// While the fallback is that function, and the one behind it (system.oldIndexFB) is the function of setfallback.lua that returns nil, it is done here
+// with the same steps. A script that is not the same as the one that was seen gets the function.
+static TProtoFunc *indexFBProto = nullptr;
+static TProtoFunc *indexFBRejected = nullptr;
+static TaggedString *indexFBParent, *indexFBSystem, *indexFBOld, *indexFBDisabled;
+static int indexFBDepth = 0;
+
+static bool endsWith(const char *s, const char *suffix) {
+	size_t n = strlen(s), m = strlen(suffix);
+	return n >= m && strcmp(s + n - m, suffix) == 0;
+}
+
+static bool recogniseIndexFB(TProtoFunc *tf) {
+	static const char *const names[] = { "parent", "system", "oldIndexFB", "indexFB_disabled", "FALSE", "type", "table" };
+	if (tf->lineDefined != 2303 || tf->nconsts != 7 || !endsWith(tf->fileName->str, "_system.lua"))
+		return false;
+	for (int i = 0; i < 7; i++) {
+		if (ttype(&tf->consts[i]) != LUA_T_STRING || strcmp(svalue(&tf->consts[i]), names[i]) != 0)
+			return false;
+	}
+	indexFBParent = tsvalue(&tf->consts[0]);
+	indexFBSystem = tsvalue(&tf->consts[1]);
+	indexFBOld = tsvalue(&tf->consts[2]);
+	indexFBDisabled = tsvalue(&tf->consts[3]);
+	return true;
+}
+
+static bool stillIndexFB(TProtoFunc *tf) {
+	return tf->lineDefined == 2303 && tf->nconsts == 7 &&
+		ttype(&tf->consts[0]) == LUA_T_STRING && tsvalue(&tf->consts[0]) == indexFBParent &&
+		ttype(&tf->consts[1]) == LUA_T_STRING && tsvalue(&tf->consts[1]) == indexFBSystem &&
+		ttype(&tf->consts[2]) == LUA_T_STRING && tsvalue(&tf->consts[2]) == indexFBOld &&
+		ttype(&tf->consts[3]) == LUA_T_STRING && tsvalue(&tf->consts[3]) == indexFBDisabled;
+}
+
+// Is system.oldIndexFB the function of setfallback.lua that returns nil
+static bool oldIndexFBReturnsNil() {
+	TObject *sys = &indexFBSystem->globalval;
+	if (ttype(sys) != LUA_T_ARRAY || ttype(luaT_getim(avalue(sys)->htag, IM_GETTABLE)) != LUA_T_NIL)
+		return false;
+	TObject key;
+	ttype(&key) = LUA_T_STRING;
+	tsvalue(&key) = indexFBOld;
+	TObject *old = luaH_get(avalue(sys), &key);
+	if (!old || ttype(old) != LUA_T_PROTO)
+		return false;
+	TProtoFunc *tf = tfvalue(old);
+	return tf->lineDefined == 11 && tf->nconsts == 0 && endsWith(tf->fileName->str, "setfallback.lua");
+}
+
+// Leaves the result of the fallback for the table at top-2 and the key at top-1 as luaD_callTM(im, 2, 1) would; false when it is not done
+static bool indexFBFast(TProtoFunc *tf) {
+	if (tf != indexFBProto) {
+		if (tf == indexFBRejected)
+			return false;
+		if (!recogniseIndexFB(tf)) {
+			indexFBRejected = tf;
+			return false;
+		}
+		indexFBProto = tf;
+	} else if (!stillIndexFB(tf)) {
+		// (the function was freed and the place used again)
+		indexFBProto = nullptr;
+		return false;
+	}
+	if (indexFBDepth > 100)
+		return false;
+
+	Stack *S = &lua_state->stack;
+	TObject *field = S->top - 1;
+	bool isParent = ttype(field) == LUA_T_STRING && tsvalue(field) == indexFBParent;
+	if (!isParent) {
+		// (a global that is not set is nil, there is no fallback for it)
+		if (ttype(&indexFBDisabled->globalval) != LUA_T_NIL || ttype(luaT_getim(LUA_T_NIL, IM_GETGLOBAL)) != LUA_T_NIL)
+			return false;
+		TObject key;
+		ttype(&key) = LUA_T_STRING;
+		tsvalue(&key) = indexFBParent;
+		TObject *parent = luaH_get(avalue(S->top - 2), &key);
+		if (parent && ttype(parent) == LUA_T_ARRAY) {
+			*(S->top - 2) = *parent;
+			indexFBDepth++;
+			luaV_gettable();
+			indexFBDepth--;
+			return true;
+		}
+	}
+	if (!oldIndexFBReturnsNil())
+		return false;
+	--S->top;
+	ttype(S->top - 1) = LUA_T_NIL;
+	return true;
+}
+
 /*
 ** Function to index a table.
 ** Receives the table at top-2 and the index at top-1.
@@ -98,9 +194,10 @@ void luaV_gettable() {
 			if (h && ttype(h) != LUA_T_NIL) {
 				--S->top;
 				*(S->top - 1) = *h;
-			} else if (ttype(im = luaT_getim(tg, IM_INDEX)) != LUA_T_NIL)
-				luaD_callTM(im, 2, 1);
-			else {
+			} else if (ttype(im = luaT_getim(tg, IM_INDEX)) != LUA_T_NIL) {
+				if (ttype(im) != LUA_T_PROTO || !indexFBFast(tfvalue(im)))
+					luaD_callTM(im, 2, 1);
+			} else {
 				--S->top;
 				ttype(S->top - 1) = LUA_T_NIL;
 			}
