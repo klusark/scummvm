@@ -169,10 +169,26 @@ void luaD_callTM(TObject *f, int32 nParams, int32 nResults) {
 	lua_state->preventBreakCounter--;
 }
 
+// A call made from a C function or a tag method needs a task of its own: keep the ones that are done for the next call
+static lua_Task *freeTasks = nullptr;
+
+static lua_Task *newTask() {
+	if (!freeTasks)
+		return luaM_new(lua_Task);
+	lua_Task *t = freeTasks;
+	freeTasks = t->next;
+	return t;
+}
+
+static void freeTask(lua_Task *t) {
+	t->next = freeTasks;
+	freeTasks = t;
+}
+
 int32 luaD_call(StkId base, int32 nResults) {
 	lua_Task *tmpTask = lua_state->task;
 	if (!lua_state->task || lua_state->callLevelCounter) {
-		lua_Task *t = luaM_new(lua_Task);
+		lua_Task *t = newTask();
 		lua_taskinit(t, lua_state->task, base, nResults);
 		lua_state->task = t;
 	} else {
@@ -242,7 +258,7 @@ int32 luaD_call(StkId base, int32 nResults) {
 		if (firstResult <= 0) {
 			nResults = lua_state->task->aux;
 			base = -firstResult;
-			lua_Task *t = luaM_new(lua_Task);
+			lua_Task *t = newTask();
 			lua_taskinit(t, lua_state->task, base, nResults);
 			lua_state->task = t;
 		} else {
@@ -258,7 +274,7 @@ int32 luaD_call(StkId base, int32 nResults) {
 
 			lua_Task *tmp = lua_state->task;
 			lua_state->task = lua_state->task->next;
-			luaM_free(tmp);
+			freeTask(tmp);
 			if (lua_state->task) {
 				nResults = lua_state->task->initResults;
 				base = lua_state->task->initBase;
@@ -348,7 +364,7 @@ int32 luaD_protectedrun(int32 nResults) {
 		while (tmpTask != lua_state->task) {
 			lua_Task *t = lua_state->task;
 			lua_state->task = lua_state->task->next;
-			luaM_free(t);
+			freeTask(t);
 		}
 		status = 1;
 	}
