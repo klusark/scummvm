@@ -136,6 +136,14 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 	}
 	if (ConfMan.hasKey("sim_render_every"))
 		_simRenderEvery = CLIP(ConfMan.getInt("sim_render_every"), 1, 1000);
+	if (ConfMan.hasKey("dump_frames")) {
+		if (!_simFps)
+			error("--dump-frames needs --sim-fps, the frames of two runs can only be told apart by the simulated clock");
+		_dumpFramesDir = ConfMan.getPath("dump_frames");
+		if (ConfMan.hasKey("dump_frames_every"))
+			_dumpFramesEvery = CLIP(ConfMan.getInt("dump_frames_every"), 1, 100000);
+		_dumpFramesChanged = ConfMan.hasKey("dump_frames_changed") && ConfMan.getBool("dump_frames_changed");
+	}
 	if (_simFps) {
 		// the sound is mixed and iMuse runs in steps of the simulated time too, see luaUpdate()
 		static_cast<Audio::MixerImpl *>(_mixer)->setSimulated(true);
@@ -234,6 +242,7 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 }
 
 GrimEngine::~GrimEngine() {
+	delete _dumpFramesIndex;
 	delete[] _controlsEnabled;
 	delete[] _controlsState;
 	delete[] _joyAxisPosition;
@@ -1045,6 +1054,52 @@ void GrimEngine::drawPrimitives(int layer) {
 	}
 }
 
+Bitmap *GrimEngine::grabFrame() {
+	g_driver->_screenshotColor = true;
+	Bitmap *frame = g_driver->getScreenshot(640, 480, false);
+	g_driver->_screenshotColor = false;
+	if (frame) {
+		frame->setActiveImage(0);
+		frame->getBitmapData()->convertToColorFormat(Graphics::PixelFormat(4, 8, 8, 8, 8, 24, 16, 8, 0));
+	}
+	return frame;
+}
+
+// The frames of two runs of the same simulated game, one with each renderer, are compared by devtools/grim/framediff.py: the line
+// of a frame in frames.tsv gives its number, the simulated time in ms, the set and the camera setup, and the file ("=" when the
+// picture is the one of the frame before)
+void GrimEngine::dumpFrame() {
+	if (_simFrame % _dumpFramesEvery != 0)
+		return;
+
+	Bitmap *frame = grabFrame();
+	if (!frame)
+		return;
+	const Graphics::Surface &pixels = frame->getData();
+	const uint32 size = pixels.pitch * pixels.h;
+	const bool same = _dumpFramesChanged && _dumpFramesLast.size() == size && !memcmp(_dumpFramesLast.data(), pixels.getPixels(), size);
+	Common::String file = "=";
+	if (!same) {
+		file = Common::String::format("f%06u.png", _simFrame);
+		Common::DumpFile out;
+		if (!out.open(_dumpFramesDir.appendComponent(file), true) || !Image::writePNG(out, pixels))
+			error("Cannot write the frame %s", file.c_str());
+		_dumpFramesLast.resize(size);
+		memcpy(_dumpFramesLast.data(), pixels.getPixels(), size);
+	}
+	delete frame;
+
+	if (!_dumpFramesIndex) {
+		_dumpFramesIndex = new Common::DumpFile();
+		if (!_dumpFramesIndex->open(_dumpFramesDir.appendComponent("frames.tsv"), true))
+			error("Cannot write %s", _dumpFramesDir.appendComponent("frames.tsv").toString().c_str());
+	}
+	const Common::String line = Common::String::format("%u\t%u\t%s\t%d\t%s\n", _simFrame, (unsigned)Video::g_videoSimMillis,
+			_currSet ? _currSet->getName().c_str() : "-", _currSet ? _currSet->getSetup() : -1, file.c_str());
+	_dumpFramesIndex->writeString(line);
+	_dumpFramesIndex->flush();
+}
+
 void GrimEngine::doFlip() {
 	_frameCounter++;
 	// When possible, flip the buffer
@@ -1240,6 +1295,8 @@ void GrimEngine::mainLoop() {
 			// Now, it will queue all the OpenGL commands and draw them on the
 			// GPU while the CPU is busy updating the game world.
 			updateDisplayScene();
+			if (!_dumpFramesDir.empty())
+				dumpFrame();
 		}
 
 		if (renderFrame)

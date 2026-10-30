@@ -1087,6 +1087,18 @@ Common::String parseCommandLine(Common::StringMap &settings, int argc, const cha
 				if (retval < 1 || retval > 1000)
 					usage("--sim-render-every: '%s' is out of range, use 1 - 1000", option);
 			END_OPTION
+
+			DO_LONG_OPTION("dump-frames")
+				settings["dump_frames"] = Common::Path::fromCommandLine(option).toConfig();
+			END_OPTION
+
+			DO_LONG_OPTION_INT("dump-frames-every")
+				if (retval < 1 || retval > 100000)
+					usage("--dump-frames-every: '%s' is out of range, use 1 - 100000", option);
+			END_OPTION
+
+			DO_LONG_OPTION_BOOL("dump-frames-changed")
+			END_OPTION
 #endif
 
 			DO_LONG_OPTION_INT("engine-speed")

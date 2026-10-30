@@ -519,16 +519,12 @@ void Lua_V1::DumpFrame() {
 	GrimEngine::EngineMode mode = g_grim->getMode();
 	g_grim->setMode(GrimEngine::NormalMode);
 	g_grim->updateDisplayScene();
-	g_driver->_screenshotColor = true;
-	Bitmap *shot = g_driver->getScreenshot(640, 480, false);
-	g_driver->_screenshotColor = false;
+	Bitmap *shot = g_grim->grabFrame();
 	g_grim->setMode(mode);
 	if (!shot) {
 		lua_pushnil();
 		return;
 	}
-	shot->setActiveImage(0);
-	shot->getBitmapData()->convertToColorFormat(Graphics::PixelFormat(4, 8, 8, 8, 8, 24, 16, 8, 0));
 	Common::DumpFile out;
 	bool ok = false;
 	if (out.open(Common::Path(dir + "/" + name + ".png", '/'), true)) {

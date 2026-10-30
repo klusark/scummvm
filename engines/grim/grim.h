@@ -25,6 +25,7 @@
 #include "engines/engine.h"
 #include "engines/advancedDetector.h"
 
+#include "common/array.h"
 #include "common/str-array.h"
 #include "common/hashmap.h"
 #include "common/events.h"
@@ -34,6 +35,10 @@
 #include "engines/grim/textobject.h"
 #include "engines/grim/iris.h"
 #include "engines/grim/detection.h"
+
+namespace Common {
+class DumpFile;
+}
 
 namespace Grim {
 
@@ -102,6 +107,8 @@ public:
 	void handleDebugLoadResource();
 	void luaUpdate();
 	void updateDisplayScene();
+	/** The frame as drawn, in colour, 640x480, as 8 bit RGBA (the caller deletes it) */
+	Bitmap *grabFrame();
 	void doFlip();
 	void setFlipEnable(bool state) { _flipEnable = state; }
 	bool getFlipEnable() { return _flipEnable; }
@@ -231,6 +238,9 @@ protected:
 	void savegameSave();
 	void saveGRIM();
 
+	/** Writes the frame just drawn to the directory given with --dump-frames, when it is one of the frames asked for */
+	void dumpFrame();
+
 	void savegameRestore();
 	void restoreGRIM();
 
@@ -273,6 +283,12 @@ protected:
 	unsigned _simMs = 0;
 	/** With --sim-fps: only one frame in this many is drawn (1 = every frame) */
 	unsigned _simRenderEvery = 8;
+	/** With --dump-frames: the directory where the frames are written, one frame in _dumpFramesEvery (see dumpFrame) */
+	Common::Path _dumpFramesDir;
+	unsigned _dumpFramesEvery = 1;
+	bool _dumpFramesChanged = false;
+	Common::DumpFile *_dumpFramesIndex = nullptr;
+	Common::Array<byte> _dumpFramesLast;
 	EngineMode _lastSimRenderMode = NormalMode;
 	Set *_lastSimRenderSet = nullptr;
 	unsigned _fpsReports = 0;
