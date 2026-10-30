@@ -2,9 +2,10 @@
 """Compares the frames that several runs of Grim Fandango wrote with --dump-frames, one run for each renderer
 (--renderer=opengl_shaders, opengl, tinygl), all of them with the same --sim-fps and the same --autorun script.
 
-    framediff.py [options] <frames dir of the reference> <frames dir> [<frames dir>...] -o <output dir>
+    framediff.py [options] <frames dir> <frames dir> [<frames dir>...] -o <output dir>
 
-The first directory is the reference, every other one is compared with it, frame by frame. A frame is listed when a pixel of it
+The directory named opengl (--reference) is the reference, or the first one when there is none of that name; every other one is
+compared with it, frame by frame. A frame is listed when a pixel of it
 differs by more than --threshold in any colour channel (0 = any difference); for those the output directory gets
 <reference>_<frame>.png, <name>_<frame>.png and diff_<name>_<frame>.png (the difference, times --gain).
 report.tsv in it has a line for every frame compared. The differences that are not above the threshold are counted
@@ -40,7 +41,8 @@ def load(path, file):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("dirs", nargs="+", help="the frame directories, the reference first")
+    parser.add_argument("dirs", nargs="+", help="the frame directories, named after the renderer")
+    parser.add_argument("--reference", default="opengl", help="the name of the directory to compare the others with (default opengl)")
     parser.add_argument("-o", "--output", required=True, help="where the report and the images go")
     parser.add_argument("--threshold", type=int, default=0, help="the difference in a channel (0-255) that counts (default 0)")
     parser.add_argument("--gain", type=int, default=8, help="the factor of the difference image (default 8)")
@@ -50,6 +52,7 @@ def main():
     if len(args.dirs) < 2:
         parser.error("two directories at least")
 
+    args.dirs.sort(key=lambda d: os.path.basename(os.path.normpath(d)) != args.reference)
     names = [os.path.basename(os.path.normpath(d)) for d in args.dirs]
     indexes = [read_index(d) for d in args.dirs]
     os.makedirs(args.output, exist_ok=True)
