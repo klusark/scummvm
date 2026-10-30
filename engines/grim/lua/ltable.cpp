@@ -62,19 +62,35 @@ static intptr hashindex(TObject *ref) {
 	return (h >= 0 ? h : -(h + 1));
 }
 
+// The two kinds of key that nearly all the lookups are for are told apart without a call
+static inline bool sameKey(TObject *key, TObject *rf) {
+	if (ttype(key) != ttype(rf))
+		return false;
+	if (ttype(key) == LUA_T_STRING)
+		return tsvalue(key) == tsvalue(rf);
+	return luaO_equalObj(key, rf);
+}
+
+// h is not negative; a division of 32 bits is faster and gives the same numbers when it fits
+static inline int32 moduloOf(intptr h, int32 n) {
+	if (h <= 0xffffffffLL)
+		return int32((uint32)h % (uint32)n);
+	return int32(h % n);
+}
+
 int32 present(Hash *t, TObject *key) {
 	int32 tsize = nhash(t);
 	intptr h = hashindex(key);
-	int32 h1 = int32(h % tsize);
+	int32 h1 = moduloOf(h, tsize);
 	TObject *rf = ref(node(t, h1));
-	if (ttype(rf) != LUA_T_NIL && !luaO_equalObj(key, rf)) {
-		int32 h2 = int32(h % (tsize - 2) + 1);
+	if (ttype(rf) != LUA_T_NIL && !sameKey(key, rf)) {
+		int32 h2 = moduloOf(h, tsize - 2) + 1;
 		do {
 			h1 += h2;
 			if (h1 >= tsize)
 				h1 -= tsize;
 			rf = ref(node(t, h1));
-		} while (ttype(rf) != LUA_T_NIL && !luaO_equalObj(key, rf));
+		} while (ttype(rf) != LUA_T_NIL && !sameKey(key, rf));
 	}
 	return h1;
 }
