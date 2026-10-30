@@ -2313,7 +2313,8 @@ void Actor::turnHeadingBy(float degrees) {
 	float q[3];
 	for (int i = 0; i < 3; i++)
 		q[i] = toF((LD)f[i] + pos[i]);
-	if (_hPlane) {
+	// Walker_TurnHeading projects onto a sector only when the walker has one, which an actor that ignores the boxes does not
+	if (_hPlane && _followBoxes) {
 		// FUN_004a6fa0: the point onto the plane of the sector
 		const float d = toF(((LD)q[1] - _hPlaneV0[1]) * _hPlaneN[1] + ((LD)q[2] - _hPlaneV0[2]) * _hPlaneN[2] + ((LD)q[0] - _hPlaneV0[0]) * _hPlaneN[0]);
 		for (int i = 0; i < 3; i++)
@@ -2357,7 +2358,7 @@ float Actor::faceHeading(const Math::Angle &yaw, const Math::Angle &pitch, const
 float Actor::turnHeadingToPoint(const Math::Vector3d &target, float maxAngle) {
 	ensureHeading();
 	float q[3] = { target.x(), target.y(), target.z() };
-	if (_hPlane)
+	if (_hPlane && _followBoxes)
 		headingFixPlane(q);
 	float v[3] = { toF((LD)q[0] - _pos.x()), toF((LD)q[1] - _pos.y()), toF((LD)q[2] - _pos.z()) };
 	const float fr[9] = { _hRight[0], _hRight[1], _hRight[2], _hFwd[0], _hFwd[1], _hFwd[2], _hUp[0], _hUp[1], _hUp[2] };
