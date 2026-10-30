@@ -550,8 +550,17 @@ void GfxOpenGLS::getScreenBoundingBox(const Mesh *model, int *x1, int *y1, int *
 		return;
 	}
 
-	Math::Matrix4 modelMatrix = _currentActor->getFinalMatrix();
-	Math::Matrix4 mvpMatrix = _mvpMatrix * modelMatrix;
+	// The matrices the shaders get: the camera, the actor and then the nodes of its model (_mvpMatrix is only set for EMI)
+	Math::Matrix4 projMatrix = _projMatrix;
+	projMatrix.transpose();
+	Math::Matrix4 viewMatrix = _viewMatrix;
+	viewMatrix.transpose();
+	Math::Matrix4 modelMatrix = _currentActor->getRotationQuat().toMatrix();
+	modelMatrix.transpose();
+	modelMatrix.setPosition(_currentActor->getWorldPos());
+	Math::Matrix4 extraMatrix = _matrixStack.top();
+	extraMatrix.transpose();
+	Math::Matrix4 mvpMatrix = projMatrix * viewMatrix * modelMatrix * extraMatrix;
 
 	double top = 1000;
 	double right = -1000;
@@ -607,9 +616,9 @@ void GfxOpenGLS::getScreenBoundingBox(const Mesh *model, int *x1, int *y1, int *
 	}
 
 	*x1 = (int)left;
-	*y1 = (int)(_gameHeight - bottom);
+	*y1 = (int)top;
 	*x2 = (int)right;
-	*y2 = (int)(_gameHeight - top);
+	*y2 = (int)bottom;
 }
 
 void GfxOpenGLS::getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, int *x2, int *y2) {
