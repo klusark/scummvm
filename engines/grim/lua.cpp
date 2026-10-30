@@ -264,7 +264,9 @@ void LuaBase::update(int frameTime, int movieTime) {
 	_frameTimeCollection += frameTime;
 	if (_frameTimeCollection > 10000) {
 		_frameTimeCollection = 0;
-		lua_collectgarbage(0);
+		// (a simulated run goes through the game clock in a fraction of the time: the collections that the memory asks for are enough)
+		if (!g_grim->isSimulated())
+			lua_collectgarbage(0);
 	}
 
 	lua_beginblock();
