@@ -155,6 +155,7 @@ Actor::Actor() :
 }
 
 Actor::~Actor() {
+	setSetName(Common::String());
 	if (_shadowArray) {
 		clearShadowPlanes();
 		delete[] _shadowArray;
@@ -339,7 +340,7 @@ bool Actor::restoreState(SaveGame *savedState) {
 
 	// load actor name
 	_name = savedState->readString();
-	_setName = savedState->readString();
+	setSetName(savedState->readString());
 
 	_talkColor = savedState->readColor();
 
@@ -3245,9 +3246,32 @@ void Actor::putInSet(const Common::String &set) {
 		_puck = true;
 	// The set should change immediately, otherwise a very rapid set change
 	// for an actor will be recognized incorrectly and the actor will be lost.
-	_setName = set;
+	setSetName(set);
 
 	g_grim->invalidateActiveActorsList();
+}
+
+Actor::SetActorsMap Actor::_setActors;
+
+void Actor::setSetName(const Common::String &setName) {
+	if (setName == _setName)
+		return;
+
+	if (!_setName.empty()) {
+		Common::List<Actor *> &oldSet = _setActors[_setName];
+		oldSet.remove(this);
+		if (oldSet.empty())
+			_setActors.erase(_setName);
+	}
+	_setName = setName;
+	if (!_setName.empty())
+		_setActors[_setName].push_front(this);
+}
+
+const Common::List<Actor *> &Actor::getActorsInSet(const Common::String &setName) {
+	static const Common::List<Actor *> none;
+	SetActorsMap::const_iterator it = _setActors.find(setName);
+	return it != _setActors.end() ? it->_value : none;
 }
 
 bool Actor::isDrawableInSet(const Common::String &set) const {

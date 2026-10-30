@@ -26,6 +26,10 @@
 #include "engines/grim/object.h"
 #include "engines/grim/color.h"
 
+#include "common/hashmap.h"
+#include "common/list.h"
+#include "common/str.h"
+
 #include "math/vector3d.h"
 #include "math/angle.h"
 #include "math/quat.h"
@@ -376,6 +380,12 @@ public:
 	 * @param setName The name of the set.
 	 */
 	void putInSet(const Common::String &setName);
+	/** Returns the name of the set the actor is in, empty for none. */
+	const Common::String &getSetName() const { return _setName; }
+	/**
+	 * Returns the actors in a set, the last one put there first like the original lists them.
+	 */
+	static const Common::List<Actor *> &getActorsInSet(const Common::String &setName);
 	/**
 	 * Returns true if the actor is in the given set.
 	 * For engine internal use only, do not expose via lua API.
@@ -691,6 +701,10 @@ private:
 
 	Common::String _name;
 	Common::String _setName;    // The actual current set
+
+	typedef Common::HashMap<Common::String, Common::List<Actor *> > SetActorsMap;
+	static SetActorsMap _setActors; // The actors of each set, kept up to date by setSetName
+	void setSetName(const Common::String &setName);
 
 	Color _talkColor;
 	Math::Vector3d _pos;
