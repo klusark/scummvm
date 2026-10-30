@@ -1329,6 +1329,7 @@ Bitmap *GfxTinyGL::getScreenshot(int w, int h, bool useStored) {
 	if (useStored) {
 		bmp = createScreenshotBitmap(_storedDisplay, w, h, true);
 	} else {
+		TinyGL::presentBuffer();
 		Graphics::Surface *src = TinyGL::copyFromFrameBuffer(_pixelFormat);
 		bmp = createScreenshotBitmap(src, w, h, true);
 		src->free();
