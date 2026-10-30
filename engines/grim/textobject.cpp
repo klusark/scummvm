@@ -293,8 +293,16 @@ void TextObject::setupTextReal(S msg, Common::String (*convert)(const S &s)) {
 	// printed further down the screen.
 	const int SCREEN_TOP_MARGIN = _font->getKernedHeight();
 	if (_isSpeech) {
-		_y -= _numberLines * _font->getKernedHeight();
-		if (_y < SCREEN_TOP_MARGIN) {
+		const int blockHeight = _numberLines * _font->getKernedHeight();
+		_y -= blockHeight;
+		if (g_grim->getGameType() == GType_GRIM) {
+			// The original keeps the block 10 pixels away from the top and the bottom of the screen
+			const int screenHeight = _height ? _height : 480;
+			if (_y < 10)
+				_y = 10;
+			if (_y + blockHeight > screenHeight - 10)
+				_y = screenHeight - blockHeight - 10;
+		} else if (_y < SCREEN_TOP_MARGIN) {
 			_y = SCREEN_TOP_MARGIN;
 		}
 	}
