@@ -464,6 +464,15 @@ public:
 	 */
 	bool canSee(const Actor *other) const;
 
+	/** What canSee needs of the observer, worked out once for several actors. */
+	struct Sight {
+		Sight() : state(0), pitchScale(0.f), cosLimit(0.f) {}
+		int state; // 0: not worked out, 1: ready, 2: the actor cannot see
+		Math::Vector3d head, forward;
+		float pitchScale, cosLimit;
+	};
+	bool canSee(const Actor *other, Sight &sight) const;
+
 	void setPuckOrient(bool orient);
 	/**
 	 * EMI: the "puck" is the body an actor is walked and turned with (EnableActorPuck). An actor without one does not walk
