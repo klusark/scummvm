@@ -23,6 +23,7 @@
 #define GRIM_LAB_H
 
 #include "common/archive.h"
+#include "common/fs.h"
 
 namespace Common {
 	class File;
@@ -49,6 +50,9 @@ public:
 class Lab : public Common::Archive {
 public:
 	bool open(const Common::Path &filename, bool keepStream = false);
+	// The file of the archive by its place on the disk, not by its name in the search path: the archive can be read when the directory of the game is no
+	// longer in the search path (the configuration key loose_files, see ResourceLoader)
+	void setNode(const Common::FSNode &node) { _labNode = node; _hasNode = true; }
 	Lab();
 	~Lab();
 	// Common::Archive implementation
@@ -62,6 +66,9 @@ private:
 	void parseMonkey4FileTable(Common::File *_f);
 
 	Common::Path _labFileName;
+	Common::FSNode _labNode;
+	bool _hasNode = false;
+	bool openFile(Common::File *file) const;
 	typedef Common::SharedPtr<LabEntry> LabEntryPtr;
 	typedef Common::HashMap<Common::Path, LabEntryPtr, Common::Path::IgnoreCase_Hash, Common::Path::IgnoreCase_EqualTo> LabMap;
 	LabMap _entries;
