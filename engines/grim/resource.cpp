@@ -216,7 +216,10 @@ ResourceLoader::ResourceLoader() {
 		// Caching "local.m4b" to speed up the launch of the mac version,
 		// we _COULD_ protect this with a platform check, but the file isn't
 		// really big anyhow...
-		bool useCache = (filename == "local.m4b");
+		// (with preload_data=true in the configuration the data archives, data000.lab to data004.lab, are read into memory at the start (390 MB): a file
+		// that the game asks for is then copied from memory, and no file is opened for it. Not the voices, music and movies.)
+		static const bool preloadData = ConfMan.hasKey("preload_data") && ConfMan.getBool("preload_data");
+		bool useCache = (filename == "local.m4b") || (preloadData && filename.size() == 11 && filename.hasPrefix("data00") && filename.hasSuffix(".lab") && filename[6] <= '4');
 		if (l->open((*x)->getPathInArchive(), useCache))
 			SearchMan.add(filename, l, priority--, true);
 		else
