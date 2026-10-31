@@ -80,6 +80,9 @@ struct Shadow {
  */
 class Actor : public PoolObject<Actor> {
 public:
+	// (for the tools that watch a walk: whether the actor is held to a line, and the line)
+	bool isConstrained() const { return _constrained; }
+	const Math::Vector3d &getConstrainDir() const { return _constrainDir; }
 	enum CollisionMode {
 		CollisionOff = 0,
 		CollisionBox = 1,
