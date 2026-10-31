@@ -201,6 +201,7 @@ void Model::loadText(TextSplitter *ts) {
 		_rootHierNode[num]._numChildren = numChildren;
 		_rootHierNode[num]._pos = Math::Vector3d(x, y, z);
 		_rootHierNode[num]._rot = Math::Quaternion::fromEuler(yaw, pitch, roll, Math::EO_ZXY);
+		_rootHierNode[num]._rotInv = _rootHierNode[num]._rot.inverse();
 		_rootHierNode[num]._animRot = _rootHierNode[num]._rot;
 		_rootHierNode[num]._animPos = _rootHierNode[num]._pos;
 		_rootHierNode[num]._pivot = Math::Vector3d(pivotx, pivoty, pivotz);
@@ -617,6 +618,7 @@ void ModelNode::loadBinary(Common::SeekableReadStream *data, ModelNode *hierNode
 	float yaw = data->readFloatLE();
 	float roll = data->readFloatLE();
 	_rot = Math::Quaternion::fromEuler(yaw, pitch, roll, Math::EO_ZXY);
+	_rotInv = _rot.inverse();
 	_animRot = _rot;
 	_animPos = _pos;
 	_sprite = nullptr;
