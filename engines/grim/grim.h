@@ -298,6 +298,15 @@ protected:
 	/** The pictures are drawn on a schedule of 60 a second, by the clock of the run (the simulated one when there is one): the first picture and how many came since */
 	unsigned _drawStartMs = 0;
 	unsigned _drawCount = 0;
+	/** sim_wall_fps: a simulated run draws no more than that many pictures a second of the real clock (0 = as fast as it can), see paceDrawing */
+	unsigned _simWallFps = 0;
+	unsigned _wallLast = 0;
+	unsigned _simHoldMs = 0;
+	bool _simHeld = false;
+	/** frame_marker: the number of the simulated frame as squares along the bottom edge of every picture, see drawFrameMarker */
+	bool _frameMarker = false;
+	void paceDrawing();
+	void drawFrameMarker();
 	bool _drawn = false;
 	unsigned _fpsReports = 0;
 	int _prevSmushFrame = 0;
