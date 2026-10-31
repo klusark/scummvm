@@ -136,6 +136,13 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 	}
 	if (ConfMan.hasKey("sim_render_every"))
 		_simRenderEvery = CLIP(ConfMan.getInt("sim_render_every"), 1, 1000);
+	// sim_wall_fps and frame_marker are for a recording of a fast simulated run (autorun/tools/record_fast.sh): the run is held to a fixed rate of pictures
+	// that a capture (OBS at a higher rate) sees every one of, and the number of the frame on each picture lets the capture be put back in order
+	if (ConfMan.hasKey("sim_wall_fps"))
+		_simWallFps = CLIP(ConfMan.getInt("sim_wall_fps"), 1, 1000);
+	if (ConfMan.hasKey("sim_hold_ms"))
+		_simHoldMs = CLIP(ConfMan.getInt("sim_hold_ms"), 0, 60000);
+	_frameMarker = ConfMan.hasKey("frame_marker") && ConfMan.getBool("frame_marker");
 	if (ConfMan.hasKey("dump_frames")) {
 		if (!_simFps)
 			error("--dump-frames needs --sim-fps, the frames of two runs can only be told apart by the simulated clock");
@@ -1066,6 +1073,45 @@ Bitmap *GrimEngine::grabFrame() {
 	return frame;
 }
 
+// Holds the pictures of a simulated run to sim_wall_fps a second of the real clock: no picture is shown less than one period after the one before (a run that
+// is late does not catch up with a burst, a capture would miss those). The first picture is shown for sim_hold_ms first, so that a capture has time to hook
+// the window; it is drawn again and again (with the same number, a capture takes the first of them)
+void GrimEngine::paceDrawing() {
+	if (!_simHeld) {
+		_simHeld = true;
+		const unsigned until = g_system->getMillis() + _simHoldMs;
+		while (g_system->getMillis() < until) {
+			updateDisplayScene();
+			if (_frameMarker)
+				drawFrameMarker();
+			g_driver->flipBuffer();
+			g_system->delayMillis(4);
+		}
+		_wallLast = g_system->getMillis();
+	}
+	const unsigned period = (1000 + _simWallFps - 1) / _simWallFps;
+	const unsigned target = _wallLast + period;
+	unsigned now;
+	while ((now = g_system->getMillis()) < target) {
+		if (target - now > 2)
+			g_system->delayMillis(target - now - 1);
+	}
+	_wallLast = now;
+}
+
+// The number of the simulated frame, 32 bits, along the bottom edge: two cells white, black (to find the start and the level), then the bits (white = 1)
+// from the top one; cells of 8 x 8 points, so that they stay clear through the compression of a video
+void GrimEngine::drawFrameMarker() {
+	const int cell = 8;
+	for (int i = 0; i < 34; i++) {
+		bool on = i == 0 ? true : i == 1 ? false : ((_simFrame >> (33 - i)) & 1) != 0;
+		byte v = on ? 255 : 0;
+		PrimitiveObject p;
+		p.createRectangle(Common::Point(i * cell, 480 - cell), Common::Point(i * cell + cell - 1, 479), Color(v, v, v), true);
+		g_driver->drawRectangle(&p);
+	}
+}
+
 // The frames of two runs of the same simulated game, one with each renderer, are compared by devtools/grim/framediff.py: the line
 // of a frame in frames.tsv gives its number, the simulated time in ms, the set and the camera setup, and the file ("=" when the
 // picture is the one of the frame before)
@@ -1317,10 +1363,15 @@ void GrimEngine::mainLoop() {
 			updateDisplayScene();
 			if (!_dumpFramesDir.empty())
 				dumpFrame();
+			if (_frameMarker)
+				drawFrameMarker();
 		}
 
-		if (renderFrame)
+		if (renderFrame) {
+			if (_simWallFps && _simFps)
+				paceDrawing();
 			doFlip();
+		}
 		else
 			_frameCounter++;
 
