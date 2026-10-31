@@ -22,6 +22,7 @@
 #ifndef GRIM_KEYFRAME_H
 #define GRIM_KEYFRAME_H
 
+#include "math/quat.h"
 #include "math/vector3d.h"
 
 #include "engines/grim/object.h"
@@ -76,6 +77,11 @@ private:
 		int _flags;
 		Math::Vector3d _pos, _dpos;
 		Math::Angle _pitch, _yaw, _roll, _dpitch, _dyaw, _droll;
+
+		// The rotation of the entry itself, built the first time it is needed: a node without deltas
+		// (or a frame that falls on the entry) uses it as it is, every frame
+		mutable Math::Quaternion _rotation;
+		mutable bool _hasRotation = false;
 	};
 
 	struct KeyframeNode {

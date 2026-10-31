@@ -260,6 +260,20 @@ KeyframeAnim::KeyframeNode::~KeyframeNode() {
 	delete[] _entries;
 }
 
+// The rotation of three turns, about Z, X and Y in that order: the same rotation as Math::Quaternion::fromEuler(z, x, y, Math::EO_ZXY), which
+// builds three matrices, multiplies them and converts the result back. Here it is the product of the three quaternions of the turns, written out
+// for the zeros that they have (the same numbers as Quaternion::operator* gives them).
+static Math::Quaternion rotationZXY(const Math::Angle &z, const Math::Angle &x, const Math::Angle &y) {
+	const Math::Angle hz = z / 2, hx = x / 2, hy = y / 2;
+	const float sz = hz.getSine(), cz = hz.getCosine();
+	const float sx = hx.getSine(), cx = hx.getCosine();
+	const float sy = hy.getSine(), cy = hy.getCosine();
+	// the turn about Z, then the one about X: (cz * sx, sz * sx, sz * cx, cz * cx)
+	const float zxx = cz * sx, zxy = sz * sx, zxz = sz * cx, zxw = cz * cx;
+	// and the one about Y
+	return Math::Quaternion(zxx * cy - zxz * sy, zxw * sy + zxy * cy, zxx * sy + zxz * cy, zxw * cy - zxy * sy);
+}
+
 void KeyframeAnim::KeyframeNode::animate(ModelNode &node, float frame, float fade, bool useDelta) const {
 	if (_numEntries == 0)
 		return;
@@ -280,6 +294,7 @@ void KeyframeAnim::KeyframeNode::animate(ModelNode &node, float frame, float fad
 	Math::Angle pitch = _entries[low]._pitch;
 	Math::Angle yaw = _entries[low]._yaw;
 	Math::Angle roll = _entries[low]._roll;
+	const KeyframeEntry &entry = _entries[low];
 
 	/** @bug Interpolating between two orientations specified by Euler angles (yaw/pitch/roll)
 	 *  by linearly interpolating the YPR values does not compute proper in-between
@@ -287,6 +302,7 @@ void KeyframeAnim::KeyframeNode::animate(ModelNode &node, float frame, float fad
 	 *  Though, if the start and end poses are very similar to each other, this can look
 	 *  acceptable without visual artifacts.
 	 */
+	const bool onEntry = !useDelta || dt == 0.0f;
 	if (useDelta) {
 		pos += dt * _entries[low]._dpos;
 		pitch += dt * _entries[low]._dpitch;
@@ -296,9 +312,23 @@ void KeyframeAnim::KeyframeNode::animate(ModelNode &node, float frame, float fad
 
 	node._animPos += (pos - node._pos) * fade;
 
-	Math::Quaternion rotQuat = Math::Quaternion::fromEuler(yaw, pitch, roll, Math::EO_ZXY);
-	rotQuat = node._animRot * node._rot.inverse() * rotQuat;
-	node._animRot = node._animRot.slerpQuat(rotQuat, fade);
+	Math::Quaternion rotQuat;
+	if (onEntry) {
+		if (!entry._hasRotation) {
+			entry._rotation = rotationZXY(yaw, pitch, roll);
+			entry._hasRotation = true;
+		}
+		rotQuat = entry._rotation;
+	} else {
+		rotQuat = rotationZXY(yaw, pitch, roll);
+	}
+	rotQuat = node._animRot * node._rotInv * rotQuat;
+	if (fade >= 1.0f) {
+		// (the whole of it: the interpolation gives the new rotation, the short way round from the old one)
+		node._animRot = node._animRot.dotProduct(rotQuat) < 0.0f ? rotQuat * -1.0f : rotQuat;
+	} else {
+		node._animRot = node._animRot.slerpQuat(rotQuat, fade);
+	}
 }
 
 } // end of namespace Grim
