@@ -196,6 +196,8 @@ public:
 	// (could be const).
 	Math::Vector3d _pos, _pivot;
 	Math::Quaternion _rot;
+	// the inverse of _rot, which does not change once the model is loaded (the animation uses it for every node in every frame)
+	Math::Quaternion _rotInv;
 	// Specifies the animated pose for this node.
 	Math::Vector3d _animPos;
 	Math::Quaternion _animRot;
