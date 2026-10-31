@@ -202,6 +202,12 @@ ResourceLoader::ResourceLoader() {
 	if (files.empty())
 		error("%s", "Cannot find game data - check configuration file");
 
+	// With loose_files=false in the configuration the files that lie loose in the directory of the game are not used: the directory leaves the search path
+	// once the archives are known, so that a file that the game asks for is looked for in the archives only (and not first on the disk, where a file with
+	// the name of an archive member would take its place). The archives are opened by their place on the disk then.
+	const bool looseFiles = !ConfMan.hasKey("loose_files") || ConfMan.getBool("loose_files");
+	const Common::FSNode gameDir(ConfMan.getPath("path"));
+
 	// Load labs
 	int priority = -1;
 	for (Common::ArchiveMemberList::const_iterator x = files.begin(); x != files.end(); ++x) {
@@ -220,6 +226,15 @@ ResourceLoader::ResourceLoader() {
 		// that the game asks for is then copied from memory, and no file is opened for it. Not the voices, music and movies.)
 		static const bool preloadData = ConfMan.hasKey("preload_data") && ConfMan.getBool("preload_data");
 		bool useCache = (filename == "local.m4b") || (preloadData && filename.size() == 11 && filename.hasPrefix("data00") && filename.hasSuffix(".lab") && filename[6] <= '4');
+		if (!looseFiles) {
+			Common::FSNode labNode = gameDir;
+			const Common::StringArray parts = (*x)->getPathInArchive().splitComponents();
+			for (const Common::String &part : parts)
+				labNode = labNode.getChild(part);
+			// (an archive that is not in the directory of the game, from an extra path, is opened by its name as before)
+			if (labNode.exists())
+				l->setNode(labNode);
+		}
 		if (l->open((*x)->getPathInArchive(), useCache))
 			SearchMan.add(filename, l, priority--, true);
 		else
@@ -227,6 +242,9 @@ ResourceLoader::ResourceLoader() {
 	}
 
 	files.clear();
+
+	if (!looseFiles)
+		SearchMan.remove(gameDir.getPath().toString());
 
 	// Debug aid for the autorun scripts: with dump_patchr every file that ScummVM patches is opened once, which writes
 	// the patched file out (see wrapPatchedFile)
