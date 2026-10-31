@@ -41,6 +41,10 @@ Lab::Lab() {
 	_stream = nullptr;
 }
 
+bool Lab::openFile(Common::File *file) const {
+	return _hasNode ? file->open(_labNode) : file->open(_labFileName);
+}
+
 Lab::~Lab() {
 	delete _stream;
 }
@@ -51,7 +55,7 @@ bool Lab::open(const Common::Path &filename, bool keepStream) {
 	bool result = true;
 
 	Common::File *file = new Common::File();
-	if (!file->open(filename) || file->readUint32BE() != MKTAG('L','A','B','N')) {
+	if (!openFile(file) || file->readUint32BE() != MKTAG('L','A','B','N')) {
 		result = false;
 	} else {
 		file->readUint32LE(); // version
@@ -173,7 +177,7 @@ Common::SeekableReadStream *Lab::createReadStreamForMember(const Common::Path &p
 
 	if (!_stream) {
 		Common::File *file = new Common::File();
-		file->open(_labFileName);
+		openFile(file);
 		return new Common::SeekableSubReadStream(file, i->_offset, i->_offset + i->_len, DisposeAfterUse::YES);
 	} else {
 		byte *data = static_cast<byte*>(malloc(sizeof(byte) * i->_len));
