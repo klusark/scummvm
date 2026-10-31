@@ -798,9 +798,7 @@ STUB_FUNC(Lua_V1::SetCameraRoll)
 STUB_FUNC(Lua_V1::WalkActorToAvoiding)
 STUB_FUNC(Lua_V1::GetActorChores)
 STUB_FUNC(Lua_V1::SetCameraPosition)
-STUB_FUNC(Lua_V1::GetCameraFOV)
 STUB_FUNC(Lua_V1::SetCameraFOV)
-STUB_FUNC(Lua_V1::GetCameraRoll)
 STUB_FUNC(Lua_V1::GetMemoryUsage)
 STUB_FUNC(Lua_V1::GetFontDimensions)
 STUB_FUNC(Lua_V1::PurgeText)
@@ -955,6 +953,7 @@ struct luaL_reg grimMainOpcodes[] = {
 	{ "SetGamma", LUA_OPCODE(Lua_V1, SetGamma) },
 	{ "SetActorWalkDominate", LUA_OPCODE(Lua_V1, SetActorWalkDominate) },
 	{ "SetActorConstrain", LUA_OPCODE(Lua_V1, SetActorConstrain) },
+	{ "GetActorConstrain", LUA_OPCODE(Lua_V1, GetActorConstrain) },
 	{ "RenderModeUser", LUA_OPCODE(Lua_V1, RenderModeUser) },
 	{ "ForceRefresh", LUA_OPCODE(Lua_V1, ForceRefresh) },
 	{ "DimScreen", LUA_OPCODE(Lua_V1, DimScreen) },

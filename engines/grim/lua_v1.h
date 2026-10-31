@@ -129,6 +129,7 @@ protected:
 	DECLARE_LUA_OPCODE(PutActorAtInterest);
 	DECLARE_LUA_OPCODE(SetActorFollowBoxes);
 	DECLARE_LUA_OPCODE(SetActorConstrain);
+	DECLARE_LUA_OPCODE(GetActorConstrain);
 	DECLARE_LUA_OPCODE(GetVisibleThings);
 	DECLARE_LUA_OPCODE(SetShadowColor);
 	DECLARE_LUA_OPCODE(KillActorShadows);

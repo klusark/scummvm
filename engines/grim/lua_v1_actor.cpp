@@ -1466,6 +1466,22 @@ void Lua_V1::SetActorConstrain() {
 	actor->setConstrain(!lua_isnil(constrainObj));
 }
 
+// Whether the actor is held to the line of a stair or a curb, and the line (no script of the game asks, the autorun's tools do)
+void Lua_V1::GetActorConstrain() {
+	lua_Object actorObj = lua_getparam(1);
+	if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != MKTAG('A','C','T','R'))
+		return;
+	Actor *actor = getactor(actorObj);
+	if (!actor->isConstrained()) {
+		lua_pushnil();
+		return;
+	}
+	lua_pushnumber(1);
+	lua_pushnumber(actor->getConstrainDir().x());
+	lua_pushnumber(actor->getConstrainDir().y());
+	lua_pushnumber(actor->getConstrainDir().z());
+}
+
 void Lua_V1::GetVisibleThings() {
 	lua_Object actorObj = lua_getparam(1);
 	Actor *actor = nullptr;

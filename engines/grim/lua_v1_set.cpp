@@ -537,4 +537,16 @@ void Lua_V1::GetCameraPosition() {
 	lua_pushnumber(setup->_pos.z());
 }
 
+// The field of view (degrees, the width) and the roll of the camera of the current setup: no script of the game asks for them, they are for the tools that draw
+// over the screen (the autorun's nav overlay)
+void Lua_V1::GetCameraFOV() {
+	Set::Setup *setup = g_grim->getCurrSet()->getCurrSetup();
+	lua_pushnumber(setup->_fov);
+}
+
+void Lua_V1::GetCameraRoll() {
+	Set::Setup *setup = g_grim->getCurrSet()->getCurrSetup();
+	lua_pushnumber(setup->_roll);
+}
+
 } // end of namespace Grim
