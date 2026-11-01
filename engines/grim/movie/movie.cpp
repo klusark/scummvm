@@ -88,6 +88,12 @@ void MoviePlayer::timerCallback(void *instance) {
 }
 
 void MoviePlayer::simulate() {
+	// the movie timer that the timer thread ticks in a real run (the SMUSH player is paced by it)
+	{
+		Common::StackLock lock(_frameMutex);
+		handleTimer();
+	}
+
 	// a few frames at most, a movie that cannot keep up must not hold the engine
 	for (int i = 0; i < 20; i++) {
 		Common::StackLock lock(_frameMutex);
