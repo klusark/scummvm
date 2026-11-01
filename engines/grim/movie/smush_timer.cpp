@@ -21,9 +21,16 @@
 
 #include "common/system.h"
 
+#include "video/video_decoder.h"
+
 #include "engines/grim/movie/smush_timer.h"
 
 namespace Grim {
+
+// The clock of the movie timer: the simulated one in a simulated run (--sim-fps), the host's otherwise
+static inline uint32 timerMillis() {
+	return Video::g_videoSimulated ? Video::g_videoSimMillis : g_system->getMillis();
+}
 
 SmushTimer::SmushTimer() {
 	memset(_timers, 0, sizeof(_timers));
@@ -42,7 +49,7 @@ int SmushTimer::moduleStartup() {
 			_timers[i].callback = nullptr;
 
 		_sysTickIncrement = 19886;
-		_timerThreadLastTime = g_system->getMillis();
+		_timerThreadLastTime = timerMillis();
 	}
 
 	return 0;
@@ -57,7 +64,7 @@ void SmushTimer::timerThread() {
 		return;
 
 	// The host timer exists only after the first movie, don't replay the idle time as ticks
-	uint32 now = g_system->getMillis();
+	uint32 now = timerMillis();
 	if (now - _timerThreadLastTime > 1000)
 		_timerThreadLastTime = now;
 
