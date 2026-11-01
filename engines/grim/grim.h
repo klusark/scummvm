@@ -298,6 +298,11 @@ protected:
 	/** The pictures are drawn on a schedule of 60 a second, by the clock of the run (the simulated one when there is one): the first picture and how many came since */
 	unsigned _drawStartMs = 0;
 	unsigned _drawCount = 0;
+	/** sim_jitter: the simulated frames are this many ms shorter or longer, at random (the real ones are), see simClockMs */
+	unsigned _simJitter = 0;
+	unsigned _simClock = 0;
+	unsigned _simRng = 12345;
+	unsigned simClockMs() const;
 	/** sim_wall_fps: a simulated run draws no more than that many pictures a second of the real clock (0 = as fast as it can), see paceDrawing */
 	unsigned _simWallFps = 0;
 	unsigned _wallLast = 0;

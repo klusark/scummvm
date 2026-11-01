@@ -134,6 +134,12 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 		if (!_simFps)
 			_simFps = 1000 / _simMs;
 	}
+	// sim_jitter=<ms>: every simulated frame is that many ms shorter or longer than it should be, at random (the same every run, sim_jitter_seed): the length
+	// of the frames of a real run varies, and what a walk does near a boundary can depend on it
+	if (ConfMan.hasKey("sim_jitter"))
+		_simJitter = CLIP(ConfMan.getInt("sim_jitter"), 0, 100);
+	if (ConfMan.hasKey("sim_jitter_seed"))
+		_simRng = ConfMan.getInt("sim_jitter_seed");
 	if (ConfMan.hasKey("sim_render_every"))
 		_simRenderEvery = CLIP(ConfMan.getInt("sim_render_every"), 1, 1000);
 	// sim_wall_fps and frame_marker are for a recording of a fast simulated run (autorun/tools/record_fast.sh): the run is held to a fixed rate of pictures
@@ -875,9 +881,15 @@ void GrimEngine::luaUpdate() {
 	if (_simFps) {
 		// Simulated time: every frame is the same length however long it really took, so that a run does not depend on
 		// the speed of the machine (the whole milliseconds add up to exactly _simFps frames a second)
-		unsigned before = _simMs ? _simFrame * _simMs : (unsigned)((uint64)_simFrame * 1000 / _simFps);
+		unsigned before = simClockMs();
+		const unsigned plain = (_simMs ? (_simFrame + 1) * _simMs : (unsigned)((uint64)(_simFrame + 1) * 1000 / _simFps)) - (_simMs ? _simFrame * _simMs : (unsigned)((uint64)_simFrame * 1000 / _simFps));
 		_simFrame++;
-		unsigned simTime = _simMs ? _simFrame * _simMs : (unsigned)((uint64)_simFrame * 1000 / _simFps);
+		if (_simJitter) {
+			_simRng = _simRng * 1664525u + 1013904223u;
+			int delta = (int)plain + (int)((_simRng >> 16) % (2 * _simJitter + 1)) - (int)_simJitter;
+			_simClock += delta < 1 ? 1 : delta;
+		}
+		unsigned simTime = simClockMs();
 		_frameTime = simTime - before;
 		_frameStart = newStart;
 		// the sound and iMuse move on by the same simulated time
@@ -898,7 +910,9 @@ void GrimEngine::luaUpdate() {
 
 	// (a frame after a change of set or a load is a short one, so that the time of the load does not count; with a simulated clock every frame
 	// is as long as the others, as it is in the original with the fixed frame time)
-	if (_mode == PauseMode || (_shortFrame && (!_simFps || (ConfMan.hasKey("sim_short_frame") && ConfMan.getBool("sim_short_frame"))))) {
+	// (no_short_frame: no zero-length frame at all, as in the original, whose frame is the wall-clock time capped at 300 ms)
+	const bool noShortFrame = ConfMan.hasKey("no_short_frame") && ConfMan.getBool("no_short_frame");
+	if (_mode == PauseMode || (_shortFrame && !noShortFrame && (!_simFps || (ConfMan.hasKey("sim_short_frame") && ConfMan.getBool("sim_short_frame"))))) {
 		_frameTime = 0;
 	}
 
@@ -1134,6 +1148,13 @@ void GrimEngine::drawFrameMarker() {
 // The frames of two runs of the same simulated game, one with each renderer, are compared by devtools/grim/framediff.py: the line
 // of a frame in frames.tsv gives its number, the simulated time in ms, the set and the camera setup, and the file ("=" when the
 // picture is the one of the frame before)
+// The simulated clock in ms: the frames of the fixed length, or with sim_jitter the sum of the shorter and longer ones
+unsigned GrimEngine::simClockMs() const {
+	if (_simJitter)
+		return _simClock;
+	return _simMs ? _simFrame * _simMs : (unsigned)((uint64)_simFrame * 1000 / _simFps);
+}
+
 void GrimEngine::dumpFrame() {
 	if (_simFrame % _dumpFramesEvery != 0)
 		return;
@@ -1353,7 +1374,7 @@ void GrimEngine::mainLoop() {
 		// Never more than 60 pictures a second, by the clock of the run: the simulated one when there is one, so that a run stays the same every time.
 		// (A loop that is held to a speed limit is slower than that already.)
 		if (renderFrame && (_simFps || !_speedLimitMs)) {
-			const unsigned nowMs = _simFps ? (_simMs ? _simFrame * _simMs : (unsigned)((uint64)_simFrame * 1000 / _simFps)) : g_system->getMillis();
+			const unsigned nowMs = _simFps ? simClockMs() : g_system->getMillis();
 			if (_drawn && nowMs > _drawStartMs + (unsigned)((uint64)_drawCount * 1000 / 60) + 1000) {
 				// (far behind the schedule: begin again)
 				_drawn = false;
