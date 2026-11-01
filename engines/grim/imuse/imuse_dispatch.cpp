@@ -1065,6 +1065,10 @@ uint8 *IMuse::dispatchCheckForJump(int32 *mapPtr, IMuseStreamZone *strZnPtr, int
 	while (curMapPlace < endOfMap) {
 		mapPlaceTag = READ_UINT32(curMapPlace);
 		bytesUntilNextPlace = READ_UINT32(curMapPlace + 4) + 8;
+		// (the map of some sounds, the one of the Land of the Living music for one, is declared longer than its blocks: what is read from the end of the last block
+		// as a block has a size that sends the pointer far off, and with a heap above 4 GB, not below it, that is a crash. A size that does not fit in the map ends the walk.)
+		if (bytesUntilNextPlace < 8 || bytesUntilNextPlace > endOfMap - curMapPlace)
+			break;
 
 		if (mapPlaceTag == MKTAG('J', 'U', 'M', 'P')) {
 			jumpHookPos = READ_UINT32(curMapPlace + 8);
