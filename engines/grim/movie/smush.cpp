@@ -232,6 +232,7 @@ bool SmushPlayer::prepareFrame() {
 		if (_videoLooping) {
 			_smushDecoder->rewind();
 			_smushDecoder->start();
+			applyClockScale();
 			// The disasm restarts looping movies with the frame rate of the header
 			int delay = _smushDecoder->getFrameDelay();
 			_smushAnim->anmStart(delay ? (delay / 2 + 1000000) / delay : 15);
