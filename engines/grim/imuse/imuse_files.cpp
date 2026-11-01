@@ -28,6 +28,13 @@
 
 namespace Grim {
 
+// The order in which sounds were put in the cache, for finding the oldest one to throw out: a counter, not the clock, so that two sounds put there in the same
+// millisecond (a simulated run does thousands of frames a second) keep an order, and the same run always throws out the same sound
+static uint32 cacheNextTimestamp() {
+	static uint32 counter = 0;
+	return ++counter;
+}
+
 int IMuse::imInitFilelist() {
 	for (int i = 0; i < IMUSE_MAX_SOUND_LIST; i++) {
 		_mainSoundList[i].prev = nullptr;
@@ -914,7 +921,7 @@ int IMuse::cacheGetSoundId(const char *soundName) {
 
 		sound = &_soundCache[loadSlot];
 		Common::strlcpy(sound->soundFilename, soundName, sizeof(sound->soundFilename));
-		sound->tsOfAllocation = g_system->getMillis();
+		sound->tsOfAllocation = cacheNextTimestamp();
 		allocated = true;
 	} else {
 		if (soundKey == 10000)
@@ -1012,7 +1019,7 @@ int IMuse::cacheGetSoundId(const char *soundName) {
 		return 0;
 	}
 
-	sound->tsOfAllocation = g_system->getMillis();
+	sound->tsOfAllocation = cacheNextTimestamp();
 
 	if (!_demo) {
 		char lipsyncFilename[32];
@@ -1093,7 +1100,7 @@ int IMuse::cacheGetSoundId(const char *soundName) {
 int IMuse::cachePurgeOldestStoppedSound() {
 	int foundSlot = -1;
 	int emptySlot = -1;
-	uint32 oldestTimestamp = g_system->getMillis();
+	uint32 oldestTimestamp = 0xFFFFFFFF;
 	int numSlots = _demo ? 16 : IMUSE_MAX_CACHED_SOUNDS;
 
 	for (int slot = numSlots - 1; slot >= 0; slot--) {
@@ -1465,7 +1472,7 @@ void IMuse::allocateProcessedSound(int luaSoundId) {
 			sound->flag = 1;
 		}
 
-		sound->tsOfAllocation = g_system->getMillis();
+		sound->tsOfAllocation = cacheNextTimestamp();
 	}
 }
 
