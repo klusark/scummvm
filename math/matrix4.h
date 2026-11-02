@@ -230,7 +230,7 @@ public:
 		if (det == 0)
 			return false;
 
-		det = 1.0 / det;
+		det = 1.0f / det;
 
 		for (int i = 0; i < 16; i++) {
 			m[i] = inv[i] * det;

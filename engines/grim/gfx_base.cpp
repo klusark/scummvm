@@ -138,8 +138,8 @@ Math::Matrix4 GfxBase::makeLookMatrix(const Math::Vector3d& pos, const Math::Vec
 Math::Matrix4 GfxBase::makeProjMatrix(float fov, float nclip, float fclip) {
 	float right = nclip * tan(fov / 2 * ((float)M_PI / 180));
 	float left = -right;
-	float top = right * 0.75;
-	float bottom = -right * 0.75;
+	float top = right * 0.75f;
+	float bottom = -right * 0.75f;
 
 	Math::Matrix4 proj;
 	proj(0,0) = (2.0f * nclip) / (right - left);

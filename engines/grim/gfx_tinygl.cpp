@@ -505,7 +505,7 @@ void GfxTinyGL::startActorDraw(const Actor *actor) {
 			tglMatrixMode(TGL_PROJECTION);
 			tglLoadIdentity();
 			float right = 1;
-			float top = right * 0.75;
+			float top = right * 0.75f;
 			float div = 6.0f;
 			tglFrustumf(-right / div, right / div, -top / div, top / div, 1.0f / div, 3276.8f);
 			tglMatrixMode(TGL_MODELVIEW);

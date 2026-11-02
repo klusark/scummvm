@@ -431,7 +431,7 @@ void GfxOpenGLS::setupCameraFrustum(float fov, float nclip, float fclip) {
 	_fov = fov; _nclip = nclip; _fclip = fclip;
 
 	float right = nclip * tan(fov / 2 * ((float)M_PI / 180));
-	float top = right * 0.75;
+	float top = right * 0.75f;
 
 	_projMatrix = makeFrustumMatrix(-right, right, -top, top, nclip, fclip);
 }
@@ -697,7 +697,7 @@ void GfxOpenGLS::getActorScreenBBox(const Actor *actor, Common::Point &p1, Commo
 
 				Math::Vector4d v = Math::Vector4d(p.x(), p.y(), p.z(), 1.0f);
 				v = _projMatrix.transform(modelView.transform(v));
-				if (v.w() == 0.0)
+				if (v.w() == 0.0f)
 					return;
 				v /= v.w();
 

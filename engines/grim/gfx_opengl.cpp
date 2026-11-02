@@ -582,7 +582,7 @@ void GfxOpenGL::startActorDraw(const Actor *actor) {
 			glMatrixMode(GL_PROJECTION);
 			glLoadIdentity();
 			float right = 1;
-			float top = right * 0.75;
+			float top = right * 0.75f;
 			float div = 6.0f;
 			glFrustum(-right / div, right / div, -top / div, top / div, 1.0f / div, 3276.8f);
 			glMatrixMode(GL_MODELVIEW);

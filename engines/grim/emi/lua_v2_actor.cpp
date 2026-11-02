@@ -146,7 +146,7 @@ void Lua_V2::SetActorWalkRate() {
 	Actor *actor = getactor(actorObj);
 	float rate = lua_getnumber(rateObj);
 	// const below only differ from grim
-	actor->setWalkRate(rate * 3.279999971389771);
+	actor->setWalkRate(rate * 3.279999971389771f);
 }
 
 void Lua_V2::GetActorWalkRate() {
@@ -747,7 +747,7 @@ void Lua_V2::PlayActorChore() {
 	float fadeTime = 0.0f;
 
 	if (!lua_isnil(modeObj)) {
-		if (lua_getnumber(modeObj) != 0.0)
+		if (lua_getnumber(modeObj) != 0.0f)
 			mode = true;
 	}
 

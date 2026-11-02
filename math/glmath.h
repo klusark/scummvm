@@ -50,7 +50,7 @@ bool gluMathProject(const Vector3d &obj, const T model[16], const T proj[16], co
 
 	out = modelMatrix.transform(in);
 	in = projMatrix.transform(out);
-	if (in.w() == 0.0)
+	if (in.w() == 0.0f)
 		return false;
 
 	in.x() /= in.w();
