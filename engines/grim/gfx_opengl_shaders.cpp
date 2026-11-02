@@ -370,9 +370,11 @@ void GfxOpenGLS::setupShaders() {
 	_emergProgram = OpenGL::Shader::fromFiles("grim_emerg", commonAttributes);
 
 	static const char* actorAttributes[] = {"position", "texcoord", "color", "normal", nullptr};
-	_actorProgram = OpenGL::Shader::fromFiles(isEMI ? "emi_actor" : "grim_actor", actorAttributes);
-	_actorLightsProgram = OpenGL::Shader::fromFiles(isEMI ? "emi_actorlights" : "grim_actorlights", actorAttributes);
-	_spriteProgram = OpenGL::Shader::fromFiles(isEMI ? "emi_sprite" : "grim_actor", actorAttributes);
+	// Actors and sprites share one fragment shader per game.
+	const char *objectFragment = isEMI ? "emi_object" : "grim_object";
+	_actorProgram = OpenGL::Shader::fromFiles(isEMI ? "emi_actor" : "grim_actor", objectFragment, actorAttributes);
+	_actorLightsProgram = OpenGL::Shader::fromFiles(isEMI ? "emi_actorlights" : "grim_actorlights", objectFragment, actorAttributes);
+	_spriteProgram = OpenGL::Shader::fromFiles(isEMI ? "emi_sprite" : "grim_sprite", objectFragment, actorAttributes);
 
 	static const char* primAttributes[] = { "position", nullptr };
 	_shadowPlaneProgram = OpenGL::Shader::fromFiles("grim_shadowplane", primAttributes);
@@ -1132,6 +1134,50 @@ void GfxOpenGLS::drawModelFace(const Mesh *mesh, const MeshFace *face) {
 }
 
 void GfxOpenGLS::drawSprite(const Sprite *sprite) {
+	if (g_grim->getGameType() == GType_GRIM) {
+		// A sprite of Grim (the smoke of Manny's cigarette, sparks) is a quad that faces the camera, its bottom edge on the position of the sprite, and the
+		// texture runs flipped along x, as in the fixed pipeline.
+		// The sprite writes depth, as in the fixed pipeline: the meshes of the model are drawn after the sprites of their node (Manny's head after
+		// the smoke of his cigarette) and must not cover them. The alpha test keeps the clear texels from writing depth.
+		glDepthMask(GL_TRUE);
+		glEnable(GL_BLEND);
+		if (sprite->_flags1 & Sprite::BlendAdditive) {
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+		} else {
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		}
+		if (sprite->_flags2 & Sprite::DepthTest) {
+			glEnable(GL_DEPTH_TEST);
+		} else {
+			glDisable(GL_DEPTH_TEST);
+		}
+
+		_spriteProgram->use();
+		_spriteProgram->setUniform("extraMatrix", _matrixStack.top());
+		_spriteProgram->setUniform("spritePos", sprite->_pos);
+		_spriteProgram->setUniform("spriteSize", Math::Vector2d(sprite->_width, sprite->_height));
+		_spriteProgram->setUniform("textured", GL_TRUE);
+		_spriteProgram->setUniform1f("alphaRef", 0.5f);
+
+		float sprite_quad[] = {
+		//	 X   ,  Y  , Z   , S   , T
+			+0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
+			+0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
+			-0.5f, 1.0f, 0.0f, 1.0f, 0.0f,
+			-0.5f, 0.0f, 0.0f, 1.0f, 1.0f,
+		};
+
+		glBindBuffer(GL_ARRAY_BUFFER, _spriteVBO);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(sprite_quad), sprite_quad, GL_STATIC_DRAW);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadEBO);
+		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+		glEnable(GL_DEPTH_TEST);
+		glDepthMask(GL_TRUE);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		return;
+	}
+
 	if (g_grim->getGameType() == GType_MONKEY4) {
 		glDepthMask(GL_TRUE);
 	} else {
