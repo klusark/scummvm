@@ -1094,6 +1094,11 @@ void Actor::doWalkForward() {
 		Math::Vector3d forwardVec(-_moveYaw.getSine(),
 		                           _moveYaw.getCosine(), 0);
 
+		// In Grim the pitch of an actor is only how it is drawn: it walks along the ground plane (the big spider that mends the web turns up to the web
+		// and takes off again while it walks, and a script sets its height)
+		if (g_grim->getGameType() == GType_GRIM)
+			forwardVec.set(-moveSine(), moveCosine(), 0.0f);
+
 		// EMI: Y is up-down, actors use an X-Z plane for movement
 		if (g_grim->getGameType() == GType_MONKEY4) {
 			forwardVec.x() = -forwardVec.x();
