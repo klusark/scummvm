@@ -98,7 +98,7 @@ bool Rect2d::intersectsCircle(const Vector2d &center, float radius) const {
 	Math::Angle angle = (_topRight - _topLeft).getAngle();
 
 	if (angle == 0) {
-		Vector2d circleDistance(fabs(center.getX() - c.getX()), fabs(center.getY() - c.getY()));
+		Vector2d circleDistance(fabsf(center.getX() - c.getX()), fabsf(center.getY() - c.getY()));
 
 		if (circleDistance.getX() > (w / 2.f + radius)) {
 			return false;

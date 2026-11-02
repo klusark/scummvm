@@ -274,10 +274,10 @@ Quaternion& Quaternion::operator+=(const Quaternion &o) {
 }
 
 bool Quaternion::operator==(const Quaternion &o) const {
-	float dw = fabs(w() - o.w());
-	float dx = fabs(x() - o.x());
-	float dy = fabs(y() - o.y());
-	float dz = fabs(z() - o.z());
+	float dw = fabsf(w() - o.w());
+	float dx = fabsf(x() - o.x());
+	float dy = fabsf(y() - o.y());
+	float dz = fabsf(z() - o.z());
 	// Threshold of equality
 	float th = 1E-5f;
 
