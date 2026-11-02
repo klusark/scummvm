@@ -303,13 +303,7 @@ void Lua_V2::GetCameraPitch() {
 	}
 
 	Set::Setup *setup = set->getCurrSetup();
-	float pitch;
-	if (g_grim->getGameType() == GType_MONKEY4) {
-		setup->getRotation(nullptr, nullptr, &pitch);
-	} else {
-		setup->getRotation(nullptr, &pitch, nullptr);
-	}
-	lua_pushnumber(pitch);
+	lua_pushnumber(setup->getPitch().getDegrees());
 }
 
 void Lua_V2::GetCameraYaw() {
@@ -320,13 +314,7 @@ void Lua_V2::GetCameraYaw() {
 	}
 
 	Set::Setup *setup = set->getCurrSetup();
-	float yaw;
-	if (g_grim->getGameType() == GType_MONKEY4) {
-		setup->getRotation(nullptr, &yaw, nullptr);
-	} else {
-		setup->getRotation(&yaw, nullptr, nullptr);
-	}
-	lua_pushnumber(yaw);
+	lua_pushnumber(setup->getYaw().getDegrees());
 }
 
 void Lua_V2::GetCameraRoll() {
@@ -337,13 +325,7 @@ void Lua_V2::GetCameraRoll() {
 	}
 
 	Set::Setup *setup = set->getCurrSetup();
-	float roll;
-	if (g_grim->getGameType() == GType_MONKEY4) {
-		setup->getRotation(&roll, nullptr, nullptr);
-	} else {
-		setup->getRotation(nullptr, nullptr, &roll);
-	}
-	lua_pushnumber(roll);
+	lua_pushnumber(setup->getRoll().getDegrees());
 }
 
 void Lua_V2::PitchCamera() {

@@ -21,6 +21,7 @@
 
 #include "engines/grim/debug.h"
 #include "engines/grim/set.h"
+#include "engines/grim/worldaxes.h"
 #include "engines/grim/textsplit.h"
 #include "engines/grim/colormap.h"
 #include "engines/grim/grim.h"
@@ -520,52 +521,40 @@ Light::Light() : _falloffNear(0.0f), _falloffFar(0.0f), _enabled(false), _id(0) 
 	setPenumbra(0.0f);
 }
 
-void Set::Setup::getRotation(float *x, float *y, float *z) {
-	Math::Angle aX, aY, aZ;
-	if (g_grim->getGameType() == GType_MONKEY4)
-		_rot.getEuler(&aX, &aY, &aZ, Math::EO_ZYX);
-	else
-		_rot.getEuler(&aX, &aY, &aZ, Math::EO_ZXY);
+Math::Angle Set::Setup::getPitch() const {
+	Math::Angle pitch;
+	WorldAxes::getEuler(_rot, nullptr, &pitch, nullptr);
+	return pitch;
+}
 
-	if (x != nullptr)
-		*x = aX.getDegrees();
-	if (y != nullptr)
-		*y = aY.getDegrees();
-	if (z != nullptr)
-		*z = aZ.getDegrees();
+Math::Angle Set::Setup::getYaw() const {
+	Math::Angle yaw;
+	WorldAxes::getEuler(_rot, &yaw, nullptr, nullptr);
+	return yaw;
+}
+
+Math::Angle Set::Setup::getRoll() const {
+	Math::Angle roll;
+	WorldAxes::getEuler(_rot, nullptr, nullptr, &roll);
+	return roll;
 }
 
 void Set::Setup::setPitch(Math::Angle pitch) {
-	Math::Angle oldYaw, oldRoll;
-	if (g_grim->getGameType() == GType_MONKEY4) {
-		_rot.getEuler(&oldRoll, &oldYaw, nullptr, Math::EO_ZYX);
-		_rot.buildFromEuler(oldRoll, oldYaw, pitch, Math::EO_ZYX);
-	} else {
-		_rot.getEuler(&oldYaw, nullptr, &oldRoll, Math::EO_ZXY);
-		_rot.buildFromEuler(oldYaw, pitch, oldRoll, Math::EO_ZXY);
-	}
+	Math::Angle yaw, roll;
+	WorldAxes::getEuler(_rot, &yaw, nullptr, &roll);
+	WorldAxes::buildFromEuler(_rot, yaw, pitch, roll);
 }
 
 void Set::Setup::setYaw(Math::Angle yaw) {
-	Math::Angle oldPitch, oldRoll;
-	if (g_grim->getGameType() == GType_MONKEY4) {
-		_rot.getEuler(&oldRoll, nullptr, &oldPitch, Math::EO_ZYX);
-		_rot.buildFromEuler(oldRoll, yaw, oldPitch, Math::EO_ZYX);
-	} else {
-		_rot.getEuler(nullptr, &oldPitch, &oldRoll, Math::EO_ZXY);
-		_rot.buildFromEuler(yaw, oldPitch, oldRoll, Math::EO_ZXY);
-	}
+	Math::Angle pitch, roll;
+	WorldAxes::getEuler(_rot, nullptr, &pitch, &roll);
+	WorldAxes::buildFromEuler(_rot, yaw, pitch, roll);
 }
 
 void Set::Setup::setRoll(Math::Angle roll) {
-	Math::Angle oldPitch, oldYaw;
-	if (g_grim->getGameType() == GType_MONKEY4) {
-		_rot.getEuler(nullptr, &oldYaw, &oldPitch, Math::EO_ZYX);
-		_rot.buildFromEuler(roll, oldYaw, oldPitch, Math::EO_ZYX);
-	} else {
-		_rot.getEuler(&oldYaw, &oldPitch, nullptr, Math::EO_ZXY);
-		_rot.buildFromEuler(oldYaw, oldPitch, roll, Math::EO_ZXY);
-	}
+	Math::Angle yaw, pitch;
+	WorldAxes::getEuler(_rot, &yaw, &pitch, nullptr);
+	WorldAxes::buildFromEuler(_rot, yaw, pitch, roll);
 }
 
 void Light::setUmbra(float angle) {
