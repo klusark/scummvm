@@ -65,7 +65,7 @@ void Lua_V1::new_dofile() {
 // Debugging message functions
 
 void Lua_V1::PrintDebug() {
-	if (Debug::isChannelEnabled(Debug::Scripts | Debug::Info)) {
+	if (Debug::isChannelEnabled(Debug::Scripts | Debug::Info) || true) {
 		Common::String msg("Debug: ");
 		lua_Object strObj = lua_getparam(1);
 		if (lua_isnil(strObj))

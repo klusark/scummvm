@@ -802,6 +802,38 @@ void Actor::moveTo(const Math::Vector3d &pos) {
 	_pos += moveVec;
 }
 
+// The pitch of an actor is not used for walking, in both games it only changes how the actor is drawn
+static Math::Vector3d flatWalkDirection(const Math::Angle &yaw) {
+	if (g_grim->getGameType() == GType_MONKEY4) {
+		// EMI: Y is up-down, actors use an X-Z plane for movement
+		return Math::Vector3d(yaw.getSine(), 0.0f, yaw.getCosine());
+	}
+	return Math::Vector3d(-yaw.getSine(), yaw.getCosine(), 0.0f);
+}
+
+// The direction of a walk along a sector with this normal. It is computed in the axes of Grim (Z is up); EMI has Y up, so its normal goes
+// in as (x, -z, y) and the result comes back as (x, z, -y)
+static Math::Vector3d slopeWalkDirection(const Math::Angle &yaw, Sector *currSector, bool backwards) {
+	const bool emi = g_grim->getGameType() == GType_MONKEY4;
+	Math::Vector3d normal = currSector->getNormal();
+	if (emi)
+		normal.set(normal.x(), -normal.z(), normal.y());
+
+	Math::Angle ax = Math::Vector2d(normal.x(), normal.z()).getAngle();
+	Math::Angle ay = Math::Vector2d(normal.y(), normal.z()).getAngle();
+	Math::Vector3d dir(-yaw.getSine() * ax.getSine(), yaw.getCosine() * ay.getSine(),
+	                   -yaw.getCosine() * ay.getCosine() + yaw.getSine() * ax.getCosine());
+	if (emi)
+		dir.set(dir.x(), dir.z(), -dir.y());
+
+	if (backwards)
+		dir = -dir;
+
+	Math::Vector3d puckVec = currSector->getProjectionToPuckVector(dir);
+	puckVec /= puckVec.getMagnitude();
+	return puckVec;
+}
+
 void Actor::walkForward() {
 	float dist = g_grim->getPerSecond(_walkRate) * _timeScale;
 	// Limit the amount of the movement per frame, otherwise with low fps
@@ -820,18 +852,7 @@ void Actor::walkForward() {
 	_walking = false;
 
 	if (!_followBoxes) {
-		Math::Vector3d forwardVec(-_moveYaw.getSine() * _pitch.getCosine(),
-		                           _moveYaw.getCosine() * _pitch.getCosine(), _pitch.getSine());
-
-		// EMI: Y is up-down, actors use an X-Z plane for movement
-		if (g_grim->getGameType() == GType_MONKEY4) {
-			float temp = forwardVec.z();
-			forwardVec.x() = -forwardVec.x();
-			forwardVec.z() = forwardVec.y();
-			forwardVec.y() = temp;
-		}
-
-		_pos += forwardVec * dist;
+		_pos += flatWalkDirection(_moveYaw) * dist;
 		_walkedCur = true;
 		return;
 	}
@@ -849,16 +870,7 @@ void Actor::walkForward() {
 
 		g_grim->getCurrSet()->findClosestSector(_pos, &currSector, &_pos);
 		if (!currSector) { // Shouldn't happen...
-			Math::Vector3d forwardVec(-_moveYaw.getSine() * _pitch.getCosine(),
-			                           _moveYaw.getCosine() * _pitch.getCosine(), _pitch.getSine());
-
-			// EMI: Y is up-down, actors use an X-Z plane for movement
-			if (g_grim->getGameType() == GType_MONKEY4) {
-				float temp = forwardVec.z();
-				forwardVec.x() = -forwardVec.x();
-				forwardVec.z() = forwardVec.y();
-				forwardVec.y() = temp;
-			}
+			Math::Vector3d forwardVec = flatWalkDirection(_moveYaw);
 
 			if (backwards)
 				forwardVec = -forwardVec;
@@ -872,31 +884,8 @@ void Actor::walkForward() {
 		float oldDist = dist;
 		while (currSector) {
 			prevSector = currSector;
-			Math::Vector3d forwardVec;
-			const Math::Vector3d &normal = currSector->getNormal();
-			if (g_grim->getGameType() == GType_GRIM) {
-				Math::Angle ax = Math::Vector2d(normal.x(), normal.z()).getAngle();
-				Math::Angle ay = Math::Vector2d(normal.y(), normal.z()).getAngle();
+			Math::Vector3d puckVec = slopeWalkDirection(_moveYaw, currSector, backwards);
 
-				float z1 = -_moveYaw.getCosine() * (ay - _pitch).getCosine();
-				float z2 = _moveYaw.getSine() * (ax - _pitch).getCosine();
-				forwardVec = Math::Vector3d(-_moveYaw.getSine() * ax.getSine() * _pitch.getCosine(),
-				                             _moveYaw.getCosine() * ay.getSine() * _pitch.getCosine(), z1 + z2);
-			} else {
-				Math::Angle ax = Math::Vector2d(normal.x(), normal.y()).getAngle();
-				Math::Angle az = Math::Vector2d(normal.z(), normal.y()).getAngle();
-
-				float y1 = _moveYaw.getCosine() * (az - _pitch).getCosine();
-				float y2 = _moveYaw.getSine() * (ax - _pitch).getCosine();
-				forwardVec = Math::Vector3d(-_moveYaw.getSine() * ax.getSine() * _pitch.getCosine(), y1 + y2,
-				                            -_moveYaw.getCosine() * az.getSine() * _pitch.getCosine());
-			}
-
-			if (backwards)
-				forwardVec = -forwardVec;
-
-			Math::Vector3d puckVec = currSector->getProjectionToPuckVector(forwardVec);
-			puckVec /= puckVec.getMagnitude();
 			currSector->getExitInfo(_pos, puckVec, &ei);
 			float exitDist = (ei.exitPoint - _pos).getMagnitude();
 			if (dist < exitDist) {
@@ -1120,16 +1109,29 @@ void Actor::turn(int dir) {
 }
 
 Math::Angle Actor::getYawTo(const Actor *a) const {
-	Math::Vector3d forwardVec = getSimplePuckVector();
+	Math::Vector3d forwardVec;
 	Math::Vector3d delta = a->getWorldPos() - getWorldPos();
 
-	if (g_grim->getGameType() == GType_MONKEY4) {
-		delta.y() = 0;
+	if (g_grim->getGameType() == GType_GRIM) {
+		forwardVec.set(-_yaw.getSine(), _yaw.getCosine(), 0.0f);
+
+		// A bug of the original (0x004a018e): the vertical part of the direction is the z of the forward vector minus the
+		// z of this actor, the z of the other actor is not used. The angle gets bigger the higher this actor stands
+		Sector *currSector = nullptr;
+		g_grim->getCurrSet()->findClosestSector(_pos, &currSector, nullptr);
+		if (currSector) {
+			Math::Vector3d inPlane = currSector->getProjectionToPuckVector(forwardVec);
+			inPlane /= inPlane.getMagnitude();
+			forwardVec = inPlane / inPlane.getMagnitude();
+		}
+
+		delta.z() = forwardVec.z() - getWorldPos().z();
 	} else {
-		delta.z() = 0;
+		forwardVec.set(_yaw.getSine(), 0, _yaw.getCosine());
 	}
+
 	if (delta.getMagnitude() < Math::epsilon)
-		return Math::Angle(0);
+		return Math::Angle(90);
 	return Math::Vector3d::angle(forwardVec, delta);
 }
 
