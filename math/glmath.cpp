@@ -28,16 +28,16 @@ bool gluMathUnProject(const Vector3d &win, const Matrix4 &mvpMatrix, const Commo
 	Matrix4 A;
 	Vector4d in, out;
 
-	in.x() = (win.x() - viewport.left) * 2 / viewport.width() - 1.0;
-	in.y() = (win.y() - viewport.top) * 2 / viewport.height() - 1.0;
-	in.z() = 2 * win.z() - 1.0;
+	in.x() = (win.x() - viewport.left) * 2 / viewport.width() - 1.0f;
+	in.y() = (win.y() - viewport.top) * 2 / viewport.height() - 1.0f;
+	in.z() = 2 * win.z() - 1.0f;
 	in.w() = 1.0;
 
 	A = mvpMatrix;
 	A.inverse();
 
 	out = A.transform(in);
-	if (out.w() == 0.0)
+	if (out.w() == 0.0f)
 		return false;
 
 	obj.x() = out.x() / out.w();
@@ -61,13 +61,13 @@ Matrix4 makePerspectiveMatrix(double fovy, double aspect, double zNear, double z
 
 Matrix4 makeFrustumMatrix(double left, double right, double bottom, double top, double zNear, double zFar) {
 	Matrix4 proj;
-	proj(0, 0) = (2.0f * zNear) / (right - left);
-	proj(1, 1) = (2.0f * zNear) / (top - bottom);
+	proj(0, 0) = (2.0 * zNear) / (right - left);
+	proj(1, 1) = (2.0 * zNear) / (top - bottom);
 	proj(2, 0) = (right + left) / (right - left);
 	proj(2, 1) = (top + bottom) / (top - bottom);
 	proj(2, 2) = -(zFar + zNear) / (zFar - zNear);
 	proj(2, 3) = -1.0f;
-	proj(3, 2) = -(2.0f * zFar * zNear) / (zFar - zNear);
+	proj(3, 2) = -(2.0 * zFar * zNear) / (zFar - zNear);
 	proj(3, 3) = 0.0f;
 
 	return proj;

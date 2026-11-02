@@ -336,7 +336,7 @@ void GrimEngine::handleJoyAxis(byte axis, int16 position) {
 		fpos = 0;
 	}
 
-	if (fabsf(fpos - _joyAxisPosition[axis]) > 0.1) {
+	if ((double)fabsf(fpos - _joyAxisPosition[axis]) > 0.1) {
 		LuaObjects objects;
 		objects.add(keycode);
 		objects.add(fpos);

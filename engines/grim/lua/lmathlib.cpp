@@ -14,8 +14,8 @@
 
 namespace Grim {
 
-#define FROMRAD(a) ((a) * (180.0 / (float)M_PI))
-#define TORAD(a)    ((a) * ((float)M_PI / 180.0))
+#define FROMRAD(a) ((double)(a) * (180.0 / (double)(float)M_PI))
+#define TORAD(a)    ((double)(a) * ((double)(float)M_PI / 180.0))
 
 static void math_abs() {
 	float d = luaL_check_number(1);
@@ -69,11 +69,11 @@ static void math_pow() {
 }
 
 static void math_deg() {
-	lua_pushnumber(luaL_check_number(1) * (180.0 / (float)M_PI));
+	lua_pushnumber((double)luaL_check_number(1) * (180.0 / (double)(float)M_PI));
 }
 
 static void math_rad() {
-	lua_pushnumber(luaL_check_number(1) * ((float)M_PI / 180.0));
+	lua_pushnumber((double)luaL_check_number(1) * ((double)(float)M_PI / 180.0));
 }
 
 static void math_min() {

@@ -906,7 +906,7 @@ void Actor::walkForward() {
 			}
 			_pos = ei.exitPoint;
 			dist -= exitDist;
-			if (exitDist > 0.0001)
+			if ((double)exitDist > 0.0001)
 				_walkedCur = true;
 
 			// Check for an adjacent sector which can continue

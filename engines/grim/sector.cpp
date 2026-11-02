@@ -327,7 +327,7 @@ bool Sector::isPointInSector(const Math::Vector3d &point) const {
 	if (_height < 9000.f) { // No need to check when height is 9999.
 		float dist = distanceToPoint(point);
 
-		if (fabsf(dist) > _height + 0.01) // Add an error margin
+		if ((double)fabsf(dist) > (double)_height + 0.01) // Add an error margin
 			return false;
 	}
 
@@ -371,8 +371,8 @@ Common::List<Math::Line3d> Sector::getBridgesTo(Sector *sector) const {
 			delta_b2 = bridge.end() - line.begin();
 			Math::Vector3d cross_b1 = Math::Vector3d::crossProduct(edge, delta_b1);
 			Math::Vector3d cross_b2 = Math::Vector3d::crossProduct(edge, delta_b2);
-			bool b1_out = cross_b1.dotProduct(_normal) < -1e-7;
-			bool b2_out = cross_b2.dotProduct(_normal) < -1e-7;
+			bool b1_out = (double)cross_b1.dotProduct(_normal) < -1e-7;
+			bool b2_out = (double)cross_b2.dotProduct(_normal) < -1e-7;
 
 			bool useXZ = (g_grim->getGameType() == GType_MONKEY4);
 

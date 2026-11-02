@@ -68,7 +68,7 @@ void Lua_V2::DimScreen() {
 
 	g_driver->setDimLevel(dim);
 	// FIXME func(dim);
-	warning("Lua_V2::DimScreen: dim: %f", dim);
+	warning("Lua_V2::DimScreen: dim: %f", (double)dim);
 }
 
 void Lua_V2::MakeCurrentSetup() {
@@ -567,7 +567,7 @@ void Lua_V2::OverWorldToScreen() { // TODO
 		z = lua_getnumber(param3);
 	}
 
-	warning("Stub function: OverWorldToScreen(%f, %f, %f) - returning 0,0", x, y, z);
+	warning("Stub function: OverWorldToScreen(%f, %f, %f) - returning 0,0", (double)x, (double)y, (double)z);
 
 	lua_pushnumber(0);
 	lua_pushnumber(0);

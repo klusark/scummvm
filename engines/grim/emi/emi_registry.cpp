@@ -84,7 +84,7 @@ uint EmiRegistry::convertTalkSpeedFromGUI(uint talkspeed) const {
 }
 
 const Common::String EmiRegistry::convertGammaToRegistry(float gamma) const {
-	return Common::String().format("%.2f", gamma);
+	return Common::String().format("%.2f", (double)gamma);
 }
 
 float EmiRegistry::convertGammaFromRegistry(const Common::String &gamma) const {
@@ -146,12 +146,12 @@ bool EmiRegistry::Get(const Common::String &key, float &res) const {
 			res = ConfMan.getInt(_transMap[key]);
 	}
 
-	Debug::debug(Debug::Engine, "Pushing %f", res);
+	Debug::debug(Debug::Engine, "Pushing %f", (double)res);
 	return true;
 }
 
 void EmiRegistry::Set(const Common::String &key, float &value)  {
-	Debug::debug(Debug::Engine, "SetResidualVMPreference(%s, %f)", key.c_str(), value);
+	Debug::debug(Debug::Engine, "SetResidualVMPreference(%s, %f)", key.c_str(), (double)value);
 
 	if (!_transMap.contains(key))
 		return;

@@ -199,7 +199,7 @@ void GfxOpenGL::setupCameraFrustum(float fov, float nclip, float fclip) {
 	glLoadIdentity();
 
 	float right = nclip * tan(fov / 2 * ((float)M_PI / 180));
-	glFrustum(-right, right, -right * 0.75, right * 0.75, nclip, fclip);
+	glFrustum(-(double)right, (double)right, -(double)right * 0.75, (double)right * 0.75, (double)nclip, (double)fclip);
 
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
@@ -215,11 +215,11 @@ void GfxOpenGL::positionCamera(const Math::Vector3d &pos, const Math::Vector3d &
 
 	Math::Matrix4 lookMatrix = Math::makeLookAtMatrix(pos, interest, up_vec);
 	glMultMatrixf(lookMatrix.getData());
-	glTranslated(-pos.x(), -pos.y(), -pos.z());
+	glTranslated(-(double)pos.x(), -(double)pos.y(), -(double)pos.z());
 }
 
 void GfxOpenGL::positionCamera(const Math::Vector3d &pos, const Math::Matrix4 &rot) {
-	glScaled(1.0f, 1.0f, -1.0f);
+	glScaled(1.0, 1.0, -1.0);
 	_currentPos = pos;
 	_currentRot = rot;
 }
@@ -365,14 +365,14 @@ void GfxOpenGL::getScreenBoundingBox(const Mesh *model, int *x1, int *y1, int *x
 			Math::Vector3d win;
 			Math::gluMathProject<GLdouble, GLint>(obj, modelView, projection, viewPort, win);
 
-			if (win.x() > right)
-				right = win.x();
-			if (win.x() < left)
-				left = win.x();
-			if (win.y() < top)
-				top = win.y();
-			if (win.y() > bottom)
-				bottom = win.y();
+			if ((double)win.x() > right)
+				right = (double)win.x();
+			if ((double)win.x() < left)
+				left = (double)win.x();
+			if ((double)win.y() < top)
+				top = (double)win.y();
+			if ((double)win.y() > bottom)
+				bottom = (double)win.y();
 		}
 	}
 
@@ -433,14 +433,14 @@ void GfxOpenGL::getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, in
 			Math::Vector3d win;
 			Math::gluMathProject<GLdouble, GLint>(obj, modelView, projection, viewPort, win);
 
-			if (win.x() > right)
-				right = win.x();
-			if (win.x() < left)
-				left = win.x();
-			if (win.y() < top)
-				top = win.y();
-			if (win.y() > bottom)
-				bottom = win.y();
+			if ((double)win.x() > right)
+				right = (double)win.x();
+			if ((double)win.x() < left)
+				left = (double)win.x();
+			if ((double)win.y() < top)
+				top = (double)win.y();
+			if ((double)win.y() > bottom)
+				bottom = (double)win.y();
 		}
 	}
 
@@ -584,7 +584,7 @@ void GfxOpenGL::startActorDraw(const Actor *actor) {
 			float right = 1;
 			float top = right * 0.75f;
 			float div = 6.0f;
-			glFrustum(-right / div, right / div, -top / div, top / div, 1.0f / div, 3276.8f);
+			glFrustum((double)(-right / div), (double)(right / div), (double)(-top / div), (double)(top / div), (double)(1.0f / div), (double)3276.8f);
 			glMatrixMode(GL_MODELVIEW);
 			glLoadIdentity();
 			glScalef(1.0, 1.0, -1.0);
@@ -818,9 +818,9 @@ void GfxOpenGL::drawSprite(const Sprite *sprite) {
 		for (int i = 0; i < 3; i++) {
 			for (int j = 0; j < 3; j++) {
 				if (i == j) {
-					modelview[i * 4 + j] = 1.0f;
+					modelview[i * 4 + j] = 1.0;
 				} else {
-					modelview[i * 4 + j] = 0.0f;
+					modelview[i * 4 + j] = 0.0;
 				}
 			}
 		}
@@ -1688,8 +1688,8 @@ void GfxOpenGL::prepareMovieFrame(Graphics::Surface *frame) {
 	int width = frame->w;
 	byte *bitmap = (byte *)frame->getPixels();
 
-	double scaleW = _scaleW;
-	double scaleH = _scaleH;
+	double scaleW = (double)_scaleW;
+	double scaleH = (double)_scaleH;
 	// Remastered hack, don't scale full-screen videos for now.
 	if (height == 1080) {
 		_scaleW = 1.0f;
@@ -1764,8 +1764,8 @@ void GfxOpenGL::prepareMovieFrame(Graphics::Surface *frame) {
 }
 
 void GfxOpenGL::drawMovieFrame(int offsetX, int offsetY) {
-	double scaleW = _scaleW;
-	double scaleH = _scaleH;
+	double scaleW = (double)_scaleW;
+	double scaleH = (double)_scaleH;
 	// Remastered hack, don't scale full-screen videos for now.
 	if (_smushHeight == 1080) {
 		_scaleW = 1.0f;

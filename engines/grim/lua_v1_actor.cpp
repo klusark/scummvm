@@ -1598,8 +1598,8 @@ void Lua_V1::SetActorClipPlane() {
 	// This looks like original renderer specific.
 	// There is no known visual differences between lack implementation and original.
 	debug(2, "Stub function: SetActorClipPlane(norm(%f, %f, %f), point(%f, %f, %f)",
-	         lua_getnumber(normalXObj), lua_getnumber(normalYObj), lua_getnumber(normalZObj),
-	         lua_getnumber(pointXObj), lua_getnumber(pointYObj), lua_getnumber(pointZObj));
+	         (double)lua_getnumber(normalXObj), (double)lua_getnumber(normalYObj), (double)lua_getnumber(normalZObj),
+	         (double)lua_getnumber(pointXObj), (double)lua_getnumber(pointYObj), (double)lua_getnumber(pointZObj));
 }
 
 void Lua_V1::SetActorClipActive() {

@@ -141,7 +141,7 @@ inline Angle operator/(float f, const Angle &a2) {
 
 
 inline bool operator==(const Angle &a1, const Angle &a2) {
-	return fabsf(a1.getDegrees() - a2.getDegrees()) < 0.001;
+	return (double)fabsf(a1.getDegrees() - a2.getDegrees()) < 0.001;
 }
 
 inline bool operator!=(const Angle &a1, const Angle &a2) {

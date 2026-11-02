@@ -87,13 +87,13 @@ bool AABB::collides(const AABB &aabb) const {
 }
 
 Math::Vector3d AABB::distance(const Math::Vector3d &point) const {
-	double dx = MAX(getMin().x() - point.x(), point.x() - getMax().x());
+	double dx = (double)MAX(getMin().x() - point.x(), point.x() - getMax().x());
 	dx = MAX(dx, 0.0);
 
-	double dy = MAX(getMin().y() - point.y(), point.y() - getMax().y());
+	double dy = (double)MAX(getMin().y() - point.y(), point.y() - getMax().y());
 	dy = MAX(dy, 0.0);
 
-	double dz = MAX(getMin().z() - point.z(), point.z() - getMax().z());
+	double dz = (double)MAX(getMin().z() - point.z(), point.z() - getMax().z());
 	dz = MAX(dz, 0.0);
 
 	return Math::Vector3d(dx, dy, dz);

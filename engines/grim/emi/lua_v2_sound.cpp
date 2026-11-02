@@ -105,7 +105,7 @@ void Lua_V2::SetReverb() {
 	if (lua_isnumber(dampingObj))
 		damping = lua_getnumber(dampingObj);
 
-	Debug::debug(Debug::Sound | Debug::Scripts, "Lua_V2::SetReverb, eax: %d, decay: %f, mix: %f, predelay: %f, damping: %f", param, decay, mix, predelay, damping);
+	Debug::debug(Debug::Sound | Debug::Scripts, "Lua_V2::SetReverb, eax: %d, decay: %f, mix: %f, predelay: %f, damping: %f", param, (double)decay, (double)mix, (double)predelay, (double)damping);
 	// FIXME: func(param, decay, mix, predelay, damping);
 }
 

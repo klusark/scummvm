@@ -156,7 +156,7 @@ void Lua_V2::GetActorWalkRate() {
 
 	Actor *actor = getactor(actorObj);
 	// const below only differ from grim
-	lua_pushnumber(actor->getWalkRate() * 0.3048780560493469);
+	lua_pushnumber((double)actor->getWalkRate() * 0.3048780560493469);
 }
 
 void Lua_V2::SetActorTurnRate() {
@@ -408,7 +408,7 @@ void Lua_V2::CompleteChore() {
 	int chore = lua_getuserdata(param1);
 	float time = lua_getnumber(param2);
 
-	error("Lua_V2::CompleteChore(%d, %f) - TODO: Implement opcode", chore, time);
+	error("Lua_V2::CompleteChore(%d, %f) - TODO: Implement opcode", chore, (double)time);
 }
 
 void Lua_V2::SetActorSortOrder() {
@@ -939,7 +939,7 @@ void Lua_V2::SetActorFOV() {
 		float fov = lua_getnumber(fovObj);
 		// FIXME: implement missing code
 		//actor->func(fov); // cos(fov * some tuntime val * 0.5)
-		warning("Lua_V2::SetActorFOV: implement opcode. actor: %s, param: %f", actor->getName().c_str(), fov);
+		warning("Lua_V2::SetActorFOV: implement opcode. actor: %s, param: %f", actor->getName().c_str(), (double)fov);
 	}
 }
 

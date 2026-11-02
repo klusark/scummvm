@@ -49,7 +49,7 @@ MDCT::MDCT(int bits, bool inverse, double scale) : _bits(bits), _fft(nullptr) {
 
 	scale = sqrt(ABS(scale));
 	for (int i = 0; i < size4; i++) {
-		const double alpha = 2 * (float)M_PI * (i + theta) / _size;
+		const double alpha = (double)(2 * (float)M_PI) * (i + theta) / _size;
 
 		_tCos[i] = -cos(alpha) * scale;
 		_tSin[i] = -sin(alpha) * scale;

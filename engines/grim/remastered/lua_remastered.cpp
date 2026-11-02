@@ -168,7 +168,7 @@ void Lua_Remastered::QueryActiveHotspots() {
 
 	assert(lua_isnumber(param));
 
-	warning("Stub function: QueryActiveHotspots(%f)", lua_getnumber(param));
+	warning("Stub function: QueryActiveHotspots(%f)", (double)lua_getnumber(param));
 
 	// TODO: Handle coord scaling better
 	float scaleX = 1920.0f/1600;
@@ -232,7 +232,7 @@ void Lua_Remastered::SetCursor() {
 
 	assert(lua_isnumber(param1));
 
-	warning("Stub function: SetCursor(%f)", lua_getnumber(param1));
+	warning("Stub function: SetCursor(%f)", (double)lua_getnumber(param1));
 }
 
 void Lua_Remastered::GetPlatform() {
@@ -261,7 +261,7 @@ void Lua_Remastered::GetRemappedKeyHint() {
 void Lua_Remastered::ImSetCommentaryVol() {
 	lua_Object param1 = lua_getparam(1);
 	assert(lua_isnumber(param1));
-	warning("Stub function: ImSetCommentaryVol(%f)", lua_getnumber(param1));
+	warning("Stub function: ImSetCommentaryVol(%f)", (double)lua_getnumber(param1));
 }
 
 void Lua_Remastered::ImGetCommentaryVol() {
@@ -272,7 +272,7 @@ void Lua_Remastered::ImGetCommentaryVol() {
 void Lua_Remastered::SetLanguage() {
 	lua_Object param1 = lua_getparam(1);
 	assert(lua_isnumber(param1));
-	warning("Stub function: SetLanguage(%f)", lua_getnumber(param1));
+	warning("Stub function: SetLanguage(%f)", (double)lua_getnumber(param1));
 	g_grim->setLanguage(lua_getnumber(param1));
 	delete g_localizer;
 	g_localizer = new Localizer();
@@ -281,14 +281,14 @@ void Lua_Remastered::SetLanguage() {
 void Lua_Remastered::SetMouseSpeedScale() {
 	lua_Object param1 = lua_getparam(1);
 	assert(lua_isnumber(param1));
-	warning("Stub function: SetMouseSpeedScale(%f)", lua_getnumber(param1));
+	warning("Stub function: SetMouseSpeedScale(%f)", (double)lua_getnumber(param1));
 }
 
 // Commentary
 void Lua_Remastered::EnableCommentary() {
 	lua_Object param1 = lua_getparam(1);
 	assert(lua_isnumber(param1));
-	warning("Stub function: EnableCommentary(%f)", lua_getnumber(param1));
+	warning("Stub function: EnableCommentary(%f)", (double)lua_getnumber(param1));
 }
 
 void Lua_Remastered::SetCommentary() {
@@ -318,13 +318,13 @@ void Lua_Remastered::HasHeardCommentary() {
 void Lua_Remastered::SetResolutionScaling() {
 	lua_Object param1 = lua_getparam(1);
 	assert(lua_isnumber(param1));
-	warning("Stub function: SetResolutionScaling(%f)", lua_getnumber(param1));
+	warning("Stub function: SetResolutionScaling(%f)", (double)lua_getnumber(param1));
 }
 
 void Lua_Remastered::IsConceptUnlocked() {
 	lua_Object param1 = lua_getparam(1);
 	assert(lua_isnumber(param1));
-	warning("Remastered function: IsConceptUnlocked(%f) returns %d", lua_getnumber(param1), g_grim->isConceptEnabled(lua_getnumber(param1)));
+	warning("Remastered function: IsConceptUnlocked(%f) returns %d", (double)lua_getnumber(param1), g_grim->isConceptEnabled(lua_getnumber(param1)));
 	if (g_grim->isConceptEnabled(lua_getnumber(param1))) {
 		lua_pushnumber(1);
 	} else {
@@ -335,21 +335,21 @@ void Lua_Remastered::IsConceptUnlocked() {
 void Lua_Remastered::UnlockConcept() {
 	lua_Object param1 = lua_getparam(1);
 	assert(lua_isnumber(param1));
-	warning("Remastered function: UnlockConcept(%f)", lua_getnumber(param1));
+	warning("Remastered function: UnlockConcept(%f)", (double)lua_getnumber(param1));
 	g_grim->enableConcept(lua_getnumber(param1));
 }
 
 void Lua_Remastered::UnlockCutscene() {
 	lua_Object param1 = lua_getparam(1);
 	assert(lua_isnumber(param1));
-	warning("Remastered function: UnlockCutscene(%f)", lua_getnumber(param1));
+	warning("Remastered function: UnlockCutscene(%f)", (double)lua_getnumber(param1));
 	g_grim->enableCutscene(lua_getnumber(param1));
 }
 
 void Lua_Remastered::IsCutsceneUnlocked() {
 	lua_Object param1 = lua_getparam(1);
 	assert(lua_isnumber(param1));
-	warning("Remastered function: IsCutsceneUnlocked(%f) returns %d", lua_getnumber(param1), g_grim->isCutsceneEnabled(lua_getnumber(param1)));
+	warning("Remastered function: IsCutsceneUnlocked(%f) returns %d", (double)lua_getnumber(param1), g_grim->isCutsceneEnabled(lua_getnumber(param1)));
 	if (g_grim->isCutsceneEnabled(lua_getnumber(param1))) {
 		lua_pushnumber(1);
 	} else {
@@ -369,7 +369,7 @@ void Lua_Remastered::SetGameRenderMode() {
 		return;
 	}
 	assert(lua_isnumber(param1));
-	warning("Stub function: SetGameRenderMode(%f)", lua_getnumber(param1));
+	warning("Stub function: SetGameRenderMode(%f)", (double)lua_getnumber(param1));
 	g_grim->setMode((GrimEngine::EngineMode)(int)lua_getnumber(param1));
 }
 
@@ -409,7 +409,7 @@ void Lua_Remastered::AddHotspot() {
 	} else if (!lua_isnil(param10)) {
 		assert(lua_isnil(param10));
 	}
-	warning("Stub function: AddHotspot(%s, %f, %f, %f, %f, %f, %f, %f, %s, %s, %f)", lua_getstring(param1), lua_getnumber(param2), lua_getnumber(param3), lua_getnumber(param4), lua_getnumber(param5), lua_getnumber(param6), lua_getnumber(param7), lua_getnumber(param8), p9str, p10str, lua_getnumber(param11));
+	warning("Stub function: AddHotspot(%s, %f, %f, %f, %f, %f, %f, %f, %s, %s, %f)", lua_getstring(param1), (double)lua_getnumber(param2), (double)lua_getnumber(param3), (double)lua_getnumber(param4), (double)lua_getnumber(param5), (double)lua_getnumber(param6), (double)lua_getnumber(param7), (double)lua_getnumber(param8), p9str, p10str, (double)lua_getnumber(param11));
 
 	Hotspot *hotspot = new Hotspot(lua_getstring(param1), lua_getnumber(param2), lua_getnumber(param3), lua_getnumber(param4), lua_getnumber(param5));
 
@@ -560,7 +560,7 @@ void Lua_Remastered::Save() {
 void Lua_Remastered::ShowCursor() {
 	lua_Object param1 = lua_getparam(1);
 	assert(lua_isnumber(param1));
-	warning("Stub function: ShowCursor(%f)", lua_getnumber(param1));
+	warning("Stub function: ShowCursor(%f)", (double)lua_getnumber(param1));
 }
 
 void Lua_Remastered::ReadRegistryIntValue() {

@@ -181,13 +181,13 @@ Math::Matrix4 makeRotationMatrix(const Math::Angle& angle, Math::Vector3d axis) 
 
 Math::Matrix4 makeFrustumMatrix(double left, double right, double bottom, double top, double nclip, double fclip) {
 	Math::Matrix4 proj;
-	proj(0, 0) = (2.0f * nclip) / (right - left);
-	proj(1, 1) = (2.0f * nclip) / (top - bottom);
+	proj(0, 0) = (2.0 * nclip) / (right - left);
+	proj(1, 1) = (2.0 * nclip) / (top - bottom);
 	proj(2, 0) = (right + left) / (right - left);
 	proj(2, 1) = (top + bottom) / (top - bottom);
 	proj(2, 2) = -(fclip + nclip) / (fclip - nclip);
 	proj(2, 3) = -1.0f;
-	proj(3, 2) = -(2.0f * fclip * nclip) / (fclip - nclip);
+	proj(3, 2) = -(2.0 * fclip * nclip) / (fclip - nclip);
 	proj(3, 3) = 0.0f;
 
 	return proj;
@@ -225,7 +225,7 @@ GfxOpenGLS::GfxOpenGLS() {
 	_dimRegionProgram = nullptr;
 
 	float div = 6.0f;
-	_overworldProjMatrix = makeFrustumMatrix(-1.f / div, 1.f / div, -0.75f / div, 0.75f / div, 1.0f / div, 3276.8f);
+	_overworldProjMatrix = makeFrustumMatrix((double)(-1.f / div), (double)(1.f / div), (double)(-0.75f / div), (double)(0.75f / div), (double)(1.0f / div), (double)3276.8f);
 }
 
 GfxOpenGLS::~GfxOpenGLS() {
@@ -433,7 +433,7 @@ void GfxOpenGLS::setupCameraFrustum(float fov, float nclip, float fclip) {
 	float right = nclip * tan(fov / 2 * ((float)M_PI / 180));
 	float top = right * 0.75f;
 
-	_projMatrix = makeFrustumMatrix(-right, right, -top, top, nclip, fclip);
+	_projMatrix = makeFrustumMatrix(-(double)right, (double)right, -(double)top, (double)top, (double)nclip, (double)fclip);
 }
 
 void GfxOpenGLS::positionCamera(const Math::Vector3d &pos, const Math::Vector3d &interest, float roll) {
@@ -552,8 +552,8 @@ void GfxOpenGLS::getScreenBoundingBox(const Mesh *model, int *x1, int *y1, int *
 			v = mvpMatrix * v;
 			v /= v.w();
 
-			double winX = (1 + v.x()) / 2.0f * _gameWidth;
-			double winY = (1 + v.y()) / 2.0f * _gameHeight;
+			double winX = (double)((1 + v.x()) / 2.0f * _gameWidth);
+			double winY = (double)((1 + v.y()) / 2.0f * _gameHeight);
 
 			if (winX > right)
 				right = winX;
@@ -621,8 +621,8 @@ void GfxOpenGLS::getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, i
 			v = mvpMatrix * v;
 			v /= v.w();
 
-			double winX = (1 + v.x()) / 2.0f * _gameWidth;
-			double winY = (1 + v.y()) / 2.0f * _gameHeight;
+			double winX = (double)((1 + v.x()) / 2.0f * _gameWidth);
+			double winY = (double)((1 + v.y()) / 2.0f * _gameHeight);
 
 			if (winX > right)
 				right = winX;
@@ -701,8 +701,8 @@ void GfxOpenGLS::getActorScreenBBox(const Actor *actor, Common::Point &p1, Commo
 					return;
 				v /= v.w();
 
-				double winX = (1 + v.x()) / 2.0f * _gameWidth;
-				double winY = (1 + v.y()) / 2.0f * _gameHeight;
+				double winX = (double)((1 + v.x()) / 2.0f * _gameWidth);
+				double winY = (double)((1 + v.y()) / 2.0f * _gameHeight);
 
 				// Find the points
 				if (winX < p1.x)

@@ -104,7 +104,7 @@ void luaH_free(Hash *frees) {
 
 Hash *luaH_new(int32 nhash) {
 	Hash *t = luaM_new(Hash);
-	nhash = luaO_redimension((int32)((float)nhash / REHASH_LIMIT));
+	nhash = luaO_redimension((int32)((double)(float)nhash / REHASH_LIMIT));
 	nodevector(t) = hashnodecreate(nhash);
 	nhash(t) = nhash;
 	nuse(t) = 0;
@@ -166,7 +166,7 @@ TObject *luaH_set(Hash *t, TObject *r) {
 	Node *n = node(t, present(t, r));
 	if (ttype(ref(n)) == LUA_T_NIL) {
 		nuse(t)++;
-		if ((float)nuse(t) > (float)nhash(t) * REHASH_LIMIT) {
+		if ((double)(float)nuse(t) > (double)(float)nhash(t) * REHASH_LIMIT) {
 			rehash(t);
 			n = node(t, present(t, r));
 		}

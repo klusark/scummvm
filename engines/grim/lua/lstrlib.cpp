@@ -471,7 +471,7 @@ static void str_format() {
 			case 'f':
 			case 'g':
 			case 'G':
-				snprintf(buff, 1000, form, luaL_check_number(arg));
+				snprintf(buff, 1000, form, (double)luaL_check_number(arg));
 				break;
 			default:  // also treat cases 'pnLlh'
 				lua_error("invalid option in `format'");
