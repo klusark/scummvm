@@ -2143,73 +2143,6 @@ static bool boxSlide(const Math::Vector3d &cur, const Math::Vector3d &prev, cons
 	return true;
 }
 
-bool Actor::handleBoxCollision(Actor *actor, const Math::Vector3d &p1, float size1, const Math::Vector3d &p2, float size2,
-                               Math::Vector3d *vec) const {
-	if (!actor->getCurrentCostume() || !getCurrentCostume())
-		return false;
-	Model *model = actor->getCurrentCostume()->getModel();
-	Model *model1 = getCurrentCostume()->getModel();
-	if (!model || !model1)
-		return false;
-
-	// The mover is a sphere centered on its model's center, the other actor is a box
-	const Math::Matrix4 rot1(_yaw, _pitch, _roll, Math::EO_ZXY);
-	Math::Matrix4 m2(actor->_yaw, actor->_pitch, actor->_roll, Math::EO_ZXY);
-	m2.setPosition(actor->_pos);
-
-	Math::Vector3d off1 = model1->_center;
-	rot1.transform(&off1, false);
-	Math::Vector3d center2 = model->_center;
-	m2.transform(&center2, true);
-
-	const Math::Vector3d curCenter = _pos + *vec + off1;
-	const float r1 = model1->_radius * _collisionScale;
-	const float r2 = model->_radius * actor->_collisionScale;
-	if (curCenter.getDistanceTo(center2) >= r1 + r2)
-		return false;
-
-	const float scale = actor->_collisionScale;
-	const Math::Vector3d boxMin = model->_bboxPos;
-	const Math::Vector3d boxMax = model->_bboxPos + model->_bboxSize;
-	const Math::Vector3d pad(r1, r1, r1);
-	const Math::Vector3d bmin = boxMin * scale - pad;
-	const Math::Vector3d bmax = boxMax * scale + pad;
-
-	Math::Matrix4 toBox = m2;
-	toBox.invertAffineOrthonormal();
-	Math::Vector3d loc = curCenter;
-	toBox.transform(&loc, true);
-	Math::Vector3d prev = _pos + off1;
-	toBox.transform(&prev, true);
-
-	for (int i = 0; i < 3; i++) {
-		if (loc.getValue(i) <= bmin.getValue(i) || loc.getValue(i) >= bmax.getValue(i))
-			return false;
-	}
-
-	Math::Vector3d res;
-	if (!boxSlide(loc, prev, bmin, bmax, res)) {
-		// Out through the nearest of the four sides, a centimetre past it
-		res = loc;
-		float best = FLT_MAX;
-		for (int i = 0; i < 4; i++) {
-			const int axis = i / 2;
-			const bool isMax = i % 2 == 0;
-			const float limit = isMax ? bmax.getValue(axis) : bmin.getValue(axis);
-			const float dist = fabsf(limit - loc.getValue(axis));
-			if (dist < best) {
-				best = dist;
-				res = loc;
-				res.setValue(axis, limit + (isMax ? 0.01f : -0.01f));
-			}
-		}
-	}
-
-	m2.transform(&res, true);
-	*vec = res - off1 - _pos;
-	collisionHandlerCallback(actor);
-	return true;
-}
 void Actor::getBBoxInfo(Math::Vector3d &bboxPos, Math::Vector3d &bboxSize) const {
 	if (g_grim->getGameType() == GType_MONKEY4) {
 		EMICostume *costume = static_cast<EMICostume *>(getCurrentCostume());
@@ -2272,10 +2205,6 @@ bool Actor::handleCollisionWith(Actor *actor, CollisionMode mode, Math::Vector3d
 	//if (g_grim->getGameType() == GType_GRIM)
 	mode1 = CollisionSphere;
 
-	if (/*g_grim->getGameType() == GType_GRIM && */mode2 == CollisionBox) {
-		warning("Collision new box!");
-		return handleBoxCollision(actor, p1, size1, p2, size2, vec);
-	}
 
 	if (mode1 == CollisionSphere && mode2 == CollisionSphere) {
 		warning("Collision sphere!");
@@ -2296,124 +2225,73 @@ bool Actor::handleCollisionWith(Actor *actor, CollisionMode mode, Math::Vector3d
 		warning("Collision between box and box not implemented!");
 		return false;
 	} else {
-		Math::Vector3d bboxSize1, bboxSize2;
-		Math::Vector3d bboxPos1, bboxPos2;
-		warning("Collision else!");
+		if (!actor->getCurrentCostume() || !getCurrentCostume())
+			return false;
+		Model *model = actor->getCurrentCostume()->getModel();
+		Model *model1 = getCurrentCostume()->getModel();
+		if (!model || !model1)
+			return false;
 
-		// get bboxSize and bboxPos for the current and the colliding actor
-		this->getBBoxInfo(bboxPos1, bboxSize1);
-		actor->getBBoxInfo(bboxPos2, bboxSize2);
+		// The mover is a sphere centered on its model's center, the other actor is a box
+		const Math::Matrix4 rot1(_yaw, _pitch, _roll, Math::EO_ZXY);
+		Math::Matrix4 m2(actor->_yaw, actor->_pitch, actor->_roll, Math::EO_ZXY);
+		m2.setPosition(actor->_pos);
 
-		Math::Rect2d rect;
+		Math::Vector3d off1 = model1->_center;
+		rot1.transform(&off1, false);
+		Math::Vector3d center2 = model->_center;
+		m2.transform(&center2, true);
 
-		Math::Vector3d bboxPos;
-		Math::Vector3d size;
-		float scale;
-		Math::Vector3d pos;
-		Math::Vector3d circlePos;
-		Math::Angle yaw;
+		const Math::Vector3d curCenter = _pos + *vec + off1;
+		const float r1 = model1->_radius * _collisionScale;
+		const float r2 = model->_radius * actor->_collisionScale;
+		if (curCenter.getDistanceTo(center2) >= r1 + r2)
+			return false;
 
-		Math::Vector2d circle;
-		float radius;
+		const float scale = actor->_collisionScale;
+		const Math::Vector3d boxMin = model->_bboxPos;
+		const Math::Vector3d boxMax = model->_bboxPos + model->_bboxSize;
+		const Math::Vector3d pad(r1, r1, r1);
+		const Math::Vector3d bmin = boxMin * scale - pad;
+		const Math::Vector3d bmax = boxMax * scale + pad;
 
-		if (mode1 == CollisionBox) {
-			pos = p1 + *vec;
-			bboxPos = pos + bboxPos1;
-			size =  bboxSize1;
-			scale = _collisionScale;
-			yaw = _yaw;
+		Math::Matrix4 toBox = m2;
+		toBox.invertAffineOrthonormal();
+		Math::Vector3d loc = curCenter;
+		toBox.transform(&loc, true);
+		Math::Vector3d prev = _pos + off1;
+		toBox.transform(&prev, true);
 
-			circle.setX(p2.x());
-			circle.setY(p2.y());
-			circlePos = p2;
-			radius = size2;
-		} else {
-			pos = p2;
-			bboxPos = p2  + bboxPos2;
-			size = bboxSize2;
-			scale = actor->_collisionScale;
-			yaw = actor->_yaw;
-
-			circle.setX(p1.x() + vec->x());
-			circle.setY(p1.y() + vec->y());
-			circlePos = p1;
-			radius = size1;
+		for (int i = 0; i < 3; i++) {
+			if (loc.getValue(i) <= bmin.getValue(i) || loc.getValue(i) >= bmax.getValue(i))
+				return false;
 		}
 
-		rect._topLeft = Math::Vector2d(bboxPos.x(), bboxPos.y() + size.y());
-		rect._topRight = Math::Vector2d(bboxPos.x() + size.x(), bboxPos.y() + size.y());
-		rect._bottomLeft = Math::Vector2d(bboxPos.x(), bboxPos.y());
-		rect._bottomRight = Math::Vector2d(bboxPos.x() + size.x(), bboxPos.y());
-
-		rect.scale(scale);
-		rect.rotateAround(Math::Vector2d(pos.x(), pos.y()), yaw);
-
-		if (rect.intersectsCircle(circle, radius)) {
-			Math::Vector2d center = rect.getCenter();
-			// Draw a line from the center of the rect to the place the character
-			// would go to.
-			Math::Vector2d v = circle - center;
-			v.normalize();
-
-			Math::Segment2d edge;
-			// That line intersects (usually) an edge
-			rect.getIntersection(center, v, &edge);
-			// Take the perpendicular of that edge
-			Math::Line2d perpendicular = edge.getPerpendicular(circle);
-
-			Math::Vector3d point;
-			Math::Vector2d p;
-			// If that perpendicular intersects the edge
-			if (edge.intersectsLine(perpendicular, &p)) {
-				Math::Vector2d direction = perpendicular.getDirection();
-				direction.normalize();
-
-				// Move from the intersection until we are at a safe distance
-				Math::Vector2d point1(p - direction * radius);
-				Math::Vector2d point2(p + direction * radius);
-
-				if (center.getDistanceTo(point1) < center.getDistanceTo(point2)) {
-					point = point2.toVector3d();
-				} else {
-					point = point1.toVector3d();
+		Math::Vector3d res;
+		if (!boxSlide(loc, prev, bmin, bmax, res)) {
+			warning("Actor::handleCollisionWith: boxSlide failed, actor \"%s\" is stuck in actor \"%s\"", getName().c_str(), actor->getName().c_str());
+			// Out through the nearest of the four sides, a centimetre past it
+			res = loc;
+			float best = FLT_MAX;
+			for (int i = 0; i < 4; i++) {
+				const int axis = i / 2;
+				const bool isMax = i % 2 == 0;
+				const float limit = isMax ? bmax.getValue(axis) : bmin.getValue(axis);
+				const float dist = fabsf(limit - loc.getValue(axis));
+				if (dist < best) {
+					best = dist;
+					res = loc;
+					res.setValue(axis, limit + (isMax ? 0.01f : -0.01f));
 				}
-			} else { //if not we're around a corner
-				// Find the nearest vertex of the rect
-				Math::Vector2d vertex = rect.getTopLeft();
-				float distance = vertex.getDistanceTo(circle);
-
-				Math::Vector2d other = rect.getTopRight();
-				float otherDist = other.getDistanceTo(circle);
-				if (otherDist < distance) {
-					distance = otherDist;
-					vertex = other;
-				}
-
-				other = rect.getBottomLeft();
-				otherDist = other.getDistanceTo(circle);
-				if (otherDist < distance) {
-					distance = otherDist;
-					vertex = other;
-				}
-
-				other = rect.getBottomRight();
-				if (other.getDistanceTo(circle) < distance) {
-					vertex = other;
-				}
-
-				// and move on a circle around it
-				Math::Vector2d dst = circle - vertex;
-				dst.normalize();
-				dst = dst * radius;
-				point = (vertex + dst).toVector3d();
 			}
-
-			float z = vec->z();
-			*vec = point - circlePos;
-			vec->z() = z;
-			collisionHandlerCallback(actor);
-			return true;
+		} else {
+			warning("Actor::handleCollisionWith: boxSlide succeeded, actor \"%s\" is sliding along actor \"%s\"", getName().c_str(), actor->getName().c_str());
 		}
+
+		m2.transform(&res, true);
+		*vec = res - off1 - _pos;
+		collisionHandlerCallback(actor);
+		return true;
 	}
 
 	return false;
