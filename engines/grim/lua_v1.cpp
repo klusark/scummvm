@@ -953,7 +953,6 @@ struct luaL_reg grimMainOpcodes[] = {
 	{ "SetGamma", LUA_OPCODE(Lua_V1, SetGamma) },
 	{ "SetActorWalkDominate", LUA_OPCODE(Lua_V1, SetActorWalkDominate) },
 	{ "SetActorConstrain", LUA_OPCODE(Lua_V1, SetActorConstrain) },
-	{ "GetActorConstrain", LUA_OPCODE(Lua_V1, GetActorConstrain) },
 	{ "RenderModeUser", LUA_OPCODE(Lua_V1, RenderModeUser) },
 	{ "ForceRefresh", LUA_OPCODE(Lua_V1, ForceRefresh) },
 	{ "DimScreen", LUA_OPCODE(Lua_V1, DimScreen) },
@@ -988,7 +987,6 @@ struct luaL_reg grimMainOpcodes[] = {
 	{ "TextFileGetLineCount", LUA_OPCODE(Lua_V1, TextFileGetLineCount) },
 	{ "TextFileGetLine", LUA_OPCODE(Lua_V1, TextFileGetLine) },
 	{ "ScreenShot", LUA_OPCODE(Lua_V1, ScreenShot) },
-	{ "DumpFrame", LUA_OPCODE(Lua_V1, DumpFrame) },
 	{ "GetSaveGameImage", LUA_OPCODE(Lua_V1, GetSaveGameImage) },
 	{ "GetImage", LUA_OPCODE(Lua_V1, GetImage) },
 	{ "FreeImage", LUA_OPCODE(Lua_V1, FreeImage) },
@@ -1017,7 +1015,8 @@ struct luaL_reg grimMainOpcodes[] = {
 	{ "DumpSectors", LUA_OPCODE(Lua_V1, DumpSectors) },
 	{ "IsSectorActive", LUA_OPCODE(Lua_V1, IsSectorActive) },
 	{ "GetActorTurnRate", LUA_OPCODE(Lua_V1, GetActorTurnRate) },
-	{ "DumpFrame", LUA_OPCODE(Lua_V1, DumpFrame) }
+	{ "DumpFrame", LUA_OPCODE(Lua_V1, DumpFrame) },
+	{ "GetActorConstrain", LUA_OPCODE(Lua_V1, GetActorConstrain) }
 };
 
 static struct luaL_reg grimTextOpcodes[] = {
