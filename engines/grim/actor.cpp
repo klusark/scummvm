@@ -2269,13 +2269,16 @@ bool Actor::handleCollisionWith(Actor *actor, CollisionMode mode, Math::Vector3d
 	CollisionMode mode2 = actor->_collisionMode;
 
 	// (FUN_004939f0: the actor that moves is a sphere whatever its own mode is, only the mode of the other one counts)
-	if (g_grim->getGameType() == GType_GRIM)
-		mode1 = CollisionSphere;
+	//if (g_grim->getGameType() == GType_GRIM)
+	mode1 = CollisionSphere;
 
-	if (g_grim->getGameType() == GType_GRIM && mode2 == CollisionBox)
+	if (/*g_grim->getGameType() == GType_GRIM && */mode2 == CollisionBox) {
+		warning("Collision new box!");
 		return handleBoxCollision(actor, p1, size1, p2, size2, vec);
+	}
 
 	if (mode1 == CollisionSphere && mode2 == CollisionSphere) {
+		warning("Collision sphere!");
 		Math::Vector3d pos = p1 + *vec;
 		float distance = (pos - p2).getMagnitude();
 		if (distance < size1 + size2) {
@@ -2295,6 +2298,7 @@ bool Actor::handleCollisionWith(Actor *actor, CollisionMode mode, Math::Vector3d
 	} else {
 		Math::Vector3d bboxSize1, bboxSize2;
 		Math::Vector3d bboxPos1, bboxPos2;
+		warning("Collision else!");
 
 		// get bboxSize and bboxPos for the current and the colliding actor
 		this->getBBoxInfo(bboxPos1, bboxSize1);
