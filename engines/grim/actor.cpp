@@ -2169,8 +2169,8 @@ bool Actor::handleBoxCollision(Actor *actor, const Math::Vector3d &p1, float siz
 		return false;
 
 	const float scale = actor->_collisionScale;
-	const Math::Vector3d boxMin = model->_hasFileBox ? model->_fileMin : model->_bboxPos;
-	const Math::Vector3d boxMax = model->_hasFileBox ? model->_fileMax : model->_bboxPos + model->_bboxSize;
+	const Math::Vector3d boxMin = model->_bboxPos;
+	const Math::Vector3d boxMax = model->_bboxPos + model->_bboxSize;
 	const Math::Vector3d pad(r1, r1, r1);
 	const Math::Vector3d bmin = boxMin * scale - pad;
 	const Math::Vector3d bmax = boxMax * scale + pad;
