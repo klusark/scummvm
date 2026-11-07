@@ -393,14 +393,16 @@ void Lua_V2::CompleteChore() {
 	lua_Object param1 = lua_getparam(1);
 	lua_Object param2 = lua_getparam(2);
 
-	if (!lua_isuserdata(param1) || !lua_isnumber(param2))
-		error("Lua_V2::CompleteChore - Unknown params");
+	if (!lua_isuserdata(param1) || !lua_isnumber(param2)) {
+		warning("Lua_V2::CompleteChore - Unknown params");
+		return;
+	}
 
 	// Guesswork based on StopChore:
 	int chore = lua_getuserdata(param1);
 	float time = lua_getnumber(param2);
 
-	error("Lua_V2::CompleteChore(%d, %f) - TODO: Implement opcode", chore, time);
+	warning("Lua_V2::CompleteChore(%d, %f) - TODO: Implement opcode", chore, time);
 }
 
 void Lua_V2::SetActorSortOrder() {
@@ -547,6 +549,10 @@ void Lua_V2::PutActorInSet() {
 		return;
 
 	Actor *actor = getactor(actorObj);
+	if (!actor) {
+		lua_pushnil();
+		return;
+	}
 
 	if (!lua_isstring(setObj) && !lua_isnil(setObj)) {
 		lua_pushnil();
