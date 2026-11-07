@@ -65,6 +65,7 @@ public:
 
 	void setJoints(int joint1, int joint2, int joint3);
 	void loadJoints(ModelNode *nodes);
+	void loadJoints(ModelNode *nodes, int numNodes);
 	void setMaxAngles(float maxPitch, float maxYaw, float maxRoll);
 
 	void lookAt(bool entering, const Math::Vector3d &point, float rate, const Math::Matrix4 &matrix);
