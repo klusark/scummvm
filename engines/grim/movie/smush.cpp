@@ -83,6 +83,9 @@ SmushPlayer::~SmushPlayer() {
 		delete timer;
 	}
 
+	// (after a movie that was not found as SMUSH, _videoDecoder is the Theora decoder: give the base class back the
+	// SMUSH one, the one it closes and deletes, or it would use the Theora decoder after it is deleted and delete it again)
+	_videoDecoder = _smushDecoder;
 	delete _theoraDecoder;
 }
 
