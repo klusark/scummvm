@@ -23,6 +23,8 @@
 #define GRIM_REGISTRY_H
 
 #include "common/str.h"
+#include "common/hashmap.h"
+#include "common/hash-str.h"
 
 namespace Grim {
 
@@ -31,7 +33,8 @@ public:
 	enum ValueType {
 		String,
 		Integer,
-		Boolean
+		Boolean,
+		None // (a key that was never written)
 	};
 
 	const Common::String &getString(const Common::String &key) const;
@@ -54,6 +57,8 @@ private:
 
 	class Value {
 	public:
+		Value() : _type(None) { _val._num = 0; _val._bool = false; }
+
 		void setString(const Common::String &str);
 		void setInt(int num);
 		void setBool(bool val);
@@ -93,6 +98,8 @@ private:
 	Value _spewOnError;
 	Value _transcript;
 	Value _dummy;
+	// (the keys the engine does not know: the original keeps any key in the registry)
+	Common::HashMap<Common::String, Value, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _otherKeys;
 
 	// Remastered (TODO: Fix the type-handling), TODO: Disable for original
 	Value _directorsCommentary;

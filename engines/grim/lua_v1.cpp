@@ -232,6 +232,9 @@ void Lua_V1::ReadRegistryValue() {
 	case Registry::Boolean:
 		pushbool(g_registry->getBool(key));
 		break;
+	case Registry::None:
+		lua_pushnil();
+		break;
 	}
 }
 
