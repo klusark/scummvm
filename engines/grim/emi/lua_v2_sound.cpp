@@ -318,7 +318,7 @@ void Lua_V2::PlayLoadedSoundFrom() {
 
 	if (!lua_isnumber(xObj) || !lua_isnumber(yObj) || !lua_isnumber(zObj) ||
 	    !lua_isnumber(volumeObj)) {
-		error("Lua_V2::PlayLoadedSoundFrom - ERROR: Unknown parameters");
+		warning("Lua_V2::PlayLoadedSoundFrom - ERROR: Unknown parameters");
 		return;
 	}
 
@@ -394,7 +394,7 @@ void Lua_V2::PlaySound() {
 	lua_Object volumeObj = lua_getparam(2);
 
 	if (!lua_isstring(strObj)) {
-		error("Lua_V2::PlaySound - ERROR: Unknown parameters");
+		warning("Lua_V2::PlaySound - ERROR: Unknown parameters");
 		return;
 	}
 	const char *str = lua_getstring(strObj);
@@ -425,12 +425,12 @@ void Lua_V2::PlaySoundFrom() {
 	int volume = MAX_EMI_VOLUME;
 
 	if (!lua_isstring(strObj)) {
-		error("Lua_V2::PlaySoundFrom - ERROR: Unknown parameters");
+		warning("Lua_V2::PlaySoundFrom - ERROR: Unknown parameters");
 		return;
 	}
 
 	if (!lua_isnumber(xObj) || !lua_isnumber(yObj) || !lua_isnumber(zObj)) {
-		error("Lua_V2::PlayLoadedSoundFrom - ERROR: Unknown parameters");
+		warning("Lua_V2::PlayLoadedSoundFrom - ERROR: Unknown parameters");
 		return;
 	}
 	float x = lua_getnumber(xObj);
@@ -443,7 +443,7 @@ void Lua_V2::PlaySoundFrom() {
 	} else if (lua_isnumber(volumeOrUnknownObj)) {
 		volume = (int)lua_getnumber(volumeOrUnknownObj);
 	} else {
-		error("Lua_V2::PlaySoundFrom - ERROR: Unknown parameters");
+		warning("Lua_V2::PlaySoundFrom - ERROR: Unknown parameters");
 		return;
 	}
 
@@ -460,7 +460,7 @@ void Lua_V2::PlaySoundFrom() {
 void Lua_V2::GetSoundVolume() {
 	lua_Object idObj = lua_getparam(1);
 	if (!lua_isuserdata(idObj) || lua_tag(idObj) != MKTAG('A', 'I', 'F', 'F')) {
-		error("Lua_V2::GetSoundVolume: Unknown Parameters");
+		warning("Lua_V2::GetSoundVolume: Unknown Parameters");
 		return;
 	}
 	PoolSound *sound = PoolSound::getPool().getObject(lua_getuserdata(idObj));
@@ -476,11 +476,11 @@ void Lua_V2::SetSoundVolume() {
 	lua_Object idObj = lua_getparam(1);
 	lua_Object volumeObj = lua_getparam(2);
 	if (!lua_isuserdata(idObj) || lua_tag(idObj) != MKTAG('A', 'I', 'F', 'F')) {
-		error("Lua_V2::SetSoundVolume: no valid sound id");
+		warning("Lua_V2::SetSoundVolume: no valid sound id");
 		return;
 	}
 	if (!lua_isnumber(volumeObj)) {
-		error("Lua_V2::SetSoundVolume - ERROR: Unknown parameters");
+		warning("Lua_V2::SetSoundVolume - ERROR: Unknown parameters");
 		return;
 	}
 

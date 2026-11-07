@@ -78,7 +78,12 @@ void Lua_V2::MakeCurrentSetup() {
 		g_grim->makeCurrentSetup(num);
 	} else if (lua_isstring(setupObj)) {
 		const char *setupName = lua_getstring(setupObj);
-		error("Lua_V2::MakeCurrentSetup: Not implemented case: setup: %s", setupName);
+		Set *set = g_grim->getCurrSet();
+		int num = set ? set->getSetupIndex(setupName) : -1;
+		if (num >= 0)
+			g_grim->makeCurrentSetup(num);
+		else
+			warning("Lua_V2::MakeCurrentSetup: no setup %s", setupName);
 	}
 }
 
@@ -364,7 +369,7 @@ void Lua_V2::GetCameraRoll() {
 void Lua_V2::PitchCamera() {
 	lua_Object pitchObj = lua_getparam(1);
 	if (!lua_isnumber(pitchObj)) {
-		error("Lua_V2::PitchCamera - Parameter is not a number!");
+		warning("Lua_V2::PitchCamera - Parameter is not a number!");
 		return;
 	}
 
@@ -379,7 +384,7 @@ void Lua_V2::PitchCamera() {
 void Lua_V2::YawCamera() {
 	lua_Object yawObj = lua_getparam(1);
 	if (!lua_isnumber(yawObj)) {
-		error("Lua_V2::YawCamera - Parameter is not a number!");
+		warning("Lua_V2::YawCamera - Parameter is not a number!");
 		return;
 	}
 
@@ -394,7 +399,7 @@ void Lua_V2::YawCamera() {
 void Lua_V2::RollCamera() {
 	lua_Object rollObj = lua_getparam(1);
 	if (!lua_isnumber(rollObj)) {
-		error("Lua_V2::RollCamera - Parameter is not a number!");
+		warning("Lua_V2::RollCamera - Parameter is not a number!");
 		return;
 	}
 
@@ -690,16 +695,11 @@ void Lua_V2::SetLayerSortOrder() {
 }
 
 // Stub function for builtin functions not yet implemented
-/*static void stubWarning(const char *funcName) {
+static void stubWarning(const char *funcName) {
 	warning("Stub function: %s", funcName);
-}*/
-
-static void stubError(const char *funcName) {
-	error("Stub function: %s", funcName);
 }
 
 #define STUB_FUNC(name) void name() { stubWarning(#name); }
-#define STUB_FUNC2(name) void name() { stubError(#name); }
 
 // Opcodes more or less differ to Grim Lua_V1::* LUA_OPCODEs
 // STUB_FUNC2(Lua_V2::SetActorWalkChore)
@@ -767,20 +767,20 @@ void Lua_V2::RenderModeUser() {
 }
 
 // Monkey specific LUA_OPCODEs only used for debug
-STUB_FUNC2(Lua_V2::ToggleDebugDraw)
-STUB_FUNC2(Lua_V2::ToggleDrawCameras)
-STUB_FUNC2(Lua_V2::ToggleDrawLights)
-STUB_FUNC2(Lua_V2::ToggleDrawSectors)
-STUB_FUNC2(Lua_V2::ToggleDrawBBoxes)
-STUB_FUNC2(Lua_V2::ToggleDrawFPS)
-STUB_FUNC2(Lua_V2::ToggleDrawPerformance)
-STUB_FUNC2(Lua_V2::ToggleDrawActorStats)
-STUB_FUNC2(Lua_V2::SectEditSelect)
-STUB_FUNC2(Lua_V2::SectEditPlace)
-STUB_FUNC2(Lua_V2::SectEditDelete)
-STUB_FUNC2(Lua_V2::SectEditInsert)
-STUB_FUNC2(Lua_V2::SectEditSortAdd)
-STUB_FUNC2(Lua_V2::SectEditForgetIt)
+STUB_FUNC(Lua_V2::ToggleDebugDraw)
+STUB_FUNC(Lua_V2::ToggleDrawCameras)
+STUB_FUNC(Lua_V2::ToggleDrawLights)
+STUB_FUNC(Lua_V2::ToggleDrawSectors)
+STUB_FUNC(Lua_V2::ToggleDrawBBoxes)
+STUB_FUNC(Lua_V2::ToggleDrawFPS)
+STUB_FUNC(Lua_V2::ToggleDrawPerformance)
+STUB_FUNC(Lua_V2::ToggleDrawActorStats)
+STUB_FUNC(Lua_V2::SectEditSelect)
+STUB_FUNC(Lua_V2::SectEditPlace)
+STUB_FUNC(Lua_V2::SectEditDelete)
+STUB_FUNC(Lua_V2::SectEditInsert)
+STUB_FUNC(Lua_V2::SectEditSortAdd)
+STUB_FUNC(Lua_V2::SectEditForgetIt)
 
 // ResidualVM-hacks:
 void Lua_V2::GetResidualVMPreference() {
