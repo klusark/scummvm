@@ -42,7 +42,7 @@ void GLContext::gl_transform_to_viewport(GLVertex *v) {
 	// coordinates
 	winv = (float)(1.0 / v->pc.W);
 	// Compute and clamp X coordinate
-	result = v->pc.X * winv * viewport.scale.X + viewport.trans.X;
+	result = floorf((v->pc.X * winv * viewport.scale.X + viewport.trans.X) * ZB_POINT_SUBPIXEL_ONE + 0.5f);
 	if (result > (float)INT_MAX)
 			v->zp.x = INT_MAX;
 	else if (result < (float)INT_MIN)
@@ -51,7 +51,7 @@ void GLContext::gl_transform_to_viewport(GLVertex *v) {
 			v->zp.x = (int)result;
 
 	// Compute and clamp Y coordinate
-	result = v->pc.Y * winv * viewport.scale.Y + viewport.trans.Y;
+	result = floorf((v->pc.Y * winv * viewport.scale.Y + viewport.trans.Y) * ZB_POINT_SUBPIXEL_ONE + 0.5f);
 	if (result > (float)INT_MAX)
 			v->zp.y = INT_MAX;
 	else if (result < (float)INT_MIN)
@@ -404,16 +404,16 @@ int count_triangles, count_triangles_textured, count_pixels;
 void GLContext::gl_draw_triangle_fill(GLContext *c, GLVertex *p0, GLVertex *p1, GLVertex *p2) {
 	if (c->_profilingEnabled) {
 		int norm;
-		assert(p0->zp.x >= 0 && p0->zp.x < c->fb->getPixelBufferWidth());
-		assert(p0->zp.y >= 0 && p0->zp.y < c->fb->getPixelBufferHeight());
-		assert(p1->zp.x >= 0 && p1->zp.x < c->fb->getPixelBufferWidth());
-		assert(p1->zp.y >= 0 && p1->zp.y < c->fb->getPixelBufferHeight());
-		assert(p2->zp.x >= 0 && p2->zp.x < c->fb->getPixelBufferWidth());
-		assert(p2->zp.y >= 0 && p2->zp.y < c->fb->getPixelBufferHeight());
+		assert(p0->zp.x >= 0 && p0->zp.x <= c->fb->getPixelBufferWidth() << ZB_POINT_SUBPIXEL_BITS);
+		assert(p0->zp.y >= 0 && p0->zp.y <= c->fb->getPixelBufferHeight() << ZB_POINT_SUBPIXEL_BITS);
+		assert(p1->zp.x >= 0 && p1->zp.x <= c->fb->getPixelBufferWidth() << ZB_POINT_SUBPIXEL_BITS);
+		assert(p1->zp.y >= 0 && p1->zp.y <= c->fb->getPixelBufferHeight() << ZB_POINT_SUBPIXEL_BITS);
+		assert(p2->zp.x >= 0 && p2->zp.x <= c->fb->getPixelBufferWidth() << ZB_POINT_SUBPIXEL_BITS);
+		assert(p2->zp.y >= 0 && p2->zp.y <= c->fb->getPixelBufferHeight() << ZB_POINT_SUBPIXEL_BITS);
 
 		norm = (p1->zp.x - p0->zp.x) * (p2->zp.y - p0->zp.y) -
 				(p2->zp.x - p0->zp.x) * (p1->zp.y - p0->zp.y);
-		count_pixels += abs(norm) / 2;
+		count_pixels += abs(norm) / (2 * ZB_POINT_SUBPIXEL_ONE * ZB_POINT_SUBPIXEL_ONE);
 		count_triangles++;
 	}
 
