@@ -124,6 +124,11 @@ bool BinkPlayer::loadFile(const Common::String &filename) {
 		return ret;
 	}
 
+	// The original replaces the extension of the name, if it has one, by .m4b, and adds it otherwise
+	// (StartMovie("intro.m4b") and StartMovie("intro") open the same file)
+	const char *dot = strchr(_fname.c_str(), '.');
+	if (dot)
+		_fname = Common::String(_fname.c_str(), dot);
 	_fname += ".m4b";
 
 	Common::SeekableReadStream *stream = SearchMan.createReadStreamForMember(Common::Path(_fname));
