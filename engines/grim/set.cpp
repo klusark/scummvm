@@ -568,14 +568,19 @@ void Set::Setup::setRoll(Math::Angle roll) {
 	}
 }
 
+// The spot light angles are in degrees in Grim, in radians in EMI.
+static float angleToRadians(float angle) {
+	return g_grim->getGameType() == GType_MONKEY4 ? angle : angle * (float)M_PI / 180.0f;
+}
+
 void Light::setUmbra(float angle) {
 	_umbraangle = angle;
-	_cosumbraangle = cosf(angle * (float)M_PI / 180.0f);
+	_cosumbraangle = cosf(angleToRadians(angle));
 }
 
 void Light::setPenumbra(float angle) {
 	_penumbraangle = angle;
-	_cospenumbraangle = cosf(angle * (float)M_PI / 180.0f);
+	_cospenumbraangle = cosf(angleToRadians(angle));
 }
 
 void Light::setIntensity(float intensity) {
@@ -647,7 +652,7 @@ void Light::loadBinary(Common::SeekableReadStream *data) {
 	// This relies on the order of the LightType enum.
 	_type = (LightType)data->readSint32LE();
 
-	setIntensity(data->readFloatLE());
+	float intensity = data->readFloatLE();
 
 	int j = data->readSint32LE();
 	// This always seems to be 0
@@ -655,9 +660,21 @@ void Light::loadBinary(Common::SeekableReadStream *data) {
 		warning("Light::loadBinary j != 0");
 	}
 
-	_color.getRed() = data->readSint32LE();
-	_color.getGreen() = data->readSint32LE();
-	_color.getBlue() = data->readSint32LE();
+	// Some lights have color components over 255 (the sun in jun), which
+	// the original uses as they are: the excess goes into the intensity.
+	int r = data->readSint32LE();
+	int g = data->readSint32LE();
+	int b = data->readSint32LE();
+	const int maxComponent = MAX(MAX(r, g), b);
+	if (maxComponent > 255) {
+		const float scale = 255.0f / maxComponent;
+		r = (int)(r * scale + 0.5f);
+		g = (int)(g * scale + 0.5f);
+		b = (int)(b * scale + 0.5f);
+		intensity /= scale;
+	}
+	_color = Color(CLIP(r, 0, 255), CLIP(g, 0, 255), CLIP(b, 0, 255));
+	setIntensity(intensity);
 
 	_falloffNear = data->readFloatLE();
 	_falloffFar = data->readFloatLE();
