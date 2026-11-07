@@ -194,8 +194,7 @@ Registry::Value &Registry::value(const Common::String &key) {
 	} else if (scumm_stricmp("Fullscreen", key.c_str()) == 0) {
 		return _fullScreen;
 	} else {
-		warning("write unknown regisry value %s", key.c_str());
-		return _musicVolume;
+		return _otherKeys[key];
 	}
 
 	assert(0);
@@ -254,8 +253,9 @@ const Registry::Value &Registry::value(const Common::String &key) const {
 	} else if (scumm_stricmp("Fullscreen", key.c_str()) == 0) {
 		return _fullScreen;
 	} else {
-		warning("unknown regisry value %s", key.c_str());
-		return _musicVolume;
+		if (_otherKeys.contains(key))
+			return _otherKeys[key];
+		return _dummy;
 	}
 
 	assert(0);
