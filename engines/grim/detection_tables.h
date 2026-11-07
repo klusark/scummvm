@@ -28,6 +28,32 @@ namespace Grim {
 
 static const GrimGameDescription gameDescriptions[] = {
 	{
+		// Engine test data (grim_tools/cleanroom), no file of the game: a folder of loose files with this marker
+		{
+			"grim",
+			"Test data",
+			AD_ENTRY1("grimtestdata.txt", nullptr),
+			Common::EN_ANY,
+			Common::kPlatformWindows,
+			GF_TESTDATA,
+			GUI_OPTIONS_GRIME
+		},
+		GType_GRIM
+	},
+	{
+		// Engine test data for Escape from Monkey Island (grim_tools/cleanroom): our own .m4b archives and this marker
+		{
+			"monkey4",
+			"Test data",
+			AD_ENTRY1("emitestdata.txt", nullptr),
+			Common::EN_ANY,
+			Common::kPlatformWindows,
+			GF_TESTDATA,
+			GUI_OPTIONS_GRIME
+		},
+		GType_MONKEY4
+	},
+	{
 		// Grim Fandango English version (patched)
 		{
 			"grim",
