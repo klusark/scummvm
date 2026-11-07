@@ -1031,6 +1031,10 @@ void Actor::setTurnChores(int left_chore, int right_chore, Costume *cost) {
 	if (_leftTurnChore.equals(cost, left_chore) && _rightTurnChore.equals(cost, right_chore))
 		return;
 
+	if ((left_chore >= 0 && right_chore < 0) || (left_chore < 0 && right_chore >= 0)) {
+		warning("Unexpectedly got only one turn chore");
+	}
+
 	if (!cost) {
 		cost = _leftTurnChore._costume;
 	}
@@ -1044,14 +1048,13 @@ void Actor::setTurnChores(int left_chore, int right_chore, Costume *cost) {
 
 	_leftTurnChore = ActionChore(cost, left_chore);
 	_rightTurnChore = ActionChore(cost, right_chore);
-
-	if ((left_chore >= 0 && right_chore < 0) || (left_chore < 0 && right_chore >= 0))
-		error("Unexpectedly got only one turn chore");
 }
 
 void Actor::setTalkChore(int index, int chore, Costume *cost) {
-	if (index < 1 || index > 10)
-		error("Got talk chore index out of range (%d)", index);
+	if (index < 1 || index > 10) {
+		warning("Got talk chore index out of range (%d)", index);
+		return;
+	}
 
 	index--;
 
@@ -1156,7 +1159,7 @@ void Actor::sayLine(const char *msgId, bool background, float x, float y) {
 	Common::String msg = LuaBase::instance()->parseMsgText(msgId, id);
 
 	if (id[0] == 0) {
-		error("Actor::sayLine: No message ID for text");
+		warning("Actor::sayLine: No message ID for text");
 		return;
 	}
 
@@ -1366,8 +1369,9 @@ void Actor::pushCostume(const char *n) {
 	}
 
 	Costume *newCost = g_resourceloader->loadCostume(n, this, getCurrentCostume());
-
-	_costumeStack.push_back(newCost);
+	if (newCost) {
+		_costumeStack.push_back(newCost);
+	}
 }
 
 void Actor::setColormap(const char *map) {
@@ -1839,13 +1843,19 @@ void Actor::drawCostume(Costume *costume) {
 }
 
 void Actor::setShadowPlane(const char *n) {
-	assert(_activeShadowSlot != -1);
+	if (_activeShadowSlot == -1) {
+		warning("Actor::setShadowPlane: No active shadow slot set");
+		return;
+	}
 
 	_shadowArray[_activeShadowSlot].name = n;
 }
 
 void Actor::addShadowPlane(const char *n, Set *scene, int shadowId) {
-	assert(shadowId != -1);
+	if (shadowId < 0 || shadowId >= MAX_SHADOWS) {
+		warning("Actor::addShadowPlane: shadowId %d is out of range", shadowId);
+		return;
+	}
 
 	// This needs to be an exact match, because with a substring search a search for sector
 	// "shadow1" would return sector "shadow10" in set st, causing shadows not to be cast
@@ -1896,7 +1906,10 @@ void Actor::addShadowPlane(const char *n) {
 }
 
 void Actor::setActiveShadow(int shadowId) {
-	assert(shadowId >= 0 && shadowId < MAX_SHADOWS);
+	if (shadowId < 0 || shadowId >= MAX_SHADOWS) {
+		warning("Actor::setActivateShadow: shadowId %d is out of range", shadowId);
+		return;
+	}
 
 	_activeShadowSlot = shadowId;
 	_shadowArray[_activeShadowSlot].active = true;
@@ -1910,19 +1923,32 @@ void Actor::setShadowValid(int valid) {
 }
 
 void Actor::setActivateShadow(int shadowId, bool state) {
-	assert(shadowId >= 0 && shadowId < MAX_SHADOWS);
-
-	_shadowArray[shadowId].active = state;
+	if (shadowId < 0 || shadowId >= MAX_SHADOWS) {
+		warning("Actor::setActivateShadow: shadowId %d is out of range", shadowId);
+		return;
+	}
+	_activeShadowSlot = shadowId;
+	_shadowArray[_activeShadowSlot].active = state;
 }
 
 void Actor::setShadowPoint(const Math::Vector3d &p) {
-	assert(_activeShadowSlot != -1);
+	//assert(_activeShadowSlot != -1);
+
+	if (_activeShadowSlot == -1) {
+		warning("Actor::setShadowPoint: No active shadow slot set");
+		return;
+	}
 
 	_shadowArray[_activeShadowSlot].pos = p;
 }
 
 void Actor::setShadowColor(const Color &color) {
-	assert(_activeShadowSlot != -1);
+	//assert(_activeShadowSlot != -1);
+
+	if (_activeShadowSlot == -1) {
+		warning("Actor::setShadowColor: No active shadow slot set");
+		return;
+	}
 
 	_shadowArray[_activeShadowSlot].color = color;
 }
