@@ -1923,6 +1923,11 @@ void Actor::setActiveShadow(int shadowId) {
 }
 
 void Actor::setShadowValid(int valid) {
+	if (_activeShadowSlot == -1) {
+		warning("Actor::setShadowValid: No active shadow slot set");
+		return;
+	}
+
 	if (valid == -1)
 		_shadowArray[_activeShadowSlot].dontNegate = true;
 	else
