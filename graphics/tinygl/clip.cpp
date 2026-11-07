@@ -41,20 +41,20 @@ void GLContext::gl_transform_to_viewport(GLVertex *v) {
 
 	// coordinates
 	winv = (float)(1.0 / v->pc.W);
-	// Compute and clamp X coordinate
-	result = v->pc.X * winv * viewport.scale.X + viewport.trans.X;
-	if (result > (float)INT_MAX)
+	// Compute and clamp X coordinate (rounded to the sub-pixel grid)
+	result = floorf((v->pc.X * winv * viewport.scale.X + viewport.trans.X) * ZB_POINT_SUBPIXEL_ONE + 0.5f);
+	if (result >= (float)INT_MAX)
 			v->zp.x = INT_MAX;
-	else if (result < (float)INT_MIN)
+	else if (result <= (float)INT_MIN)
 			v->zp.x = INT_MIN;
 	else
 			v->zp.x = (int)result;
 
 	// Compute and clamp Y coordinate
-	result = v->pc.Y * winv * viewport.scale.Y + viewport.trans.Y;
-	if (result > (float)INT_MAX)
+	result = floorf((v->pc.Y * winv * viewport.scale.Y + viewport.trans.Y) * ZB_POINT_SUBPIXEL_ONE + 0.5f);
+	if (result >= (float)INT_MAX)
 			v->zp.y = INT_MAX;
-	else if (result < (float)INT_MIN)
+	else if (result <= (float)INT_MIN)
 			v->zp.y = INT_MIN;
 	else
 			v->zp.y = (int)result;
@@ -403,17 +403,19 @@ int count_triangles, count_triangles_textured, count_pixels;
 
 void GLContext::gl_draw_triangle_fill(GLContext *c, GLVertex *p0, GLVertex *p1, GLVertex *p2) {
 	if (c->_profilingEnabled) {
-		int norm;
-		assert(p0->zp.x >= 0 && p0->zp.x < c->fb->getPixelBufferWidth());
-		assert(p0->zp.y >= 0 && p0->zp.y < c->fb->getPixelBufferHeight());
-		assert(p1->zp.x >= 0 && p1->zp.x < c->fb->getPixelBufferWidth());
-		assert(p1->zp.y >= 0 && p1->zp.y < c->fb->getPixelBufferHeight());
-		assert(p2->zp.x >= 0 && p2->zp.x < c->fb->getPixelBufferWidth());
-		assert(p2->zp.y >= 0 && p2->zp.y < c->fb->getPixelBufferHeight());
+		const int w = c->fb->getPixelBufferWidth() << ZB_POINT_SUBPIXEL_BITS;
+		const int h = c->fb->getPixelBufferHeight() << ZB_POINT_SUBPIXEL_BITS;
+		assert(p0->zp.x >= 0 && p0->zp.x <= w);
+		assert(p0->zp.y >= 0 && p0->zp.y <= h);
+		assert(p1->zp.x >= 0 && p1->zp.x <= w);
+		assert(p1->zp.y >= 0 && p1->zp.y <= h);
+		assert(p2->zp.x >= 0 && p2->zp.x <= w);
+		assert(p2->zp.y >= 0 && p2->zp.y <= h);
 
-		norm = (p1->zp.x - p0->zp.x) * (p2->zp.y - p0->zp.y) -
-				(p2->zp.x - p0->zp.x) * (p1->zp.y - p0->zp.y);
-		count_pixels += abs(norm) / 2;
+		float norm = ((float)(p1->zp.x - p0->zp.x) * (float)(p2->zp.y - p0->zp.y) -
+				(float)(p2->zp.x - p0->zp.x) * (float)(p1->zp.y - p0->zp.y)) /
+				(ZB_POINT_SUBPIXEL_ONE * ZB_POINT_SUBPIXEL_ONE);
+		count_pixels += (int)(fabsf(norm) / 2);
 		count_triangles++;
 	}
 

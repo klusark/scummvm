@@ -209,6 +209,28 @@ end:
 	z += dzdx;
 }
 
+// The rasterization follows OpenGL: a pixel is drawn when its centre is inside the triangle, or on its left or
+// top edge. The window coordinates are fixed point (ZB_POINT_SUBPIXEL_BITS).
+
+// The first row whose centre is at or below window y
+static inline int firstRow(int y) {
+	return (y + ZB_POINT_SUBPIXEL_ONE / 2 - 1) >> ZB_POINT_SUBPIXEL_BITS;
+}
+
+// The step in x of the edge a-b from one row to the next, 16.16
+static inline int edgeSlope(const ZBufferPoint *a, const ZBufferPoint *b) {
+	const int dy = b->y - a->y;
+	if (dy <= 0)
+		return 0;
+	return (int)(((int64)(b->x - a->x) << 16) / dy);
+}
+
+// x - 1/2 of the edge from a at the centre of row y, 16.16: the first pixel at or right of the edge is its ceiling
+static inline int edgeX(const ZBufferPoint *a, int slope, int y) {
+	const int64 yc = ((int64)y << ZB_POINT_SUBPIXEL_BITS) + ZB_POINT_SUBPIXEL_ONE / 2 - a->y;
+	return (int)(((int64)a->x << (16 - ZB_POINT_SUBPIXEL_BITS)) + (((int64)slope * yc) >> ZB_POINT_SUBPIXEL_BITS) - 0x8000);
+}
+
 template <bool kSmoothMode, bool kDepthWrite, bool kFogMode, bool kAlphaTestEnabled, bool kEnableScissor,
           bool kBlendingEnabled, bool kStencilEnabled, bool kDepthTestEnabled>
 void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint *p2,
@@ -223,11 +245,12 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 	byte *ps1 = nullptr;
 	int part, update_left = 1, update_right = 1;
 
-	int nb_lines, dx1, dy1, tmp, dx2, dy2, y;
+	int nb_lines, y;
 
-	int error = 0, derror = 0;
+	// left edge: x - 1/2 (16.16), its step, the first pixel of the row
+	int xl = 0, dxldy = 0;
 	int x1 = 0, dxdy_min = 0, dxdy_max = 0;
-	// warning: x2 is multiplied by 2^16
+	// right edge: x - 1/2 (16.16) less one, so that x2 >> 16 is the last pixel of the row
 	int x2 = 0, dx2dy2 = 0;
 
 	int z1 = 0, dzdx = 0, dzdy = 0, dzdl_min = 0, dzdl_max = 0;
@@ -262,11 +285,13 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 
 	// we compute dXdx and dXdy for all interpolated values
 
-	fdx1 = (float)(p1->x - p0->x);
-	fdy1 = (float)(p1->y - p0->y);
+	// (in pixels)
+	const float subpixel = 1.0f / ZB_POINT_SUBPIXEL_ONE;
+	fdx1 = (float)(p1->x - p0->x) * subpixel;
+	fdy1 = (float)(p1->y - p0->y) * subpixel;
 
-	fdx2 = (float)(p2->x - p0->x);
-	fdy2 = (float)(p2->y - p0->y);
+	fdx2 = (float)(p2->x - p0->x) * subpixel;
+	fdy2 = (float)(p2->y - p0->y) * subpixel;
 
 	fz0 = fdx1 * fdy2 - fdx2 * fdy1;
 	if (fz0 == 0)
@@ -357,10 +382,13 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 
 	// screen coordinates
 
-	int pp1 = _pbufWidth * p0->y;
-	pz1 = _zbuf + p0->y * _pbufWidth;
+	// the rows whose centres are in [p0, p1) and [p1, p2)
+	const int row0 = firstRow(p0->y), row1 = firstRow(p1->y), row2 = firstRow(p2->y);
+
+	int pp1 = _pbufWidth * row0;
+	pz1 = _zbuf + row0 * _pbufWidth;
 	if (kStencilEnabled) {
-		ps1 = _sbuf + p0->y * _pbufWidth;
+		ps1 = _sbuf + row0 * _pbufWidth;
 	}
 
 	if (colorMode != ColorMode::NoInterpolation && !kSmoothMode) {
@@ -389,8 +417,8 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 		pr1 = p0;
 		pr2 = p2;
 	}
-	nb_lines = p1->y - p0->y;
-	y = p0->y;
+	nb_lines = row1 - row0;
+	y = row0;
 	for (part = 0; part < 2; part++) {
 		if (part == 1) {
 			// second part
@@ -403,66 +431,58 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 				l1 = p1;
 				l2 = p2;
 			}
-			nb_lines = p2->y - p1->y + 1;
+			nb_lines = row2 - row1;
 		}
 
 		// compute the values for the left edge
 
 		if (update_left) {
-			dy1 = l2->y - l1->y;
-			dx1 = l2->x - l1->x;
-			if (dy1 > 0) {
-				if (dx1 < 0) {
-					tmp = (-dx1 << 16) / dy1;
-					tmp = -tmp;
-				} else {
-					tmp = (dx1 << 16) / dy1;
-				}
-			} else {
-				tmp = 0;
-			}
-			x1 = l1->x;
-			error = 0;
-			derror = tmp & 0x0000ffff;
-			dxdy_min = tmp >> 16;
+			dxldy = edgeSlope(l1, l2);
+			xl = edgeX(l1, dxldy, y);
+			x1 = (xl + 0xffff) >> 16;
+			dxdy_min = dxldy >> 16;
 			dxdy_max = dxdy_min + 1;
 
+			// the values at the centre of the first pixel of the row, from p0
+			const double cx = x1 + 0.5 - (double)p0->x * subpixel;
+			const double cy = y + 0.5 - (double)p0->y * subpixel;
+
 			if (colorMode != ColorMode::NoInterpolation && kFogMode) {
-				f1 = l1->f;
+				f1 = (int)(p0->f + dfdx * cx + dfdy * cy);
 				dfdl_min = (dfdy + dfdx * dxdy_min);
 				dfdl_max = dfdl_min + dfdx;
 			}
 
 			if (kInterpZ) {
-				z1 = l1->z + polyOffset;
+				z1 = (int)(p0->z + dzdx * cx + dzdy * cy) + polyOffset;
 				dzdl_min = (dzdy + dzdx * dxdy_min);
 				dzdl_max = dzdl_min + dzdx;
 			}
 
 			if (colorMode != ColorMode::NoInterpolation && kSmoothMode) {
-				r1 = l1->r;
+				r1 = (int)(p0->r + drdx * cx + drdy * cy);
 				drdl_min = (drdy + drdx * dxdy_min);
 				drdl_max = drdl_min + drdx;
 
-				g1 = l1->g;
+				g1 = (int)(p0->g + dgdx * cx + dgdy * cy);
 				dgdl_min = (dgdy + dgdx * dxdy_min);
 				dgdl_max = dgdl_min + dgdx;
 
-				b1 = l1->b;
+				b1 = (int)(p0->b + dbdx * cx + dbdy * cy);
 				dbdl_min = (dbdy + dbdx * dxdy_min);
 				dbdl_max = dbdl_min + dbdx;
 
-				a1 = l1->a;
+				a1 = (int)(p0->a + dadx * cx + dady * cy);
 				dadl_min = (dady + dadx * dxdy_min);
 				dadl_max = dadl_min + dadx;
 			}
 
 			if (kInterpST || kInterpSTZ) {
-				sz1 = l1->sz;
+				sz1 = (float)(p0->sz + dszdx * cx + dszdy * cy);
 				dszdl_min = (dszdy + dszdx * dxdy_min);
 				dszdl_max = dszdl_min + dszdx;
 
-				tz1 = l1->tz;
+				tz1 = (float)(p0->tz + dtzdx * cx + dtzdy * cy);
 				dtzdl_min = (dtzdy + dtzdx * dxdy_min);
 				dtzdl_max = dtzdl_min + dtzdx;
 			}
@@ -471,19 +491,8 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 		// compute values for the right edge
 
 		if (update_right) {
-			dx2 = (pr2->x - pr1->x);
-			dy2 = (pr2->y - pr1->y);
-			if (dy2 > 0) {
-				if (dx2 < 0) {
-					dx2dy2 = (-dx2 << 16) / dy2;
-					dx2dy2 = -dx2dy2;
-				} else {
-					dx2dy2 = (dx2 << 16) / dy2;
-				}
-			} else {
-				dx2dy2 = 0;
-			}
-			x2 = pr1->x << 16;
+			dx2dy2 = edgeSlope(pr1, pr2);
+			x2 = edgeX(pr1, dx2dy2, y) - 1;
 		}
 
 		// we draw all the scan line of the part
@@ -667,9 +676,8 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 			}
 
 			// left edge
-			error += derror;
-			if (error > 0) {
-				error -= 0x10000;
+			xl += dxldy;
+			if (((xl + 0xffff) >> 16) - x1 != dxdy_min) {
 				x1 += dxdy_max;
 				if (colorMode != ColorMode::NoInterpolation && kFogMode) {
 					f1 += dfdl_max;
