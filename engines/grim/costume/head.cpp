@@ -188,6 +188,17 @@ void Head::loadJoints(ModelNode *nodes) {
 	}
 }
 
+void Head::loadJoints(ModelNode *nodes, int numNodes) {
+	if (_joint1Node >= numNodes || _joint2Node >= numNodes || _joint3Node >= numNodes) {
+		// (joints the model does not have: none move)
+		_joint1.init(nullptr);
+		_joint2.init(nullptr);
+		_joint3.init(nullptr);
+		return;
+	}
+	loadJoints(nodes);
+}
+
 void Head::setMaxAngles(float maxPitch, float maxYaw, float maxRoll) {
 	_maxRoll = maxRoll;
 	_maxPitch = maxPitch;

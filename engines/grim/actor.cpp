@@ -1488,7 +1488,7 @@ void Actor::setTurnChores(int left_chore, int right_chore, Costume *cost) {
 	_rightTurnChore = ActionChore(cost, right_chore);
 
 	if ((left_chore >= 0 && right_chore < 0) || (left_chore < 0 && right_chore >= 0))
-		error("Unexpectedly got only one turn chore");
+		Debug::warning(Debug::Actors, "Actor::setTurnChores: only one turn chore (%d, %d)", left_chore, right_chore);
 }
 
 void Actor::setTalkChore(int index, int chore, Costume *cost) {
