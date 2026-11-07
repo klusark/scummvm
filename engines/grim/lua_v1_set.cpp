@@ -280,6 +280,8 @@ void Lua_V1::MakeCurrentSetup() {
 		return;
 
 	int num = (int)lua_getnumber(setupObj);
+	if (num < 0)
+		return;
 	g_grim->makeCurrentSetup(num);
 }
 
@@ -427,7 +429,12 @@ void Lua_V1::NewObjectState() {
 		zbitmap = lua_getstring(lua_getparam(4));
 	bool transparency = getbool(5);
 
-	ObjectState *state = g_grim->getCurrSet()->addObjectState(setupID, pos, bitmap, zbitmap, transparency);
+	ObjectState *state = g_grim->getCurrSet()->addObjectState(setupID, pos, lua_isstring(lua_getparam(3)) ? bitmap : nullptr,
+	                                                          zbitmap, transparency);
+	if (!state) {
+		lua_pushnil();
+		return;
+	}
 	lua_pushusertag(state->getId(), MKTAG('S','T','A','T'));
 }
 
