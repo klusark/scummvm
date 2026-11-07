@@ -1879,6 +1879,8 @@ void GfxOpenGLS::dimRegion(int xin, int yReal, int w, int h, float level) {
 	w = (int)(w * _scaleW);
 	h = (int)(h * _scaleH);
 	int yin = _screenHeight - yReal - h;
+	if (w <= 0 || h <= 0)
+		return;
 
 	glBindBuffer(GL_ARRAY_BUFFER, _dimRegionVBO);
 
