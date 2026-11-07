@@ -44,6 +44,8 @@ public:
 	void restoreState(SaveGame *state);
 
 private:
+	void setRegion(double t);
+
 	bool _playing;
 	Direction _direction;
 	int _x1;
