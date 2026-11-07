@@ -1288,6 +1288,13 @@ void GfxTinyGL::irisAroundRegion(int x1, int y1, int x2, int y2) {
 	float fy2 = y2;
 	float width = _screenWidth;
 	float height = _screenHeight;
+	// TinyGL scales the viewport by (size - 0.5) / size, truncates the vertices and fills both ends of each span
+	// and line: an edge at x is drawn from x - 1. That is right for the left and top black parts (they end at
+	// x1 - 1, y1 - 1); the right and bottom ones start one further on, so they begin at x2 and y2 as in OpenGL.
+	if (x2 < _gameWidth)
+		fx2 += 1.0f;
+	if (y2 < _gameHeight)
+		fy2 += 1.0f;
 	float points[20] = {
 		0.0f, 0.0f,
 		0.0f, fy1,
