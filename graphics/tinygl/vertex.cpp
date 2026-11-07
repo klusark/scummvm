@@ -75,13 +75,14 @@ void GLContext::gl_eval_viewport() {
 
 	// v->ymin needs to be upside down for transformation
 	int ymin = fb->getPixelBufferHeight() - v->ysize - v->ymin;
-	v->trans.X = (float)(((v->xsize - 0.5) / 2.0) + v->xmin);
-	v->trans.Y = (float)(((v->ysize - 0.5) / 2.0) + ymin);
+	// as in OpenGL: -1 and 1 are the outer edges of the first and last pixels
+	v->trans.X = (float)((v->xsize / 2.0) + v->xmin);
+	v->trans.Y = (float)((v->ysize / 2.0) + ymin);
 	v->trans.Z = (float)(((zsize - 0.5) / 2.0) + ((1 << ZB_POINT_Z_FRAC_BITS)) / 2);
 
-	v->scale.X = (float)((v->xsize - 0.5) / 2.0);
+	v->scale.X = (float)(v->xsize / 2.0);
 	// v->ysize needs to be upside down for scaling
-	v->scale.Y = (float)(-(v->ysize - 0.5) / 2.0);
+	v->scale.Y = (float)(-v->ysize / 2.0);
 	v->scale.Z = (float)(-((zsize - 0.5) / 2.0));
 }
 
