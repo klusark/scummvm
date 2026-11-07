@@ -50,7 +50,7 @@ LuaBase *EMIEngine::createLua() {
 }
 
 const char *EMIEngine::getUpdateFilename() {
-	if (getGamePlatform() == Common::kPlatformWindows && !(getGameFlags() & ADGF_DEMO)) {
+	if (getGamePlatform() == Common::kPlatformWindows && !(getGameFlags() & ADGF_DEMO) && !isTestData()) {
 		switch (getGameLanguage()) {
 			case Common::FR_FRA:
 				return "MonkeyUpdate_FRA.exe";

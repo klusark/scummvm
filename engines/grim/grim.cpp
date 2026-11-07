@@ -72,6 +72,9 @@
 #include "engines/grim/primitives.h"
 #include "engines/grim/objectstate.h"
 #include "engines/grim/set.h"
+
+#include "common/file.h"
+#include "image/bmp.h"
 #include "engines/grim/sound.h"
 #include "engines/grim/debugger.h"
 #include "engines/grim/remastered/overlay.h"
@@ -87,9 +90,13 @@ GrimEngine *g_grim = nullptr;
 GfxBase *g_driver = nullptr;
 int g_imuseState = -1;
 
+void installCrashDump();
+
 GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, Common::Platform platform, Common::Language language) :
 		Engine(syst), _currSet(nullptr), _selectedActor(nullptr), _pauseStartTime(0), _language(0) {
 	g_grim = this;
+	if (gameFlags & GF_TESTDATA)
+		installCrashDump();   // (clean-room tests: crashdump.cpp)
 
 	setDebugger(new Debugger());
 	_gameType = gameType;
@@ -331,13 +338,27 @@ GfxBase *GrimEngine::createRenderer(int screenW, int screenH) {
 }
 
 const char *GrimEngine::getUpdateFilename() {
-	if (!(getGameFlags() & ADGF_DEMO))
+	if (!(getGameFlags() & ADGF_DEMO) && !isTestData())
 		return "gfupd101.exe";
 	else
 		return nullptr;
 }
 
+// Test data (grim_tools/cleanroom): an error() ends ScummVM at once. error() has written the message to the log already; saying
+// it is handled skips the debugger (the engine's default handler, which waits for input) and the message box, and error() exits.
+static bool testDataErrorHandler(const char *msg) {
+	return true;
+}
+
 Common::Error GrimEngine::run() {
+	if (isTestData()) {
+		Common::setErrorHandler(testDataErrorHandler);
+		// (sim_frame_ms in the configuration: every frame is that many milliseconds long however long it took, like the
+		// original with the simtime patch of grimlaunch, so that what a test measures per frame is the same every run)
+		if (ConfMan.hasKey("sim_frame_ms"))
+			_testFrameMs = CLIP(ConfMan.getInt("sim_frame_ms"), 1, 1000);
+	}
+
 	// Try to see if we have the EMI Mac installer present
 	// Currently, this requires the data fork to be standalone
 	if (getGameType() == GType_MONKEY4) {
@@ -356,7 +377,7 @@ Common::Error GrimEngine::run() {
 	}
 
 	ConfMan.registerDefault("check_gamedata", true);
-	if (ConfMan.getBool("check_gamedata") && !isRemastered()) {
+	if (ConfMan.getBool("check_gamedata") && !isRemastered() && !isTestData()) {
 		MD5CheckDialog d;
 		if (!d.runModal()) {
 			Common::U32String confirmString = Common::U32String::format(_(
@@ -830,7 +851,10 @@ void GrimEngine::luaUpdate() {
 	_frameTime = newStart - _frameStart;
 	_frameStart = newStart;
 
-	if (_mode == PauseMode || _shortFrame) {
+	if (_testFrameMs) {
+		// (test data: a fixed frame time, the frame after a load too)
+		_frameTime = _mode == PauseMode ? 0 : _testFrameMs;
+	} else if (_mode == PauseMode || _shortFrame) {
 		_frameTime = 0;
 	}
 
@@ -985,6 +1009,25 @@ void GrimEngine::drawNormalMode() {
 	// The overlay objects should be drawn on top of everything else,
 	// including 3D objects such as Manny and the message tube
 	_currSet->drawBitmaps(ObjectState::OBJSTATE_OVERLAY);
+}
+
+// Test data (grim_tools/cleanroom): the scene as it is now, drawn and saved as a 24-bit .bmp in the game folder, for the
+// tests that look at where a text is drawn. The original saves its back buffer (Render_SaveScreenshotBmp, through
+// patch.dll); the frames are not drawn at the same times on the two, so the scene is drawn here at once.
+void GrimEngine::saveSnap(const char *file) {
+	updateDisplayScene();
+	// (TinyGL draws when the frame is presented, which only one frame in 8 is: storeDisplay presents it first. The stored
+	// display is stored again before each of its uses, so taking it here changes nothing else)
+	if (_softRenderer)
+		g_driver->storeDisplay();
+	Bitmap *frame = g_driver->getScreenshot(640, 480, _softRenderer);
+	if (frame) {
+		frame->setActiveImage(0);
+		Common::DumpFile out;
+		if (!out.open(ConfMan.getPath("path").appendComponent(file), true) || !Image::writeBMP(out, frame->getData()))
+			warning("CRSNAP: cannot write %s", file);
+		delete frame;
+	}
 }
 
 void GrimEngine::doFlip() {
@@ -1154,7 +1197,20 @@ void GrimEngine::mainLoop() {
 			}
 		}
 
-		if (_mode != PauseMode) {
+		// (test data with a fixed frame time: the frames go as fast as they can, and drawing them all is most of what a run
+		// costs. One frame in 8 is drawn, by the count of frames so that a run is the same every time, and the frame of a
+		// change of setup, mode or set)
+		bool renderFrame = true;
+		if (_testFrameMs) {
+			if (_setupChanged || _mode != _testLastMode || _currSet != _testLastSet || _frameCounter % 8 == 0) {
+				_testLastMode = _mode;
+				_testLastSet = _currSet;
+			} else {
+				renderFrame = false;
+			}
+		}
+
+		if (_mode != PauseMode && renderFrame) {
 			// Draw the display scene before doing the luaUpdate.
 			// This give a large performance boost as OpenGL stores commands
 			// in a queue on the gpu to be rendered later. When doFlip is
@@ -1164,7 +1220,10 @@ void GrimEngine::mainLoop() {
 			updateDisplayScene();
 		}
 
-		doFlip();
+		if (renderFrame)
+			doFlip();
+		else
+			_frameCounter++;
 
 		// We do not want the scripts to update while a movie is playing in the PS2-version.
 		if (!(getGamePlatform() == Common::kPlatformPS2 && _mode == SmushMode)) {
