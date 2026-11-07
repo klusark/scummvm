@@ -93,6 +93,11 @@ void Model::loadBinary(Common::SeekableReadStream *data) {
 	_bboxSize = bboxMax - _bboxPos;
 	_center.readFromStream(data);
 	_insertOffset.readFromStream(data);
+
+	for (int i = 0; i < _numHierNodes; ++i) {
+		if (_rootHierNode[i]._mesh)
+			g_driver->createMesh(_rootHierNode[i]._mesh);
+	}
 }
 
 void Model::loadText(TextSplitter *ts) {
