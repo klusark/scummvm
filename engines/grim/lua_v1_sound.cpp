@@ -35,8 +35,13 @@ namespace Grim {
 
 // Like the original, a sound is identified either by its name or by the number ImStartSound returned
 static const char *getSoundKey(lua_Object nameObj) {
-	if (lua_isnumber(nameObj))
-		return (const char *)(intptr)(int)lua_getnumber(nameObj);
+	if (lua_isnumber(nameObj)) {
+		// (a negative number is no sound: as a key it would be read as the address of a name)
+		int id = (int)lua_getnumber(nameObj);
+		if (id < 0)
+			return nullptr;
+		return (const char *)(intptr)id;
+	}
 
 	return lua_getstring(nameObj);
 }
@@ -88,34 +93,43 @@ void Lua_V1::ImSetVoiceEffect() {
 
 void Lua_V1::ImSetMusicVol() {
 	lua_Object volObj = lua_getparam(1);
-	if (!lua_isnumber(volObj))
+	if (!lua_isnumber(volObj) || !g_imuse)
 		return;
 	g_imuse->setMusicGroupVol((int)lua_getnumber(volObj));
 }
 
 void Lua_V1::ImGetMusicVol() {
+	// (EMI has no iMUSE: Monkey4.exe returns nothing)
+	if (!g_imuse)
+		return;
 	lua_pushnumber(g_imuse->getMusicGroupVol());
 }
 
 void Lua_V1::ImSetVoiceVol() {
 	lua_Object volObj = lua_getparam(1);
-	if (!lua_isnumber(volObj))
+	if (!lua_isnumber(volObj) || !g_imuse)
 		return;
 	g_imuse->setVoiceGroupVol((int)lua_getnumber(volObj));
 }
 
 void Lua_V1::ImGetVoiceVol() {
+	// (EMI has no iMUSE: Monkey4.exe returns nothing)
+	if (!g_imuse)
+		return;
 	lua_pushnumber(g_imuse->getVoiceGroupVol());
 }
 
 void Lua_V1::ImSetSfxVol() {
 	lua_Object volObj = lua_getparam(1);
-	if (!lua_isnumber(volObj))
+	if (!lua_isnumber(volObj) || !g_imuse)
 		return;
 	g_imuse->setSFXGroupVol((int)lua_getnumber(volObj));
 }
 
 void Lua_V1::ImGetSfxVol() {
+	// (EMI has no iMUSE: Monkey4.exe returns nothing)
+	if (!g_imuse)
+		return;
 	lua_pushnumber(g_imuse->getSFXGroupVol());
 }
 
