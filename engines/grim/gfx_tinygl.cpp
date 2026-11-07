@@ -692,6 +692,13 @@ void GfxTinyGL::drawEMIModelFace(const EMIModel *model, const EMIMeshFace *face)
 		tglDepthMask(TGL_TRUE);
 }
 
+// (tglIsEnabled() is not implemented)
+static bool isLightingEnabled() {
+	TGLint enabled = 0;
+	tglGetIntegerv(TGL_LIGHTING, &enabled);
+	return enabled != 0;
+}
+
 void GfxTinyGL::drawModelFace(const Mesh *mesh, const MeshFace *face) {
 	// Support transparency in actor objects, such as the message tube
 	// in Manny's Office
@@ -701,9 +708,20 @@ void GfxTinyGL::drawModelFace(const Mesh *mesh, const MeshFace *face) {
 	tglAlphaFunc(TGL_GREATER, 0.5);
 	tglEnable(TGL_ALPHA_TEST);
 	tglNormal3fv(const_cast<float *>(face->getNormal().getData()));
+	// Grim: the original's light levels, as the vertex colours
+	TGLfloat modelView[16];
+	const bool lit = g_grim->getGameType() == GType_GRIM && isLightingEnabled();
+	if (lit) {
+		tglGetFloatv(TGL_MODELVIEW_MATRIX, modelView);
+		tglDisable(TGL_LIGHTING);
+	}
 	tglBegin(TGL_POLYGON);
 	for (int i = 0; i < face->getNumVertices(); i++) {
 		tglNormal3fv(vertNormals + 3 * face->getVertex(i));
+		if (lit) {
+			const float level = getGrimLightLevel(modelView, vertices + 3 * face->getVertex(i), vertNormals + 3 * face->getVertex(i));
+			tglColor3f(level, level, level);
+		}
 
 		if (face->hasTexture())
 			tglTexCoord2fv(textureVerts + 2 * face->getTextureVertex(i));
@@ -711,6 +729,10 @@ void GfxTinyGL::drawModelFace(const Mesh *mesh, const MeshFace *face) {
 		tglVertex3fv(vertices + 3 * face->getVertex(i));
 	}
 	tglEnd();
+	if (lit) {
+		tglColor3f(1.0f, 1.0f, 1.0f);
+		tglEnable(TGL_LIGHTING);
+	}
 	// Done with transparency-capable objects
 	tglDisable(TGL_ALPHA_TEST);
 }
@@ -854,6 +876,12 @@ void GfxTinyGL::disableLights() {
 }
 
 void GfxTinyGL::setupLight(Light *light, int lightId) {
+	if (g_grim->getGameType() == GType_GRIM) {
+		TGLfloat view[16];
+		tglGetFloatv(TGL_MODELVIEW_MATRIX, view);
+		setupGrimLight(light, lightId, view);
+	}
+
 	tglEnable(TGL_LIGHTING);
 	float lightColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 	float lightPos[] = { 0.0f, 0.0f, 0.0f, 1.0f };

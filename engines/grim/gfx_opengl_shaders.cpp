@@ -1232,7 +1232,8 @@ void GfxOpenGLS::setupLight(Grim::Light *light, int lightId) {
 	lightColor.x() = (float)light->_color.getRed();
 	lightColor.y() = (float)light->_color.getGreen();
 	lightColor.z() = (float)light->_color.getBlue();
-	lightColor.w() = light->_scaledintensity;
+	// Grim lights actors with the raw intensity, see grim_actorlights.vertex.
+	lightColor.w() = g_grim->getGameType() == GType_GRIM ? light->_intensity : light->_scaledintensity;
 
 	if (light->_type == Grim::Light::Omni) {
 		lightPos = Math::Vector4d(light->_pos.x(), light->_pos.y(), light->_pos.z(), 1.0f);

@@ -40,6 +40,7 @@
 #include "engines/grim/bitmap.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/model.h"
+#include "engines/grim/set.h"
 
 #include "graphics/surface.h"
 
@@ -55,6 +56,64 @@ GfxBase::GfxBase() :
 	for (unsigned int i = 0; i < _numSpecialtyTextures; i++) {
 		_specialtyTextures[i]._isShared = true;
 	}
+}
+
+static Math::Vector3d transformPoint(const float *m, const float *v, float w) {
+	return Math::Vector3d(m[0] * v[0] + m[4] * v[1] + m[8] * v[2] + m[12] * w,
+	                      m[1] * v[0] + m[5] * v[1] + m[9] * v[2] + m[13] * w,
+	                      m[2] * v[0] + m[6] * v[1] + m[10] * v[2] + m[14] * w);
+}
+
+void GfxBase::setupGrimLight(const Light *light, int lightId, const float *view) {
+	if (lightId == 0)
+		_numGrimLights = 0;
+	if (lightId >= _maxGrimLights)
+		return;
+
+	// The lights are kept in eye space.
+	GrimLight &l = _grimLights[lightId];
+	l.type = light->_type;
+	l.pos = transformPoint(view, light->_pos.getData(), 1.0f);
+	l.dir = transformPoint(view, light->_dir.getData(), 0.0f).getNormalized();
+	l.intensity = light->_intensity;
+	l.cosInner = light->_cosumbraangle;
+	l.cosOuter = light->_cospenumbraangle;
+	_numGrimLights = lightId + 1;
+}
+
+float GfxBase::getGrimLightLevel(const float *modelView, const float *vertex, const float *normal) const {
+	const float falloff = 0.2f;
+	const Math::Vector3d pos = transformPoint(modelView, vertex, 1.0f);
+	const Math::Vector3d n = transformPoint(modelView, normal, 0.0f).getNormalized();
+	float level = 0.0f;
+	for (int i = 0; i < _numGrimLights; ++i) {
+		const GrimLight &l = _grimLights[i];
+		float intensity = l.intensity;
+		if (l.type == Light::Direct) {
+			level += intensity * MAX(0.0f, -n.dotProduct(l.dir));
+		} else if (l.type == Light::Omni || l.type == Light::Spot) {
+			Math::Vector3d toLight = l.pos - pos;
+			const float dist = toLight.getMagnitude();
+			if (dist * falloff >= intensity)
+				continue;
+			toLight /= dist;
+			if (l.type == Light::Spot) {
+				const float cosAngle = -toLight.dotProduct(l.dir);
+				if (cosAngle <= l.cosOuter)
+					continue;
+				if (cosAngle < l.cosInner)
+					intensity *= (cosAngle - l.cosOuter) / (l.cosInner - l.cosOuter);
+				// Not clamped, so that the faces turned away get darker.
+				level -= (intensity - dist * falloff) * n.dotProduct(l.dir);
+			} else {
+				level += (intensity - dist * falloff) * MAX(0.0f, n.dotProduct(toLight));
+			}
+		}
+		level = MIN(level, 1.0f);
+		if (level == 1.0f)
+			break;
+	}
+	return CLIP(level, 0.0f, 1.0f);
 }
 
 void GfxBase::setShadowMode() {

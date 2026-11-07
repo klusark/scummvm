@@ -778,9 +778,20 @@ void GfxOpenGL::drawModelFace(const Mesh *mesh, const MeshFace *face) {
 	glAlphaFunc(GL_GREATER, 0.5);
 	glEnable(GL_ALPHA_TEST);
 	glNormal3fv(face->getNormal().getData());
+	// Grim: the original's light levels, as the vertex colours
+	GLfloat modelView[16];
+	const bool lit = g_grim->getGameType() == GType_GRIM && glIsEnabled(GL_LIGHTING);
+	if (lit) {
+		glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
+		glDisable(GL_LIGHTING);
+	}
 	glBegin(GL_POLYGON);
 	for (int i = 0; i < face->getNumVertices(); i++) {
 		glNormal3fv(vertNormals + 3 * face->getVertex(i));
+		if (lit) {
+			const float level = getGrimLightLevel(modelView, vertices + 3 * face->getVertex(i), vertNormals + 3 * face->getVertex(i));
+			glColor3f(level, level, level);
+		}
 
 		if (face->hasTexture())
 			glTexCoord2fv(textureVerts + 2 * face->getTextureVertex(i));
@@ -788,6 +799,10 @@ void GfxOpenGL::drawModelFace(const Mesh *mesh, const MeshFace *face) {
 		glVertex3fv(vertices + 3 * face->getVertex(i));
 	}
 	glEnd();
+	if (lit) {
+		glColor3f(1.0f, 1.0f, 1.0f);
+		glEnable(GL_LIGHTING);
+	}
 	// Done with transparency-capable objects
 	glDisable(GL_ALPHA_TEST);
 }
@@ -982,6 +997,12 @@ void GfxOpenGL::disableLights() {
 }
 
 void GfxOpenGL::setupLight(Light *light, int lightId) {
+	if (g_grim->getGameType() == GType_GRIM) {
+		GLfloat view[16];
+		glGetFloatv(GL_MODELVIEW_MATRIX, view);
+		setupGrimLight(light, lightId, view);
+	}
+
 	if (lightId >= _maxLights) {
 		return;
 	}

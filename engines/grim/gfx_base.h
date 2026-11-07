@@ -274,6 +274,20 @@ public:
 	virtual void setBlendMode(bool additive) = 0;
 protected:
 	Bitmap *createScreenshotBitmap(Graphics::Surface *src, int w, int h, bool flipOrientation);
+
+	// Grim's actor lighting for the renderers without shaders, which cannot
+	// do it in hardware: see grim_actorlights.vertex. The matrices are
+	// OpenGL model-view matrices.
+	void setupGrimLight(const Light *light, int lightId, const float *view);
+	float getGrimLightLevel(const float *modelView, const float *vertex, const float *normal) const;
+	struct GrimLight {
+		int type;
+		Math::Vector3d pos, dir;
+		float intensity, cosInner, cosOuter;
+	};
+	static const int _maxGrimLights = 8;
+	GrimLight _grimLights[_maxGrimLights];
+	int _numGrimLights = 0;
 	static const unsigned int _numSpecialtyTextures = 22;
 	Texture _specialtyTextures[_numSpecialtyTextures];
 	static const int _gameHeight = 480;
