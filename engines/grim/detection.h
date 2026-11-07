@@ -32,6 +32,13 @@ static const Engines::ObsoleteGameID obsoleteGameIDsTable[] = {
 
 namespace Grim {
 
+// Game flags of the engine (the low 16 bits of ADGameDescription::flags)
+enum GrimGameFlags {
+	// Data made for engine tests (grim_tools/cleanroom): only the files of the game folder are read, no update or
+	// patch archive is needed
+	GF_TESTDATA = 1 << 0
+};
+
 enum GrimGameType {
 	GType_GRIM,
 	GType_MONKEY4

@@ -708,7 +708,9 @@ void EMISound::initMusicTable() {
 			delete[] musicTable;
 			_numMusicStates = 0;
 			_musicTable = nullptr;
-			tableLoadErrorDialog();
+			// (test data, grim_tools/cleanroom, has no music: the original plays none and says nothing)
+			if (!g_grim->isTestData())
+				tableLoadErrorDialog();
 		} else {
 			_numMusicStates = 126;
 			_musicTable = musicTable;
