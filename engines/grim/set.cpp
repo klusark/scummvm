@@ -922,6 +922,14 @@ void Set::setupLights(const Math::Vector3d &pos, bool inOverworld) {
 	g_driver->setupLights(lightsList);
 }
 
+int Set::getSetupIndex(const char *name) const {
+	for (int i = 0; i < _numSetups; i++) {
+		if (_setups[i]._name.equalsIgnoreCase(name))
+			return i;
+	}
+	return -1;
+}
+
 void Set::setSetup(int num) {
 	// Looks like num is zero-based so >= should work to find values
 	// that are out of the range of valid setups
@@ -1678,6 +1686,13 @@ void Set::addObjectState(const ObjectState::Ptr &s) {
 }
 
 ObjectState *Set::addObjectState(int setupID, ObjectState::Position pos, const char *bitmapName, const char *zbitmapName, bool transparency) {
+	if (!bitmapName) {
+		// (NewObjectState without a name: a state without an image, as the original's)
+		ObjectState *state = new ObjectState(setupID, pos, nullptr, zbitmapName ? Bitmap::create(zbitmapName) : nullptr, transparency);
+		addObjectState(state);
+		return state;
+	}
+
 	ObjectState *state = findState(bitmapName);
 
 	if (state) {

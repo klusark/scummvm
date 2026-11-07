@@ -98,6 +98,7 @@ public:
 
 	void setSetup(int num);
 	int getSetup() const { return _currSetup - _setups; }
+	int getSetupIndex(const char *name) const;
 	inline int getNumSetups() const { return _numSetups; }
 
 	// Sector access functions
