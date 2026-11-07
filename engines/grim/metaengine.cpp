@@ -153,7 +153,9 @@ SaveStateList GrimMetaEngine::listSaves(const char *target) const {
 
 		if (slotNum >= 0) {
 			SaveGame *savedState = SaveGame::openForLoading(*file);
-			if (savedState && savedState->isCompatible()) {
+			if (savedState && savedState->isCompatible() && !savedState->hasSection(platform == Common::kPlatformPS2 ? 'PS2S' : 'SUBS')) {
+				saveList.push_back(SaveStateDescriptor(this, slotNum, ""));
+			} else if (savedState && savedState->isCompatible()) {
 				if (platform == Common::kPlatformPS2)
 					savedState->beginSection('PS2S');
 				else

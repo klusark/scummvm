@@ -688,6 +688,12 @@ void Lua_V1::GetSaveGameData() {
 		delete savedState;
 		return;
 	}
+	if (!savedState->hasSection('SUBS')) {
+		// (saved without saveGameCallback: no strings, an empty table)
+		lua_pushobject(result);
+		delete savedState;
+		return;
+	}
 	int32 dataSize = savedState->beginSection('SUBS');
 
 	char str[200];
