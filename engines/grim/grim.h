@@ -94,6 +94,9 @@ public:
 	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override { return true; }
 	Common::Error loadGameState(int slot) override;
 	bool isRemastered() const { return !!(_gameFlags & ADGF_REMASTERED); }
+	bool isTestData() const { return !!(_gameFlags & GF_TESTDATA); }
+	/** Test data: the scene is drawn and saved to this file of the game folder (PrintDebug("CRSNAP:<file>")) */
+	void saveSnap(const char *file);
 
 	void setMode(EngineMode mode);
 	EngineMode getMode() { return _mode; }
@@ -316,6 +319,10 @@ protected:
 	unsigned int _frameCounter = 0;
 	unsigned int _lastFrameTime = 0;
 	unsigned _speedLimitMs;
+	/** Test data: the length of every frame in milliseconds (sim_frame_ms in the configuration; 0 = real time) */
+	unsigned _testFrameMs = 0;
+	EngineMode _testLastMode = NormalMode;
+	Set *_testLastSet = nullptr;
 	bool _showFps;
 	bool _softRenderer;
 

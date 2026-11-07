@@ -26,6 +26,8 @@
 #define FORBIDDEN_SYMBOL_EXCEPTION_getenv
 
 #include "gui/error.h"
+#include "common/config-manager.h"
+#include "common/fs.h"
 
 #include "engines/grim/resource.h"
 #include "engines/grim/colormap.h"
@@ -121,7 +123,14 @@ ResourceLoader::ResourceLoader() {
 		}
 	}
 
-	if (g_grim->getGameType() == GType_GRIM) {
+	if (g_grim->isTestData()) {
+		// Test data: loose files, and every LAB (Grim) or .m4b (EMI) of the game folder, as the original does (Resource_OpenArchivesInDir).
+		// Only the game folder: SearchMan would also list the embedded grim-patch.lab or monkey4-patch.m4b, whose patches are for the
+		// game's own scripts
+		Common::FSDirectory gameDir(ConfMan.getPath("path"));
+		gameDir.listMatchingMembers(files, g_grim->getGameType() == GType_GRIM ? "*.lab" : "*.m4b");
+		Common::sort(files.begin(), files.end(), LabListComperator());
+	} else if (g_grim->getGameType() == GType_GRIM) {
 		if (g_grim->getGameFlags() & ADGF_DEMO) {
 			SearchMan.listMatchingMembers(files, "gfdemo01.lab");
 			SearchMan.listMatchingMembers(files, "gdemo001.lab"); // For the english demo with video.
@@ -199,7 +208,8 @@ ResourceLoader::ResourceLoader() {
 		}
 	}
 
-	if (files.empty())
+	// (test data may be loose files only, which are read from the game folder through SearchMan)
+	if (files.empty() && !g_grim->isTestData())
 		error("%s", "Cannot find game data - check configuration file");
 
 	// With loose_files=false in the configuration the files that lie loose in the directory of the game are not used: the directory leaves the search path

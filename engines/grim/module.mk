@@ -2,6 +2,7 @@ MODULE := engines/grim
 
 MODULE_OBJS := \
 	costume/bitmap_component.o \
+	crashdump.o \
 	costume/chore.o \
 	costume/colormap_component.o \
 	costume/component.o \
