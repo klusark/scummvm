@@ -46,6 +46,10 @@ namespace TinyGL {
 
 #define ZB_POINT_Z_FRAC_BITS 14
 
+// window x and y of a ZBufferPoint are fixed point with this many bits below the pixel
+#define ZB_POINT_SUBPIXEL_BITS 4
+#define ZB_POINT_SUBPIXEL_ONE  (1 << ZB_POINT_SUBPIXEL_BITS)
+
 #define ZB_POINT_ST_FRAC_BITS 14
 #define ZB_POINT_ST_FRAC_SHIFT     (ZB_POINT_ST_FRAC_BITS - 1)
 #define ZB_POINT_ST_MAX            ( (_textureSize << ZB_POINT_ST_FRAC_BITS) - 1 )
@@ -85,7 +89,7 @@ struct Buffer {
 };
 
 struct ZBufferPoint {
-	int x, y, z;      // integer coordinates in the zbuffer
+	int x, y, z;      // coordinates in the zbuffer (x and y are fixed point, ZB_POINT_SUBPIXEL_BITS)
 	int s, t;         // coordinates for the mapping
 	int r, g, b, a;   // color indexes
 	float sz, tz;     // temporary coordinates for mapping
