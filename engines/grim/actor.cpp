@@ -2163,13 +2163,25 @@ bool Actor::getSphereInfo(float &size, Math::Vector3d &p) const {
 			return false;
 		}
 		EMIModel *model = costume->getEMIModel();
-		assert(model);
+		if (!model) {
+			Debug::warning(Debug::Actors, "Actor::getSphereInfo: costume of actor \"%s\" has no model", getName().c_str());
+			return false;
+		}
 		p = _pos + *(model->_center);
 		// pre-scale factor of 0.8 was guessed by comparing with the original game
 		size = model->_radius * _collisionScale * 0.8f;
 	} else {
-		Model *model = getCurrentCostume()->getModel();
-		assert(model);
+		Costume *costume = getCurrentCostume();
+		if (!costume) {
+			Debug::warning(Debug::Actors, "Actor::getSphereInfo: actor \"%s\" has no costume", getName().c_str());
+			return false;
+		}
+		// (a costume without a model component, or whose model failed to load, has no sphere)
+		Model *model = costume->getModel();
+		if (!model) {
+			Debug::warning(Debug::Actors, "Actor::getSphereInfo: costume of actor \"%s\" has no model", getName().c_str());
+			return false;
+		}
 
 		p = _pos + model->_insertOffset + model->_center;
 		size = model->_radius * _collisionScale;
