@@ -696,6 +696,12 @@ void Lua_V1::GetActorNodeLocation() {
 		return;
 
 	int nodeId = (int)lua_getnumber(nodeObj);
+	if (nodeId < 0 || nodeId >= actor->getCurrentCostume()->getNumModelNodes()) {
+		lua_pushnumber(0);
+		lua_pushnumber(0);
+		lua_pushnumber(0);
+		return;
+	}
 
 	ModelNode *allNodes = actor->getCurrentCostume()->getModelNodes();
 	ModelNode *node = allNodes + nodeId;
@@ -1575,6 +1581,8 @@ void Lua_V1::SetActiveShadow() {
 		return;
 	}
 	int shadowId = (int)lua_getnumber(shadowIdObj);
+	if (shadowId < 0 || shadowId >= MAX_SHADOWS)
+		return;
 	actor->setActiveShadow(shadowId);
 }
 

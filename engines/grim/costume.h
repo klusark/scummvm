@@ -60,6 +60,7 @@ public:
 	void fadeChoreIn(int chore, uint msecs);
 	void fadeChoreOut(int chore, uint msecs);
 	ModelNode *getModelNodes();
+	int getNumModelNodes();
 	Model *getModel();
 	void setColormap(const Common::String &map);
 	void stopChores(bool ignoreLoopingChores = false, int msecs = 0);

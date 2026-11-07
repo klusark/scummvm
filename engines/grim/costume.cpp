@@ -273,6 +273,13 @@ ModelNode *Costume::getModelNodes() {
 	return nullptr;
 }
 
+int Costume::getNumModelNodes() {
+	ModelComponent *comp = getMainModelComponent();
+	if (comp && comp->getHierarchy())
+		return comp->getNumNodes();
+	return 0;
+}
+
 Model *Costume::getModel() {
 	ModelComponent *comp = getMainModelComponent();
 	if (comp) {
@@ -505,7 +512,7 @@ float Costume::getHeadMaxRoll() const {
 void Costume::setHead(int joint1, int joint2, int joint3, float maxRoll, float maxPitch, float maxYaw) {
 	Head *head = static_cast<Head *>(_head);
 	head->setJoints(joint1, joint2, joint3);
-	head->loadJoints(getModelNodes());
+	head->loadJoints(getModelNodes(), getNumModelNodes());
 	head->setMaxAngles(maxPitch, maxYaw, maxRoll);
 }
 
