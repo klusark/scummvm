@@ -87,7 +87,12 @@ void GfxTinyGL::setupScreen(int screenW, int screenH) {
 
 	_pixelFormat = g_system->getScreenFormat();
 	debug(2, "INFO: TinyGL front buffer pixel format: %s", _pixelFormat.toString().c_str());
-	TinyGL::createContext(screenW, screenH, _pixelFormat, 256, true, ConfMan.getBool("dirtyrects"));
+	TinyGL::createContext(screenW, screenH, _pixelFormat, 256, true, ConfMan.getBool("dirtyrects"),
+		ConfMan.hasKey("tinygl_block_kb") ? ConfMan.getInt("tinygl_block_kb") * 1024 : 5 * 1024 * 1024); // BENCH
+	TinyGL::g_dirtyDiffMode = ConfMan.hasKey("dirty_diff") ? ConfMan.getInt("dirty_diff") : 0; // BENCH
+	TinyGL::g_dirtyDiffWindow = ConfMan.hasKey("dirty_window") ? ConfMan.getInt("dirty_window") : 16; // BENCH
+	TinyGL::g_dirtyVerify = ConfMan.hasKey("dirty_verify") && ConfMan.getBool("dirty_verify"); // BENCH
+	TinyGL::g_dirtyTileSize = ConfMan.hasKey("dirty_tile") ? ConfMan.getInt("dirty_tile") : 32; // BENCH
 
 	_storedDisplay = new Graphics::Surface;
 	_storedDisplay->create(_gameWidth, _gameHeight, _pixelFormat);
@@ -186,7 +191,9 @@ void GfxTinyGL::flipBuffer(bool opportunistic) {
 	}
 
 	Common::List<Common::Rect> dirtyAreas;
+	uint64 benchT0 = TinyGL::benchRdtsc(); // BENCH
 	TinyGL::presentBuffer(dirtyAreas);
+	TinyGL::g_benchPresentTicks += TinyGL::benchRdtsc() - benchT0;
 
 	Graphics::Surface glBuffer;
 	TinyGL::getSurfaceRef(glBuffer);

@@ -23,6 +23,7 @@
 #define GRAPHICS_TINYGL_H
 
 #include "common/str.h"
+#include "common/intrinsics.h"
 #include "graphics/pixelformat.h"
 #include "graphics/surface.h"
 #include "graphics/tinygl/gl.h"
@@ -32,6 +33,32 @@ namespace TinyGL {
 
 typedef void *ContextHandle;
 
+extern uint64 g_benchAllocTicks, g_benchStatsTicks, g_benchPresentTicks, g_benchSceneTicks; // BENCH
+
+// BENCH: CPU timestamp counter, portable between GCC/Clang and MSVC
+inline uint64 benchRdtsc() {
+#ifdef _MSC_VER
+	return __rdtsc();
+#else
+	return __builtin_ia32_rdtsc();
+#endif
+}
+
+// BENCH: dirty rect diff experiment
+struct DirtyDiffStats {
+	enum { kPosition, kRealign, kTiles, kMethods };
+	uint64 frames = 0, drawCalls = 0, unmatchedPos = 0, unmatchedRealign = 0;
+	uint64 area[kMethods] = {}, rects[kMethods] = {}, ticks[kMethods] = {}, hist[kMethods][11] = {};
+	uint64 screenArea = 0, hashTicks = 0, executes = 0, execTicks = 0, typeTicks[3] = {}, typeExecutes[3] = {}, statsTicks = 0, disposeTicks = 0;
+	uint64 verifyFrames = 0, verifyBadFrames = 0, verifyBadPixels = 0, verifyMaxBadPixels = 0, verifyFirstBadFrame = 0;
+};
+extern int g_dirtyTileSize;
+extern int g_dirtyDiffMode, g_dirtyDiffWindow;
+extern bool g_dirtyVerify;
+extern DirtyDiffStats g_dirtyDiffStats;
+
+// drawCallMemorySize is the size of each block of the per-frame draw call
+// allocator; it adds more blocks when a frame needs them.
 ContextHandle *createContext(int screenW, int screenH, Graphics::PixelFormat pixelFormat,
                    int textureSize, bool enableStencilBuffer, bool dirtyRectsEnable,
                    uint32 drawCallMemorySize = 5 * 1024 * 1024);

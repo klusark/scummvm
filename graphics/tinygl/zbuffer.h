@@ -136,6 +136,9 @@ struct FrameBuffer {
 	const uint *getZBuffer() {
 		return _zbuf;
 	}
+	// BENCH: dirty rect verification
+	uint *getZBufferMutable() { return _zbuf; }
+	byte *getStencilBuffer() { return _enableStencil ? _sbuf : nullptr; }
 
 	Graphics::Surface *copyFromFrameBuffer(const Graphics::PixelFormat &dstFormat) {
 		Graphics::Surface tmp;

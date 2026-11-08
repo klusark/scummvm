@@ -28,6 +28,36 @@
 
 namespace TinyGL {
 
+// BENCH: hashing helpers for the tile diff
+static inline uint64 hashMix(uint64 h, uint64 v) {
+	h ^= v;
+	h *= 0xff51afd7ed558ccdULL;
+	h ^= h >> 32;
+	return h;
+}
+
+static inline uint64 hashFloat(uint64 h, float f) {
+	uint32 v;
+	memcpy(&v, &f, sizeof(v));
+	return hashMix(h, v);
+}
+
+static inline uint64 hashVec3(uint64 h, const Vector3 &v) {
+	return hashFloat(hashFloat(hashFloat(h, v.X), v.Y), v.Z);
+}
+
+static inline uint64 hashVec4(uint64 h, const Vector4 &v) {
+	return hashFloat(hashFloat(hashFloat(hashFloat(h, v.X), v.Y), v.Z), v.W);
+}
+
+static inline uint64 hashPtr(uint64 h, const void *p) {
+	return hashMix(h, (uint64)(uintptr)p);
+}
+
+static inline uint64 hashRect(uint64 h, const Common::Rect &r) {
+	return hashMix(hashMix(h, ((uint64)(uint16)r.left << 16) | (uint16)r.top), ((uint64)(uint16)r.right << 16) | (uint16)r.bottom);
+}
+
 GLTextureEnvArgument::GLTextureEnvArgument()
 	: sourceRGB(TGL_TEXTURE)
 	, operandRGB(TGL_SRC_COLOR)
@@ -128,36 +158,92 @@ static inline void _appendDirtyRectangle(const DrawCall &call, Common::List<Dirt
 		rectangles.push_back(DirtyRectangle(dirty_region, r, g, b));
 }
 
-void GLContext::presentBufferDirtyRects(Common::List<Common::Rect> &dirtyAreas) {
-	typedef Common::List<DrawCall *>::const_iterator DrawCallIterator;
-	typedef Common::List<DirtyRectangle>::iterator RectangleIterator;
+// BENCH: dirty rect diff experiment
+int g_dirtyDiffMode = 0;      // 0 = compare by position, 1 = realign after a mismatch
+int g_dirtyDiffWindow = 16;   // how far (prev skip + cur skip) to look for the next match
+bool g_dirtyVerify = false;   // redraw every frame from scratch and compare pixels
+int g_dirtyTileSize = 32;     // tile diff: tile width and height in pixels
+DirtyDiffStats g_dirtyDiffStats;
+static Common::Array<byte> s_refColor, s_refZ, s_refStencil, s_saveColor, s_saveZ, s_saveStencil;
 
-	Common::List<DirtyRectangle> rectangles;
+typedef Common::Array<DrawCall *> DrawCallArray;
 
-	DrawCallIterator itFrame = _drawCallsQueue.begin();
-	DrawCallIterator endFrame = _drawCallsQueue.end();
-	DrawCallIterator itPrevFrame = _previousFrameDrawCallsQueue.begin();
-	DrawCallIterator endPrevFrame = _previousFrameDrawCallsQueue.end();
+// Cheap key checked before the full comparison: equal draw calls always have
+// the same type and dirty region.
+struct DrawCallKey {
+	Common::Rect region;
+	int type;
+	bool operator==(const DrawCallKey &o) const { return type == o.type && region == o.region; }
+};
+typedef Common::Array<DrawCallKey> DrawCallKeyArray;
 
-	// Compare draw calls.
-	for ( ; itPrevFrame != endPrevFrame && itFrame != endFrame;
-		++itPrevFrame, ++itFrame) {
-			const DrawCall &currentCall = **itFrame;
-			const DrawCall &previousCall = **itPrevFrame;
+static inline bool callsEqual(const DrawCallArray &prev, const DrawCallKeyArray &prevKeys, uint i,
+		const DrawCallArray &cur, const DrawCallKeyArray &curKeys, uint j) {
+	return prevKeys[i] == curKeys[j] && *prev[i] == *cur[j];
+}
 
-			if (previousCall != currentCall) {
-				_appendDirtyRectangle(previousCall, rectangles, 255, 255, 255);
-				_appendDirtyRectangle(currentCall, rectangles, 255, 0, 0);
+static void diffByPosition(const DrawCallArray &prev, const DrawCallKeyArray &prevKeys,
+		const DrawCallArray &cur, const DrawCallKeyArray &curKeys,
+		Common::List<DirtyRectangle> &rectangles, uint &unmatched) {
+	uint i = 0;
+	for (; i < prev.size() && i < cur.size(); i++) {
+		if (!callsEqual(prev, prevKeys, i, cur, curKeys, i)) {
+			_appendDirtyRectangle(*prev[i], rectangles, 255, 255, 255);
+			_appendDirtyRectangle(*cur[i], rectangles, 255, 0, 0);
+			unmatched += 2;
+		}
+	}
+	for (uint k = i; k < prev.size(); k++, unmatched++)
+		_appendDirtyRectangle(*prev[k], rectangles, 255, 255, 255);
+	for (uint k = i; k < cur.size(); k++, unmatched++)
+		_appendDirtyRectangle(*cur[k], rectangles, 255, 0, 0);
+}
+
+// Matches equal draw calls in order. After a mismatch it looks for the nearest
+// pair prev[i + a] == cur[j + b] (smallest a + b <= window); the calls skipped
+// on either side are the changed ones. If there is none, prev[i] and cur[j]
+// are both treated as changed, like the position diff does.
+static void diffRealign(const DrawCallArray &prev, const DrawCallKeyArray &prevKeys,
+		const DrawCallArray &cur, const DrawCallKeyArray &curKeys, uint window,
+		Common::List<DirtyRectangle> &rectangles, uint &unmatched, uint &resyncs) {
+	uint i = 0, j = 0;
+	const uint np = prev.size(), nc = cur.size();
+	while (i < np && j < nc) {
+		if (callsEqual(prev, prevKeys, i, cur, curKeys, j)) {
+			i++;
+			j++;
+			continue;
+		}
+		uint skipPrev = 1, skipCur = 1;
+		bool found = false;
+		for (uint k = 1; k <= window && !found; k++) {
+			for (uint a = 0; a <= k; a++) {
+				const uint b = k - a;
+				if (i + a < np && j + b < nc && callsEqual(prev, prevKeys, i + a, cur, curKeys, j + b)) {
+					skipPrev = a;
+					skipCur = b;
+					found = true;
+					break;
+				}
 			}
+		}
+		if (found && (skipPrev == 0 || skipCur == 0))
+			resyncs++;
+		for (uint k = 0; k < skipPrev; k++, unmatched++)
+			_appendDirtyRectangle(*prev[i + k], rectangles, 255, 255, 255);
+		for (uint k = 0; k < skipCur; k++, unmatched++)
+			_appendDirtyRectangle(*cur[j + k], rectangles, 255, 0, 0);
+		i += skipPrev;
+		j += skipCur;
 	}
+	for (; i < np; i++, unmatched++)
+		_appendDirtyRectangle(*prev[i], rectangles, 255, 255, 255);
+	for (; j < nc; j++, unmatched++)
+		_appendDirtyRectangle(*cur[j], rectangles, 255, 0, 0);
+}
 
-	for ( ; itPrevFrame != endPrevFrame; ++itPrevFrame) {
-		_appendDirtyRectangle(**itPrevFrame, rectangles, 255, 255, 255);
-	}
-
-	for ( ; itFrame != endFrame; ++itFrame) {
-		_appendDirtyRectangle(**itFrame, rectangles, 255, 0, 0);
-	}
+static void mergeDirtyRectangles(Common::List<DirtyRectangle> &rectangles, const Common::Rect &renderRect) {
+	typedef Common::List<DirtyRectangle>::iterator RectangleIterator;
 
 	// This loop increases outer rectangle coordinates to favor merging of adjacent rectangles.
 	for (auto &rect : rectangles) {
@@ -201,6 +287,177 @@ void GLContext::presentBufferDirtyRects(Common::List<Common::Rect> &dirtyAreas) 
 	for (auto &rect : rectangles) {
 		rect.rectangle.clip(renderRect);
 	}
+}
+
+static uint64 rectanglesArea(const Common::List<DirtyRectangle> &rectangles) {
+	uint64 area = 0;
+	for (const auto &rect : rectangles)
+		area += (uint64)rect.rectangle.width() * rect.rectangle.height();
+	return area;
+}
+
+// Tile diff: every tile keeps a hash of the calls touching it, in order. A
+// tile is redrawn when its hash differs from the previous frame's.
+static Common::Array<uint64> s_prevTileHash;
+static int s_prevTilesX = 0, s_prevTilesY = 0, s_prevTileSize = 0;
+
+static void diffTiles(const DrawCallArray &cur, const Common::Array<uint64> &callHashes, const Common::Rect &renderRect,
+		int tileSize, Common::List<DirtyRectangle> &rectangles) {
+	const int tilesX = (renderRect.right + tileSize - 1) / tileSize;
+	const int tilesY = (renderRect.bottom + tileSize - 1) / tileSize;
+	Common::Array<uint64> tileHash;
+	tileHash.resize(tilesX * tilesY);
+	for (uint i = 0; i < tileHash.size(); i++)
+		tileHash[i] = 0x9e3779b97f4a7c15ULL;
+
+	for (uint c = 0; c < cur.size(); c++) {
+		Common::Rect r = cur[c]->getDirtyRegion();
+		// Same one pixel of slack the rectangle merge adds.
+		r.right++;
+		r.bottom++;
+		r.clip(renderRect);
+		if (r.isEmpty())
+			continue;
+		const int x0 = r.left / tileSize, x1 = (r.right - 1) / tileSize;
+		const int y0 = r.top / tileSize, y1 = (r.bottom - 1) / tileSize;
+		const uint64 h = callHashes[c];
+		for (int y = y0; y <= y1; y++) {
+			uint64 *row = &tileHash[y * tilesX];
+			for (int x = x0; x <= x1; x++)
+				row[x] = hashMix(row[x] * 31 + 1, h);
+		}
+	}
+
+	const bool comparable = s_prevTilesX == tilesX && s_prevTilesY == tilesY && s_prevTileSize == tileSize;
+	Common::Array<bool> dirty;
+	dirty.resize(tilesX * tilesY);
+	for (uint i = 0; i < dirty.size(); i++)
+		dirty[i] = !comparable || tileHash[i] != s_prevTileHash[i];
+
+	// Join dirty tiles: runs along each row, then runs with the same span on
+	// consecutive rows.
+	struct Run { int x0, x1, y0, y1; };
+	Common::Array<Run> open, next;
+	for (int y = 0; y <= tilesY; y++) {
+		next.clear();
+		int x = 0;
+		while (y < tilesY && x < tilesX) {
+			if (!dirty[y * tilesX + x]) {
+				x++;
+				continue;
+			}
+			int x0 = x;
+			while (x < tilesX && dirty[y * tilesX + x])
+				x++;
+			Run run = { x0, x - 1, y, y };
+			for (uint k = 0; k < open.size(); k++) {
+				if (open[k].x0 == run.x0 && open[k].x1 == run.x1) {
+					run.y0 = open[k].y0;
+					open.remove_at(k);
+					break;
+				}
+			}
+			next.push_back(run);
+		}
+		for (const Run &run : open) {
+			Common::Rect rect(run.x0 * tileSize, run.y0 * tileSize, (run.x1 + 1) * tileSize, (run.y1 + 1) * tileSize);
+			rect.clip(renderRect);
+			rectangles.push_back(DirtyRectangle(rect, 0, 0, 255));
+		}
+		open = next;
+	}
+
+	s_prevTileHash = tileHash;
+	s_prevTilesX = tilesX;
+	s_prevTilesY = tilesY;
+	s_prevTileSize = tileSize;
+}
+
+void GLContext::presentBufferDirtyRects(Common::List<Common::Rect> &dirtyAreas) {
+	DirtyDiffStats &st = g_dirtyDiffStats;
+	uint64 tp0 = benchRdtsc();
+
+	DrawCallArray prev, cur;
+	prev.reserve(_previousFrameDrawCallsQueue.size());
+	cur.reserve(_drawCallsQueue.size());
+	for (auto *call : _previousFrameDrawCallsQueue)
+		prev.push_back(call);
+	for (auto *call : _drawCallsQueue)
+		cur.push_back(call);
+
+	uint64 tk0 = benchRdtsc();
+	DrawCallKeyArray prevKeys, curKeys;
+	prevKeys.resize(prev.size());
+	curKeys.resize(cur.size());
+	for (uint i = 0; i < prev.size(); i++) {
+		prevKeys[i].region = prev[i]->getDirtyRegion();
+		prevKeys[i].type = prev[i]->getType();
+	}
+	for (uint i = 0; i < cur.size(); i++) {
+		curKeys[i].region = cur[i]->getDirtyRegion();
+		curKeys[i].type = cur[i]->getType();
+	}
+	uint64 keyTicks = benchRdtsc() - tk0;
+
+	// Run both diffs every frame for the statistics; the selected one is used.
+	Common::List<DirtyRectangle> byPosition, realigned;
+	uint unmatchedPos = 0, unmatchedRealign = 0, resyncs = 0;
+
+	uint64 t0 = benchRdtsc();
+	diffByPosition(prev, prevKeys, cur, curKeys, byPosition, unmatchedPos);
+	mergeDirtyRectangles(byPosition, renderRect);
+	uint64 t1 = benchRdtsc();
+	diffRealign(prev, prevKeys, cur, curKeys, g_dirtyDiffWindow, realigned, unmatchedRealign, resyncs);
+	(void)resyncs;
+	mergeDirtyRectangles(realigned, renderRect);
+	uint64 t2 = benchRdtsc();
+
+	uint64 t3 = benchRdtsc();
+	Common::Array<uint64> callHashes;
+	callHashes.resize(cur.size());
+	for (uint i = 0; i < cur.size(); i++)
+		callHashes[i] = cur[i]->hash();
+	uint64 t4 = benchRdtsc();
+	Common::List<DirtyRectangle> tiles;
+	diffTiles(cur, callHashes, renderRect, g_dirtyTileSize, tiles);
+	uint64 t5 = benchRdtsc();
+
+	const uint64 screenArea = (uint64)renderRect.width() * renderRect.height();
+	st.frames++;
+	st.drawCalls += cur.size();
+	st.unmatchedPos += unmatchedPos;
+	st.unmatchedRealign += unmatchedRealign;
+	st.screenArea += screenArea;
+	st.hashTicks += t4 - t3;
+	st.ticks[DirtyDiffStats::kPosition] += t1 - t0 + keyTicks;
+	st.ticks[DirtyDiffStats::kRealign] += t2 - t1 + keyTicks;
+	st.ticks[DirtyDiffStats::kTiles] += t5 - t3;
+	const Common::List<DirtyRectangle> *results[DirtyDiffStats::kMethods] = { &byPosition, &realigned, &tiles };
+	for (int m = 0; m < DirtyDiffStats::kMethods; m++) {
+		const uint64 area = rectanglesArea(*results[m]);
+		st.area[m] += area;
+		st.rects[m] += results[m]->size();
+		st.hist[m][MIN<uint64>(10, area * 10 / screenArea)]++;
+	}
+
+	Common::List<DirtyRectangle> &rectangles = g_dirtyDiffMode == 2 ? tiles : g_dirtyDiffMode == 1 ? realigned : byPosition;
+	st.statsTicks += benchRdtsc() - tp0;
+
+	// Verification: the reference buffers hold the frame drawn from scratch
+	// every frame (execute all calls, no clipping), as presentBufferSimple does.
+	const int fbW = fb->getPixelBufferWidth(), fbH = fb->getPixelBufferHeight();
+	const size_t colorBytes = (size_t)fb->getPixelBufferPitch() * fbH;
+	const size_t zBytes = (size_t)fbW * fbH * sizeof(uint);
+	const size_t sBytes = fb->getStencilBuffer() ? (size_t)fbW * fbH : 0;
+	if (g_dirtyVerify && s_refColor.empty()) {
+		s_refColor.resize(colorBytes);
+		s_refZ.resize(zBytes);
+		s_refStencil.resize(sBytes);
+		memcpy(s_refColor.data(), fb->getPixelBuffer(), colorBytes);
+		memcpy(s_refZ.data(), fb->getZBufferMutable(), zBytes);
+		if (sBytes)
+			memcpy(s_refStencil.data(), fb->getStencilBuffer(), sBytes);
+	}
 
 	if (!rectangles.empty()) {
 		for (auto &rect : rectangles) {
@@ -208,16 +465,29 @@ void GLContext::presentBufferDirtyRects(Common::List<Common::Rect> &dirtyAreas) 
 		}
 
 		// Execute draw calls.
+		uint64 te0 = benchRdtsc(); // BENCH
 		for (auto &drawCall : _drawCallsQueue) {
 			Common::Rect drawCallRegion = drawCall->getDirtyRegion();
 			for (auto &rect : rectangles) {
 				Common::Rect dirtyRegion = rect.rectangle;
 				if (dirtyRegion.intersects(drawCallRegion)) {
+					uint64 tx0 = benchRdtsc();
 					drawCall->execute(true, &dirtyRegion);
+					st.typeTicks[drawCall->getType()] += benchRdtsc() - tx0;
+					st.typeExecutes[drawCall->getType()]++;
+					st.executes++;
 				}
 			}
 		}
+		st.execTicks += benchRdtsc() - te0;
 
+	}
+
+	if (g_dirtyVerify) {
+		verifyDirtyFrame(colorBytes, zBytes, sBytes);
+	}
+
+	if (!rectangles.empty()) {
 		if (_debugRectsEnabled) {
 			// Draw debug rectangles.
 			// Note: white rectangles are rectangle that contained other rectangles
@@ -236,6 +506,7 @@ void GLContext::presentBufferDirtyRects(Common::List<Common::Rect> &dirtyAreas) 
 		}
 	}
 
+	uint64 td0 = benchRdtsc();
 	// Dispose not necessary draw calls.
 	for (auto &p : _previousFrameDrawCallsQueue) {
 		delete p;
@@ -245,10 +516,65 @@ void GLContext::presentBufferDirtyRects(Common::List<Common::Rect> &dirtyAreas) 
 	_drawCallsQueue.clear();
 
 	disposeResources();
+	st.disposeTicks += benchRdtsc() - td0;
 
 	finishFrameAllocStats();
 	_currentAllocatorIndex = (_currentAllocatorIndex + 1) & 0x1;
 	resetFrameAllocator(_currentAllocatorIndex);
+}
+
+// BENCH: draws the frame from scratch on top of the reference buffers (the
+// previous frame drawn from scratch) and compares it with the dirty rect result.
+void GLContext::verifyDirtyFrame(size_t colorBytes, size_t zBytes, size_t sBytes) {
+	DirtyDiffStats &st = g_dirtyDiffStats;
+	byte *color = fb->getPixelBuffer();
+	byte *z = (byte *)fb->getZBufferMutable();
+	byte *stencil = fb->getStencilBuffer();
+
+	s_saveColor.resize(colorBytes);
+	s_saveZ.resize(zBytes);
+	s_saveStencil.resize(sBytes);
+	memcpy(s_saveColor.data(), color, colorBytes);
+	memcpy(s_saveZ.data(), z, zBytes);
+	if (sBytes)
+		memcpy(s_saveStencil.data(), stencil, sBytes);
+
+	memcpy(color, s_refColor.data(), colorBytes);
+	memcpy(z, s_refZ.data(), zBytes);
+	if (sBytes)
+		memcpy(stencil, s_refStencil.data(), sBytes);
+	for (const auto &drawCall : _drawCallsQueue)
+		drawCall->execute(true);
+
+	const int w = fb->getPixelBufferWidth(), h = fb->getPixelBufferHeight();
+	const int bpp = fb->getPixelBufferBpp(), pitch = fb->getPixelBufferPitch();
+	uint64 bad = 0;
+	for (int y = 0; y < h; y++) {
+		const byte *a = color + y * pitch, *b = s_saveColor.data() + y * pitch;
+		if (memcmp(a, b, w * bpp) == 0)
+			continue;
+		for (int x = 0; x < w; x++)
+			if (memcmp(a + x * bpp, b + x * bpp, bpp) != 0)
+				bad++;
+	}
+
+	memcpy(s_refColor.data(), color, colorBytes);
+	memcpy(s_refZ.data(), z, zBytes);
+	if (sBytes)
+		memcpy(s_refStencil.data(), stencil, sBytes);
+	memcpy(color, s_saveColor.data(), colorBytes);
+	memcpy(z, s_saveZ.data(), zBytes);
+	if (sBytes)
+		memcpy(stencil, s_saveStencil.data(), sBytes);
+
+	st.verifyFrames++;
+	if (bad) {
+		if (!st.verifyBadFrames)
+			st.verifyFirstBadFrame = st.frames;
+		st.verifyBadFrames++;
+		st.verifyBadPixels += bad;
+		st.verifyMaxBadPixels = MAX<uint64>(st.verifyMaxBadPixels, bad);
+	}
 }
 
 void GLContext::presentBufferSimple(Common::List<Common::Rect> &dirtyAreas) {
@@ -761,6 +1087,126 @@ bool ClearBufferDrawCall::operator==(const ClearBufferDrawCall &other) const {
 }
 
 
+// BENCH: draw call hashing for the tile diff. Hashes at least everything the
+// operator== compare, so equal calls always give equal hashes.
+uint64 DrawCall::hash() const {
+	switch (_type) {
+	case DrawCall_Rasterization:
+		return ((const RasterizationDrawCall *)this)->hash();
+	case DrawCall_Blitting:
+		return ((const BlittingDrawCall *)this)->hash();
+	case DrawCall_Clear:
+		return ((const ClearBufferDrawCall *)this)->hash();
+	default:
+		return 0;
+	}
+}
+
+uint64 ClearBufferDrawCall::hash() const {
+	uint64 h = hashMix(0x1234567ULL, DrawCall_Clear);
+	h = hashMix(h, _clearZBuffer | (_clearColorBuffer << 1) | (_clearStencilBuffer << 2) | (_clearState.enableScissor << 3));
+	h = hashMix(h, (uint32)_rValue);
+	h = hashMix(h, (uint32)_gValue);
+	h = hashMix(h, (uint32)_bValue);
+	h = hashMix(h, (uint32)_zValue);
+	h = hashMix(h, (uint32)_stencilValue);
+	for (int i = 0; i < 4; i++)
+		h = hashMix(h, (uint32)_clearState.scissor[i]);
+	return h;
+}
+
+uint64 BlittingDrawCall::hash() const {
+	uint64 h = hashMix(0x7654321ULL, DrawCall_Blitting);
+	h = hashMix(h, _mode);
+	h = hashPtr(h, _image);
+	h = hashMix(h, (uint32)_imageVersion);
+	h = hashRect(h, _transform._sourceRectangle);
+	h = hashRect(h, _transform._destinationRectangle);
+	h = hashMix(h, (uint32)_transform._rotation);
+	h = hashMix(h, (uint32)_transform._originX);
+	h = hashMix(h, (uint32)_transform._originY);
+	h = hashFloat(h, _transform._aTint);
+	h = hashFloat(h, _transform._rTint);
+	h = hashFloat(h, _transform._gTint);
+	h = hashFloat(h, _transform._bTint);
+	h = hashMix(h, _transform._flipHorizontally | (_transform._flipVertically << 1));
+	const BlittingState &b = _blitState;
+	h = hashMix(h, b.enableScissor | (b.enableBlending << 1) | (b.alphaTest << 2));
+	for (int i = 0; i < 4; i++)
+		h = hashMix(h, (uint32)b.scissor[i]);
+	h = hashMix(h, (uint32)b.sfactor);
+	h = hashMix(h, (uint32)b.dfactor);
+	h = hashMix(h, (uint32)b.alphaFunc);
+	h = hashMix(h, (uint32)b.alphaRefValue);
+	h = hashMix(h, (uint32)b.depthTestEnabled);
+	return h;
+}
+
+uint64 RasterizationDrawCall::hash() const {
+	uint64 h = hashMix(0xabcdefULL, DrawCall_Rasterization);
+	h = hashMix(h, (uint32)_vertexCount);
+	h = hashPtr(h, (const void *)_drawTriangleFront);
+	h = hashPtr(h, (const void *)_drawTriangleBack);
+
+	const RasterizationState &st = _state;
+	h = hashMix(h, st.enableScissor | (st.enableBlending << 1) | (st.alphaTestEnabled << 2) | (st.depthTestEnabled << 3) |
+		(st.stencilTestEnabled << 4) | (st.colorMaskRed << 5) | (st.colorMaskGreen << 6) | (st.colorMaskBlue << 7) |
+		(st.colorMaskAlpha << 8) | (st.texture2DEnabled << 9) | (st.fogEnabled << 10) | (st.polygonStippleEnabled << 11) |
+		(st.two_color_stipple_enabled << 12));
+	const int ints[] = { st.sfactor, st.dfactor, st.alphaFunc, st.alphaRefValue, st.depthFunction, st.depthWriteMask,
+		st.stencilTestFunc, st.stencilValue, st.stencilMask, st.stencilWriteMask, st.stencilSfail, st.stencilDpfail,
+		st.stencilDppass, st.offsetStates, st.lightingEnabled, st.cullFaceEnabled, st.beginType, st.currentFrontFace,
+		st.currentShadeModel, st.polygonModeBack, st.polygonModeFront, st.textureVersion,
+		st.scissor[0], st.scissor[1], st.scissor[2], st.scissor[3], (int)st.wrapS, (int)st.wrapT, (int)st.stippleColor };
+	for (uint i = 0; i < ARRAYSIZE(ints); i++)
+		h = hashMix(h, (uint32)ints[i]);
+	h = hashFloat(h, st.offsetFactor);
+	h = hashFloat(h, st.offsetUnits);
+	for (int i = 0; i < 3; i++) {
+		h = hashFloat(h, st.viewportTranslation[i]);
+		h = hashFloat(h, st.viewportScaling[i]);
+	}
+	h = hashFloat(h, st.fogColorR);
+	h = hashFloat(h, st.fogColorG);
+	h = hashFloat(h, st.fogColorB);
+	h = hashPtr(h, st.texture);
+	const GLTextureEnv &env = st.textureEnv;
+	h = hashMix(h, env.envMode);
+	h = hashMix(h, env.combineRGB);
+	h = hashMix(h, env.combineAlpha);
+	h = hashMix(h, ((uint32)env.constA << 24) | (env.constR << 16) | (env.constG << 8) | env.constB);
+	h = hashMix(h, ((uint64)env.arg0.sourceRGB << 32) | env.arg0.operandRGB);
+	h = hashMix(h, ((uint64)env.arg0.sourceAlpha << 32) | env.arg0.operandAlpha);
+	h = hashMix(h, ((uint64)env.arg1.sourceRGB << 32) | env.arg1.operandRGB);
+	h = hashMix(h, ((uint64)env.arg1.sourceAlpha << 32) | env.arg1.operandAlpha);
+	if (st.polygonStippleEnabled) {
+		for (int i = 0; i < 128; i += 4)
+			h = hashMix(h, READ_UINT32(st.polygonStipplePattern + i));
+	}
+
+	for (int i = 0; i < _vertexCount; i++) {
+		const GLVertex &v = _vertex[i];
+		h = hashMix(h, ((uint64)(uint32)v.edge_flag << 32) | (uint32)v.clip_code);
+		h = hashVec3(h, v.normal);
+		h = hashVec4(h, v.coord);
+		h = hashVec4(h, v.tex_coord);
+		h = hashVec4(h, v.color);
+		h = hashVec4(h, v.ec);
+		h = hashVec4(h, v.pc);
+		const ZBufferPoint &zp = v.zp;
+		h = hashMix(h, ((uint64)(uint32)zp.x << 32) | (uint32)zp.y);
+		h = hashMix(h, ((uint64)(uint32)zp.z << 32) | (uint32)zp.s);
+		h = hashMix(h, ((uint64)(uint32)zp.t << 32) | (uint32)zp.r);
+		h = hashMix(h, ((uint64)(uint32)zp.g << 32) | (uint32)zp.b);
+		h = hashMix(h, (uint32)zp.a);
+		if (st.fogEnabled) {
+			h = hashFloat(h, v.fog_factor);
+			h = hashMix(h, (uint32)zp.f);
+		}
+	}
+	return h;
+}
+
 bool RasterizationDrawCall::RasterizationState::operator==(const RasterizationState &other) const {
 	return
 		enableScissor == other.enableScissor &&
@@ -996,17 +1442,17 @@ Common::String FrameAllocStats::format(const char *title, size_t capacity) const
 	return out;
 }
 
+uint64 g_benchAllocTicks = 0, g_benchStatsTicks = 0, g_benchPresentTicks = 0, g_benchSceneTicks = 0; // BENCH
+
 void *GLContext::allocateFrame(size_t size, FrameAllocCategory category) {
 	LinearAllocator &allocator = _drawCallAllocator[_currentAllocatorIndex];
 	FrameAllocStats &stats = _frameAllocStats[_currentAllocatorIndex];
-	if (!allocator.canAllocate(size)) {
-		// Dump what filled the allocator before the allocator itself errors out.
-		Common::String report = stats.format("TinyGL draw call allocator exhausted", allocator.getCapacity());
-		warning("Failed allocating %u bytes (%s, label %s)\n%s", (uint)size, kFrameAllocCategoryNames[category],
-			_frameAllocLabel ? _frameAllocLabel : "(unlabeled)", report.c_str());
-	}
+	uint64 t0 = benchRdtsc(); // BENCH
 	void *ptr = allocator.allocate(size);
+	uint64 t1 = benchRdtsc();
 	stats.add(category, _frameAllocLabel, size, begin_type, vertex_cnt);
+	g_benchAllocTicks += t1 - t0;
+	g_benchStatsTicks += benchRdtsc() - t1;
 	return ptr;
 }
 
@@ -1053,8 +1499,9 @@ Common::String getFrameAllocReport(FrameAllocReport which) {
 	default:
 		break;
 	}
-	out += Common::String::format("Allocator usage right now: [0] %s, [1] %s (current index %d%s)\n",
-		formatBytes(c->_drawCallAllocator[0].getUsed()).c_str(), formatBytes(c->_drawCallAllocator[1].getUsed()).c_str(),
+	out += Common::String::format("Allocator usage right now: [0] %s in %u blocks, [1] %s in %u blocks (current index %d%s)\n",
+		formatBytes(c->_drawCallAllocator[0].getUsed()).c_str(), c->_drawCallAllocator[0].getBlockCount(),
+		formatBytes(c->_drawCallAllocator[1].getUsed()).c_str(), c->_drawCallAllocator[1].getBlockCount(),
 		c->_currentAllocatorIndex, c->_enableDirtyRectangles ? "; dirty rects keep the previous frame alive" : "");
 	return out;
 }

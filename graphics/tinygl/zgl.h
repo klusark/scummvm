@@ -225,57 +225,90 @@ struct GLSharedState {
 };
 
 /**
- * A linear allocator implementation.
- * The allocator can be initialized to a specific buffer size only once.
- * The allocation scheme is pretty simple: pointers are returned relative to a current memory position,
- * the allocator starts with an offset of 0 and increases its offset by the allocated amount every time.
- * Memory is released through the method free(), care has to be taken to call the destructors of the deallocated objects either manually (for complex struct arrays) or
- * by overriding the delete operator (with an empty implementation).
+ * A linear allocator for the per-frame draw calls.
+ * Pointers are handed out from a list of memory blocks: each allocation takes
+ * the next free bytes of the current block, and moves on to the next block when
+ * it doesn't fit. When every block is full a new one is added, so the allocator
+ * never runs out; the blocks are kept for the following frames.
+ * reset() releases everything at once, so the destructors of the allocated
+ * objects have to be called manually or overridden with an empty operator delete.
  */
 class LinearAllocator {
 public:
-	LinearAllocator() {
-		_memoryBuffer = nullptr;
-		_memorySize = 0;
-		_memoryPosition = 0;
-	}
+	static const size_t kAlignment = 8;
 
-	void initialize(size_t newSize) {
-		assert(_memoryBuffer == nullptr);
-		void *newBuffer = gl_malloc(newSize);
-		if (newBuffer == nullptr) {
-			error("Couldn't allocate memory for linear allocator.");
-		}
-		_memoryBuffer = newBuffer;
-		_memorySize = newSize;
-	}
+	LinearAllocator() : _blockSize(0), _current(0), _position(0), _used(0) {}
 
 	~LinearAllocator() {
-		if (_memoryBuffer != nullptr) {
-			gl_free(_memoryBuffer);
-		}
+		for (uint i = 0; i < _blocks.size(); i++)
+			gl_free(_blocks[i].data);
+	}
+
+	void initialize(size_t blockSize) {
+		assert(_blocks.empty());
+		_blockSize = blockSize;
+		addBlock(blockSize);
 	}
 
 	void *allocate(size_t size) {
-		if (_memoryPosition + size >= _memorySize) {
-			error("Allocator out of memory: couldn't allocate more memory from linear allocator.");
+		size = (size + kAlignment - 1) & ~(kAlignment - 1);
+		while (_position + size > _blocks[_current].size) {
+			_current++;
+			_position = 0;
+			if (_current == _blocks.size()) {
+				// Out of blocks: add one, big enough for an oversized request.
+				addBlock(MAX(size, _blockSize));
+				break;
+			}
+			// Otherwise try the next existing block; skip it too if the request doesn't fit.
 		}
-		size_t returnPos = _memoryPosition;
-		_memoryPosition += size;
-		return ((byte *)_memoryBuffer) + returnPos;
+		byte *ptr = _blocks[_current].data + _position;
+		_position += size;
+		_used += size;
+		return ptr;
 	}
 
 	void reset() {
-		_memoryPosition = 0;
+		_current = 0;
+		_position = 0;
+		_used = 0;
 	}
 
-	bool canAllocate(size_t size) const { return _memoryPosition + size < _memorySize; }
-	size_t getUsed() const { return _memoryPosition; }
-	size_t getCapacity() const { return _memorySize; }
+	/** Bytes handed out since the last reset(), including alignment padding. */
+	size_t getUsed() const { return _used; }
+	/** Total size of all blocks. */
+	size_t getCapacity() const {
+		size_t total = 0;
+		for (uint i = 0; i < _blocks.size(); i++)
+			total += _blocks[i].size;
+		return total;
+	}
+	uint getBlockCount() const { return _blocks.size(); }
+
 private:
-	void *_memoryBuffer;
-	size_t _memorySize;
-	size_t _memoryPosition;
+	struct Block {
+		byte *data;
+		size_t size;
+	};
+
+	void addBlock(size_t size) {
+		Block block;
+		block.data = (byte *)gl_malloc(size);
+		if (block.data == nullptr)
+			error("Couldn't allocate a %u byte block for the linear allocator", (uint)size);
+		block.size = size;
+		_blocks.push_back(block);
+	}
+
+	// Owns its blocks.
+	LinearAllocator(const LinearAllocator &);
+	LinearAllocator &operator=(const LinearAllocator &);
+
+	Common::Array<Block> _blocks;
+	size_t _blockSize;
+	uint _current;
+	size_t _position;
+	size_t _used;
 };
 
 /**
@@ -609,6 +642,7 @@ public:
 
 	void presentBufferDirtyRects(Common::List<Common::Rect> &dirtyAreas);
 	void presentBufferSimple(Common::List<Common::Rect> &dirtyAreas);
+	void verifyDirtyFrame(size_t colorBytes, size_t zBytes, size_t sBytes); // BENCH
 
 	void debugDrawRectangle(Common::Rect rect, int r, int g, int b);
 

@@ -78,6 +78,7 @@ public:
 	DrawCall(DrawCallType type) : _type(type) { }
 	virtual ~DrawCall() { }
 	bool operator==(const DrawCall &other) const;
+	uint64 hash() const; // BENCH: equal calls give equal hashes
 	bool operator!=(const DrawCall &other) const {
 		return !(*this == other);
 	}
@@ -95,6 +96,7 @@ public:
 	ClearBufferDrawCall(bool clearZBuffer, int zValue, bool clearColorBuffer, int rValue, int gValue, int bValue, bool clearStencilBuffer, int stencilValue);
 	virtual ~ClearBufferDrawCall() { }
 	bool operator==(const ClearBufferDrawCall &other) const;
+	uint64 hash() const; // BENCH
 	void execute(bool restoreState, const Common::Rect *clippingRectangle = nullptr) const override;
 
 	void *operator new(size_t size) {
@@ -131,6 +133,7 @@ public:
 	RasterizationDrawCall();
 	virtual ~RasterizationDrawCall() { }
 	bool operator==(const RasterizationDrawCall &other) const;
+	uint64 hash() const; // BENCH
 	void execute(bool restoreState, const Common::Rect *clippingRectangle = nullptr) const override;
 
 	void *operator new(size_t size) {
@@ -216,6 +219,7 @@ public:
 	BlittingDrawCall(BlitImage *image, const BlitTransform &transform, BlittingMode blittingMode);
 	virtual ~BlittingDrawCall();
 	bool operator==(const BlittingDrawCall &other) const;
+	uint64 hash() const; // BENCH
 	void execute(bool restoreState, const Common::Rect *clippingRectangle = nullptr) const override;
 
 	BlittingMode getBlittingMode() const { return _mode; }

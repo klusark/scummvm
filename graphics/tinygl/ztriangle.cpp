@@ -256,6 +256,14 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 
 	// we compute dXdx and dXdy for all interpolated values
 
+	// Nothing inside the clip rectangle (one pixel of slack for the span rounding).
+	if (kEnableScissor) {
+		const int minX = MIN(p0->x, MIN(p1->x, p2->x)), maxX = MAX(p0->x, MAX(p1->x, p2->x));
+		if (p2->y < _clipRectangle.top || p0->y >= _clipRectangle.bottom ||
+			maxX + 1 < _clipRectangle.left || minX - 1 >= _clipRectangle.right)
+			return;
+	}
+
 	fdx1 = (float)(p1->x - p0->x);
 	fdy1 = (float)(p1->y - p0->y);
 
@@ -482,6 +490,11 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 
 		// we draw all the scan line of the part
 		while (nb_lines > 0) {
+			// Rows below the clip rectangle: every pixel left would be scissored.
+			if (kEnableScissor && y >= _clipRectangle.bottom)
+				return;
+			// Rows above it are only stepped through.
+			if (!kEnableScissor || y >= _clipRectangle.top) {
 			int x = x1;
 			if (colorMode == ColorMode::NoInterpolation) {
 				int n;
@@ -656,6 +669,8 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 					n -= 1;
 					x += 1;
 				}
+			}
+
 			}
 
 			// left edge
