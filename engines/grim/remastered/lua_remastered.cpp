@@ -526,15 +526,16 @@ void Lua_Remastered::Save() {
 	lua_Object param2 = lua_getparam(2);
 	lua_Object param3 = lua_getparam(3);
 	lua_Object param4 = lua_getparam(4);
-	assert(lua_isnumber(param1));
-	assert(lua_isstring(param2));
-	assert(lua_isnumber(param3));
-	assert(lua_isstring(param4));
+	// The Remastered saves only to a numbered slot: given anything else (the original's Save(file)) it saves nothing
+	if (!lua_isnumber(param1)) {
+		warning("Save: no slot number given, nothing saved");
+		return;
+	}
 
 	int slot = lua_getnumber(param1);
-	const char *p2Str = lua_getstring(param2);
-	int p3Num = lua_getnumber(param3);
-	const char *p4Str = lua_getstring(param4);
+	const char *p2Str = lua_isstring(param2) ? lua_getstring(param2) : "";
+	int p3Num = lua_isnumber(param3) ? (int)lua_getnumber(param3) : 0;
+	const char *p4Str = lua_isstring(param4) ? lua_getstring(param4) : "";
 
 	warning("REMASTERED save: %d, %s, %d, %s", slot, p2Str, p3Num, p4Str);
 	Common::String saveGameFilename = Common::String::format("grim_r%03d.sav", slot);
