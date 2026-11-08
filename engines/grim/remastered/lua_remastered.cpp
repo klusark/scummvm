@@ -164,11 +164,10 @@ void Lua_Remastered::OverlayMove() {
 }
 
 void Lua_Remastered::QueryActiveHotspots() {
+	// (the Remastered gives the table without an argument too)
 	lua_Object param = lua_getparam(1);
 
-	assert(lua_isnumber(param));
-
-	warning("Stub function: QueryActiveHotspots(%f)", lua_getnumber(param));
+	warning("Stub function: QueryActiveHotspots(%f)", lua_isnumber(param) ? lua_getnumber(param) : 0.0f);
 
 	// TODO: Handle coord scaling better
 	float scaleX = 1920.0f/1600;
@@ -286,9 +285,9 @@ void Lua_Remastered::SetMouseSpeedScale() {
 
 // Commentary
 void Lua_Remastered::EnableCommentary() {
+	// (a flag: the scripts' FALSE is nil)
 	lua_Object param1 = lua_getparam(1);
-	assert(lua_isnumber(param1));
-	warning("Stub function: EnableCommentary(%f)", lua_getnumber(param1));
+	warning("Stub function: EnableCommentary(%s)", lua_isnil(param1) ? "nil" : "non-nil");
 }
 
 void Lua_Remastered::SetCommentary() {
@@ -386,29 +385,15 @@ void Lua_Remastered::AddHotspot() {
 	lua_Object param10 = lua_getparam(10);
 	lua_Object param11 = lua_getparam(11);
 
-	assert(lua_isstring(param1));
-	assert(lua_isnumber(param2));
-	assert(lua_isnumber(param3));
-	assert(lua_isnumber(param4));
-	assert(lua_isnumber(param5));
-	assert(lua_isnumber(param6));
-	assert(lua_isnumber(param7));
-	//assert(lua_isnumber(param8));
-	assert(lua_isnumber(param11));
-
-	const char *p9str = "nil";
-	const char *p10str = "nil";
-	if (lua_isstring(param9)) {
-		p9str = lua_getstring(param9);
-	} else if (!lua_isnil(param9)) {
-		assert(lua_isnil(param9));
+	// (the hotspot takes the first five; without them there is none, instead of an assert)
+	if (!lua_isstring(param1) || !lua_isnumber(param2) || !lua_isnumber(param3) || !lua_isnumber(param4) ||
+			!lua_isnumber(param5)) {
+		lua_pushnil();
+		return;
 	}
 
-	if (lua_isstring(param10)) {
-		p10str = lua_getstring(param10);
-	} else if (!lua_isnil(param10)) {
-		assert(lua_isnil(param10));
-	}
+	const char *p9str = lua_isstring(param9) ? lua_getstring(param9) : "nil";
+	const char *p10str = lua_isstring(param10) ? lua_getstring(param10) : "nil";
 	warning("Stub function: AddHotspot(%s, %f, %f, %f, %f, %f, %f, %f, %s, %s, %f)", lua_getstring(param1), lua_getnumber(param2), lua_getnumber(param3), lua_getnumber(param4), lua_getnumber(param5), lua_getnumber(param6), lua_getnumber(param7), lua_getnumber(param8), p9str, p10str, lua_getnumber(param11));
 
 	Hotspot *hotspot = new Hotspot(lua_getstring(param1), lua_getnumber(param2), lua_getnumber(param3), lua_getnumber(param4), lua_getnumber(param5));
@@ -558,9 +543,9 @@ void Lua_Remastered::Save() {
 }
 
 void Lua_Remastered::ShowCursor() {
+	// (a flag: the scripts' FALSE is nil)
 	lua_Object param1 = lua_getparam(1);
-	assert(lua_isnumber(param1));
-	warning("Stub function: ShowCursor(%f)", lua_getnumber(param1));
+	warning("Stub function: ShowCursor(%s)", lua_isnil(param1) ? "nil" : "non-nil");
 }
 
 void Lua_Remastered::ReadRegistryIntValue() {
