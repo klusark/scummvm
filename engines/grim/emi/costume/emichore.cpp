@@ -62,8 +62,9 @@ void EMIChore::update(uint time) {
 	}
 
 	int newTime;
+	// (the first update counts its frame too, as in Chore::update)
 	if (_currTime < 0)
-		newTime = 0; // For first time through
+		newTime = time;
 	else
 		newTime = _currTime + time;
 

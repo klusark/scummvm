@@ -151,9 +151,11 @@ void Chore::update(uint time) {
 	if (!_playing || _paused)
 		return;
 
+	// The first update counts its frame too (the keys at time 0 fire with it): after n frames a chore is n frames in, as
+	// in the original, where it was one frame behind
 	int newTime;
 	if (_currTime < 0)
-		newTime = 0; // For first time through
+		newTime = time;
 	else
 		newTime = _currTime + time;
 
