@@ -41,6 +41,7 @@ public:
 	bool cmd_save(int argc, const char **argv);
 	bool cmd_load(int argc, const char **argv);
 	bool cmd_imuse(int argc, const char **argv);
+	bool cmd_tinygl_alloc(int argc, const char **argv);
 };
 
 }

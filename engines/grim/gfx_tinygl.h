@@ -137,6 +137,9 @@ private:
 	Graphics::Surface *_storedDisplay;
 	float _alpha;
 	const Actor *_currentActor;
+	// TinyGL draw call memory accounting label while an actor is drawn.
+	Common::String _actorAllocLabel;
+	const char *_prevAllocLabel;
 	TGLenum _depthFunc;
 
 	void readPixels(int x, int y, int width, int height, uint8 *buffer);

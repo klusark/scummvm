@@ -50,7 +50,7 @@ GfxBase *CreateGfxTinyGL() {
 GfxTinyGL::GfxTinyGL() :
 		_alpha(1.f),
 		_currentActor(nullptr), _smushImage(nullptr),
-		_storedDisplay(nullptr) {
+		_storedDisplay(nullptr), _prevAllocLabel(nullptr) {
 	type = Graphics::RendererType::kRendererTypeTinyGL;
 	// TGL_LEQUAL as tglDepthFunc ensures that subsequent drawing attempts for
 	// the same triangles are not ignored by the depth test.
@@ -169,10 +169,12 @@ Math::Matrix4 GfxTinyGL::getProjection() {
 }
 
 void GfxTinyGL::clearScreen() {
+	TinyGL::FrameAllocLabelScope allocLabel("clearScreen");
 	tglClear(TGL_COLOR_BUFFER_BIT | TGL_DEPTH_BUFFER_BIT);
 }
 
 void GfxTinyGL::clearDepthBuffer() {
+	TinyGL::FrameAllocLabelScope allocLabel("clearDepthBuffer");
 	tglClear(TGL_DEPTH_BUFFER_BIT);
 }
 
@@ -459,6 +461,8 @@ void GfxTinyGL::getActorScreenBBox(const Actor *actor, Common::Point &p1, Common
 
 void GfxTinyGL::startActorDraw(const Actor *actor) {
 	_currentActor = actor;
+	_actorAllocLabel = Common::String::format("actor %s%s", actor->getName().c_str(), _currentShadowArray ? " (shadow)" : "");
+	_prevAllocLabel = TinyGL::setFrameAllocLabel(_actorAllocLabel.c_str());
 	tglEnable(TGL_TEXTURE_2D);
 	tglEnable(TGL_LIGHTING);
 	tglMatrixMode(TGL_PROJECTION);
@@ -553,10 +557,12 @@ void GfxTinyGL::finishActorDraw() {
 		tglDisable(TGL_CULL_FACE);
 	}
 
+	TinyGL::setFrameAllocLabel(_prevAllocLabel);
 	_currentActor = nullptr;
 }
 
 void GfxTinyGL::drawShadowPlanes() {
+	TinyGL::FrameAllocLabelScope allocLabel("drawShadowPlanes");
 /*	tglColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 	_currentShadowArray->planeList.begin();
 	for (SectorListType::iterator i = _currentShadowArray->planeList.begin(); i != _currentShadowArray->planeList.end(); i++) {
@@ -716,6 +722,7 @@ void GfxTinyGL::drawModelFace(const Mesh *mesh, const MeshFace *face) {
 }
 
 void GfxTinyGL::drawSprite(const Sprite *sprite) {
+	TinyGL::FrameAllocLabelScope allocLabel("drawSprite");
 	tglMatrixMode(TGL_TEXTURE);
 	tglLoadIdentity();
 	tglMatrixMode(TGL_MODELVIEW);
@@ -935,6 +942,7 @@ void GfxTinyGL::createBitmap(BitmapData *bitmap) {
 }
 
 void GfxTinyGL::drawBitmap(const Bitmap *bitmap, int x, int y, uint32 layer) {
+	TinyGL::FrameAllocLabelScope allocLabel("drawBitmap");
 	// PS2 EMI uses a TGA for it's splash-screen, avoid using the following
 	// code for drawing that (as it has no tiles).
 	if (g_grim->getGameType() == GType_MONKEY4 && bitmap->_data && bitmap->_data->_texc) {
@@ -1057,6 +1065,7 @@ void GfxTinyGL::createTextObject(TextObject *text) {
 }
 
 void GfxTinyGL::drawTextObject(const TextObject *text) {
+	TinyGL::FrameAllocLabelScope allocLabel("drawTextObject");
 	const TextObjectData *userData = (const TextObjectData *)text->getUserData();
 	if (userData) {
 		tglEnable(TGL_BLEND);
@@ -1159,6 +1168,7 @@ void GfxTinyGL::prepareMovieFrame(Graphics::Surface *frame) {
 }
 
 void GfxTinyGL::drawMovieFrame(int offsetX, int offsetY) {
+	TinyGL::FrameAllocLabelScope allocLabel("drawMovieFrame");
 	tglBlitFast(_smushImage, offsetX, offsetY);
 }
 
@@ -1189,6 +1199,7 @@ void GfxTinyGL::loadEmergFont() {
 }
 
 void GfxTinyGL::drawEmergString(int x, int y, const char *text, const Color &fgColor) {
+	TinyGL::FrameAllocLabelScope allocLabel("drawEmergString");
 	int length = strlen(text);
 
 	for (int l = 0; l < length; l++) {
@@ -1237,6 +1248,7 @@ void GfxTinyGL::dimScreen() {
 }
 
 void GfxTinyGL::dimRegion(int x, int y, int w, int h, float level) {
+	TinyGL::FrameAllocLabelScope allocLabel("dimRegion");
 	tglMatrixMode(TGL_PROJECTION);
 	tglLoadIdentity();
 	tglOrthof(0, _gameWidth, _gameHeight, 0, 0, 1);
@@ -1267,6 +1279,7 @@ void GfxTinyGL::dimRegion(int x, int y, int w, int h, float level) {
 }
 
 void GfxTinyGL::irisAroundRegion(int x1, int y1, int x2, int y2) {
+	TinyGL::FrameAllocLabelScope allocLabel("irisAroundRegion");
 	tglMatrixMode(TGL_PROJECTION);
 	tglLoadIdentity();
 	tglOrthof(0, _gameWidth, _gameHeight, 0, 0, 1);
@@ -1313,6 +1326,7 @@ void GfxTinyGL::irisAroundRegion(int x1, int y1, int x2, int y2) {
 }
 
 void GfxTinyGL::drawRectangle(const PrimitiveObject *primitive) {
+	TinyGL::FrameAllocLabelScope allocLabel("drawRectangle");
 	float x1 = primitive->getP1().x * _scaleW;
 	float y1 = primitive->getP1().y * _scaleH;
 	float x2 = primitive->getP2().x * _scaleW;
@@ -1356,6 +1370,7 @@ void GfxTinyGL::drawRectangle(const PrimitiveObject *primitive) {
 }
 
 void GfxTinyGL::drawLine(const PrimitiveObject *primitive) {
+	TinyGL::FrameAllocLabelScope allocLabel("drawLine");
 	float x1 = primitive->getP1().x * _scaleW;
 	float y1 = primitive->getP1().y * _scaleH;
 	float x2 = primitive->getP2().x * _scaleW;
@@ -1390,6 +1405,7 @@ void GfxTinyGL::drawLine(const PrimitiveObject *primitive) {
 }
 
 void GfxTinyGL::drawDimPlane() {
+	TinyGL::FrameAllocLabelScope allocLabel("drawDimPlane");
 	if (_dimLevel == 0.0f) return;
 
 	tglMatrixMode(TGL_PROJECTION);
@@ -1423,6 +1439,7 @@ void GfxTinyGL::drawDimPlane() {
 }
 
 void GfxTinyGL::drawPolygon(const PrimitiveObject *primitive) {
+	TinyGL::FrameAllocLabelScope allocLabel("drawPolygon");
 	float x1 = primitive->getP1().x * _scaleW;
 	float y1 = primitive->getP1().y * _scaleH;
 	float x2 = primitive->getP2().x * _scaleW;

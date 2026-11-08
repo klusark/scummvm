@@ -357,6 +357,12 @@ void GLContext::init(int screenW, int screenH, Graphics::PixelFormat pixelFormat
 	_currentAllocatorIndex = 0;
 	_drawCallAllocator[0].initialize(drawCallMemorySize);
 	_drawCallAllocator[1].initialize(drawCallMemorySize);
+	_frameAllocStats[0].clear();
+	_frameAllocStats[1].clear();
+	_lastFrameAllocStats.clear();
+	_peakFrameAllocStats.clear();
+	_frameAllocLabel = nullptr;
+	_frameAllocFrameNumber = 0;
 	_debugRectsEnabled = false;
 	_profilingEnabled = false;
 }

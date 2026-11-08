@@ -30,8 +30,17 @@
 
 namespace TinyGL {
 
+enum FrameAllocCategory {
+	kFrameAllocClearCall,
+	kFrameAllocRasterCall,
+	kFrameAllocRasterVertices,
+	kFrameAllocBlitCall,
+	kFrameAllocOther,
+	kFrameAllocCategoryCount
+};
+
 namespace Internal {
-void *allocateFrame(int size);
+void *allocateFrame(int size, FrameAllocCategory category = kFrameAllocOther);
 }
 
 struct GLContext;
@@ -89,7 +98,7 @@ public:
 	void execute(bool restoreState, const Common::Rect *clippingRectangle = nullptr) const override;
 
 	void *operator new(size_t size) {
-		return Internal::allocateFrame(size);
+		return Internal::allocateFrame(size, kFrameAllocClearCall);
 	}
 
 	void operator delete(void *p) { }
@@ -125,7 +134,7 @@ public:
 	void execute(bool restoreState, const Common::Rect *clippingRectangle = nullptr) const override;
 
 	void *operator new(size_t size) {
-		return Internal::allocateFrame(size);
+		return Internal::allocateFrame(size, kFrameAllocRasterCall);
 	}
 
 	void operator delete(void *p) { }
@@ -212,7 +221,7 @@ public:
 	BlittingMode getBlittingMode() const { return _mode; }
 
 	void *operator new(size_t size) {
-		return Internal::allocateFrame(size);
+		return Internal::allocateFrame(size, kFrameAllocBlitCall);
 	}
 
 	void operator delete(void *p) { }

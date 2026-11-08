@@ -19,6 +19,7 @@
  *
  */
 
+#include "graphics/tinygl/tinygl.h"
 #include "graphics/tinygl/zdirtyrect.h"
 #include "graphics/tinygl/zgl.h"
 #include "graphics/tinygl/gl.h"
@@ -245,8 +246,9 @@ void GLContext::presentBufferDirtyRects(Common::List<Common::Rect> &dirtyAreas) 
 
 	disposeResources();
 
+	finishFrameAllocStats();
 	_currentAllocatorIndex = (_currentAllocatorIndex + 1) & 0x1;
-	_drawCallAllocator[_currentAllocatorIndex].reset();
+	resetFrameAllocator(_currentAllocatorIndex);
 }
 
 void GLContext::presentBufferSimple(Common::List<Common::Rect> &dirtyAreas) {
@@ -261,7 +263,8 @@ void GLContext::presentBufferSimple(Common::List<Common::Rect> &dirtyAreas) {
 
 	disposeResources();
 
-	_drawCallAllocator[_currentAllocatorIndex].reset();
+	finishFrameAllocStats();
+	resetFrameAllocator(_currentAllocatorIndex);
 }
 
 void presentBuffer(Common::List<Common::Rect> &dirtyAreas) {
@@ -302,7 +305,7 @@ bool DrawCall::operator==(const DrawCall &other) const {
 RasterizationDrawCall::RasterizationDrawCall() : DrawCall(DrawCall_Rasterization) {
 	GLContext *c = gl_get_context();
 	_vertexCount = c->vertex_cnt;
-	_vertex = (GLVertex *) Internal::allocateFrame(_vertexCount * sizeof(GLVertex));
+	_vertex = (GLVertex *) Internal::allocateFrame(_vertexCount * sizeof(GLVertex), kFrameAllocRasterVertices);
 	_drawTriangleFront = c->draw_triangle_front;
 	_drawTriangleBack = c->draw_triangle_back;
 	memcpy(_vertex, c->vertex, sizeof(GLVertex) * _vertexCount);
@@ -811,9 +814,234 @@ bool RasterizationDrawCall::RasterizationState::operator==(const RasterizationSt
 		viewportScaling[2] == other.viewportScaling[2];
 }
 
-void *Internal::allocateFrame(int size) {
+static const char *const kFrameAllocCategoryNames[kFrameAllocCategoryCount] = {
+	"ClearBufferDrawCall",
+	"RasterizationDrawCall",
+	"RasterizationDrawCall vertices",
+	"BlittingDrawCall",
+	"other"
+};
+
+static const char *const kPrimitiveNames[FrameAllocStats::kNumPrimitiveTypes + 1] = {
+	"POINTS", "LINES", "LINE_LOOP", "LINE_STRIP", "TRIANGLES",
+	"TRIANGLE_STRIP", "TRIANGLE_FAN", "QUADS", "QUAD_STRIP", "POLYGON", "unknown"
+};
+
+void FrameAllocStats::clear() {
+	memset(this, 0, sizeof(*this));
+}
+
+int FrameAllocStats::getVertexBucket(int vertexCount) {
+	if (vertexCount <= 3)
+		return 0;
+	if (vertexCount <= 4)
+		return 1;
+	if (vertexCount <= 16)
+		return 2;
+	if (vertexCount <= 64)
+		return 3;
+	if (vertexCount <= 256)
+		return 4;
+	if (vertexCount <= 1024)
+		return 5;
+	return 6;
+}
+
+const char *FrameAllocStats::getVertexBucketName(int bucket) {
+	static const char *const names[kNumVertexBuckets] = {
+		"1-3 verts", "4 verts", "5-16 verts", "17-64 verts", "65-256 verts", "257-1024 verts", ">1024 verts"
+	};
+	return names[bucket];
+}
+
+void FrameAllocStats::add(FrameAllocCategory category, const char *label, size_t size, int primitive, int vertexCount) {
+	totalBytes += size;
+	totalCount++;
+	categories[category].add(size);
+
+	if (category == kFrameAllocRasterVertices) {
+		if (primitive < 0 || primitive >= kNumPrimitiveTypes)
+			primitive = kNumPrimitiveTypes;
+		primitives[primitive].add(size);
+		vertexBuckets[getVertexBucket(vertexCount)].add(size);
+	}
+
+	int i = findOrAddLabel(label);
+	if (i < 0) {
+		overflowLabels.add(size);
+		return;
+	}
+	labels[i].add(size);
+	labelCategories[i][category].add(size);
+}
+
+void FrameAllocStats::addOffscreen(const char *label, size_t size) {
+	offscreen.add(size);
+	int i = findOrAddLabel(label);
+	if (i < 0)
+		overflowOffscreen.add(size);
+	else
+		labelOffscreen[i].add(size);
+}
+
+
+int FrameAllocStats::findOrAddLabel(const char *label) {
+	if (!label)
+		label = "(unlabeled)";
+	// Labels are compared by content (truncated to the stored length), the pointer
+	// is only a cache: the same buffer may hold different text over time.
+	if (label == lastLabelPtr && strncmp(labelNames[lastLabelIndex], label, kMaxLabelLength - 1) == 0)
+		return lastLabelIndex;
+	int i;
+	for (i = 0; i < numLabels; i++) {
+		if (strncmp(labelNames[i], label, kMaxLabelLength - 1) == 0)
+			break;
+	}
+	if (i == numLabels) {
+		if (numLabels == kMaxLabels)
+			return -1;
+		Common::strlcpy(labelNames[numLabels++], label, kMaxLabelLength);
+	}
+	lastLabelPtr = label;
+	lastLabelIndex = i;
+	return i;
+}
+
+static Common::String formatBytes(size_t bytes) {
+	if (bytes >= 1024 * 1024)
+		return Common::String::format("%.2f MiB", bytes / (1024.0 * 1024.0));
+	if (bytes >= 1024)
+		return Common::String::format("%.1f KiB", bytes / 1024.0);
+	return Common::String::format("%u B", (uint)bytes);
+}
+
+static Common::String formatEntry(const char *name, const FrameAllocStats::Entry &e, size_t total, int indent = 2) {
+	return Common::String::format("%*s%-40s %8u allocs %12s %5.1f%%  largest %s\n", indent, "", name,
+		e.count, formatBytes(e.bytes).c_str(), total ? 100.0 * e.bytes / total : 0.0, formatBytes(e.largest).c_str());
+}
+
+Common::String FrameAllocStats::format(const char *title, size_t capacity) const {
+	Common::String out = Common::String::format("%s (frame %u): %s in %u allocations, capacity %s (%.1f%% used)\n",
+		title, frameNumber, formatBytes(totalBytes).c_str(), totalCount, formatBytes(capacity).c_str(),
+		capacity ? 100.0 * totalBytes / capacity : 0.0);
+
+	out += "By category:\n";
+	for (int i = 0; i < kFrameAllocCategoryCount; i++) {
+		if (categories[i].count)
+			out += formatEntry(kFrameAllocCategoryNames[i], categories[i], totalBytes);
+	}
+
+	// Labels, largest first.
+	int order[kMaxLabels];
+	for (int i = 0; i < numLabels; i++)
+		order[i] = i;
+	for (int i = 1; i < numLabels; i++) {
+		int v = order[i], j = i;
+		for (; j > 0 && labels[order[j - 1]].bytes < labels[v].bytes; j--)
+			order[j] = order[j - 1];
+		order[j] = v;
+	}
+	out += "By label:\n";
+	for (int n = 0; n < numLabels; n++) {
+		int i = order[n];
+		out += formatEntry(labelNames[i], labels[i], totalBytes);
+		for (int c = 0; c < kFrameAllocCategoryCount; c++) {
+			if (labelCategories[i][c].count && labelCategories[i][c].bytes != labels[i].bytes)
+				out += formatEntry(kFrameAllocCategoryNames[c], labelCategories[i][c], totalBytes, 6);
+		}
+		if (labelOffscreen[i].count)
+			out += formatEntry("off-screen draw calls (incl. vertices)", labelOffscreen[i], totalBytes, 6);
+	}
+	if (overflowLabels.count)
+		out += formatEntry("(label table full)", overflowLabels, totalBytes);
+	if (overflowOffscreen.count)
+		out += formatEntry("(label table full) off-screen", overflowOffscreen, totalBytes, 6);
+	if (offscreen.count) {
+		out += "Off-screen rasterization (all vertices outside one clip plane; allocated, never drawn):\n";
+		out += formatEntry("draw calls incl. vertices", offscreen, totalBytes);
+	}
+
+	if (categories[kFrameAllocRasterVertices].count) {
+		out += "Vertex arrays by primitive:\n";
+		for (int i = 0; i <= kNumPrimitiveTypes; i++) {
+			if (primitives[i].count)
+				out += formatEntry(kPrimitiveNames[i], primitives[i], totalBytes);
+		}
+		out += "Vertex arrays by vertex count:\n";
+		for (int i = 0; i < kNumVertexBuckets; i++) {
+			if (vertexBuckets[i].count)
+				out += formatEntry(getVertexBucketName(i), vertexBuckets[i], totalBytes);
+		}
+	}
+	return out;
+}
+
+void *GLContext::allocateFrame(size_t size, FrameAllocCategory category) {
+	LinearAllocator &allocator = _drawCallAllocator[_currentAllocatorIndex];
+	FrameAllocStats &stats = _frameAllocStats[_currentAllocatorIndex];
+	if (!allocator.canAllocate(size)) {
+		// Dump what filled the allocator before the allocator itself errors out.
+		Common::String report = stats.format("TinyGL draw call allocator exhausted", allocator.getCapacity());
+		warning("Failed allocating %u bytes (%s, label %s)\n%s", (uint)size, kFrameAllocCategoryNames[category],
+			_frameAllocLabel ? _frameAllocLabel : "(unlabeled)", report.c_str());
+	}
+	void *ptr = allocator.allocate(size);
+	stats.add(category, _frameAllocLabel, size, begin_type, vertex_cnt);
+	return ptr;
+}
+
+void GLContext::finishFrameAllocStats() {
+	FrameAllocStats &stats = _frameAllocStats[_currentAllocatorIndex];
+	stats.frameNumber = _frameAllocFrameNumber++;
+	_lastFrameAllocStats = stats;
+	if (stats.totalBytes >= _peakFrameAllocStats.totalBytes)
+		_peakFrameAllocStats = stats;
+}
+
+void GLContext::resetFrameAllocator(int index) {
+	_drawCallAllocator[index].reset();
+	_frameAllocStats[index].clear();
+	_frameAllocStats[index].frameNumber = _frameAllocFrameNumber;
+}
+
+const char *setFrameAllocLabel(const char *label) {
 	GLContext *c = gl_get_context();
-	return c->_drawCallAllocator[c->_currentAllocatorIndex].allocate(size);
+	const char *previous = c->_frameAllocLabel;
+	c->_frameAllocLabel = label;
+	return previous;
+}
+
+void resetFrameAllocPeak() {
+	GLContext *c = gl_get_context();
+	c->_peakFrameAllocStats.clear();
+}
+
+Common::String getFrameAllocReport(FrameAllocReport which) {
+	GLContext *c = gl_get_context();
+	size_t capacity = c->_drawCallAllocator[c->_currentAllocatorIndex].getCapacity();
+	Common::String out;
+	switch (which) {
+	case kFrameAllocReportCurrent:
+		out = c->_frameAllocStats[c->_currentAllocatorIndex].format("Current frame", capacity);
+		break;
+	case kFrameAllocReportLastFrame:
+		out = c->_lastFrameAllocStats.format("Last presented frame", capacity);
+		break;
+	case kFrameAllocReportPeakFrame:
+		out = c->_peakFrameAllocStats.format("Peak frame", capacity);
+		break;
+	default:
+		break;
+	}
+	out += Common::String::format("Allocator usage right now: [0] %s, [1] %s (current index %d%s)\n",
+		formatBytes(c->_drawCallAllocator[0].getUsed()).c_str(), formatBytes(c->_drawCallAllocator[1].getUsed()).c_str(),
+		c->_currentAllocatorIndex, c->_enableDirtyRectangles ? "; dirty rects keep the previous frame alive" : "");
+	return out;
+}
+
+void *Internal::allocateFrame(int size, FrameAllocCategory category) {
+	GLContext *c = gl_get_context();
+	return c->allocateFrame(size, category);
 }
 
 } // end of namespace TinyGL

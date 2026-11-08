@@ -259,6 +259,16 @@ void GLContext::glopEnd(GLParam *) {
 
 	if (vertex_cnt > 0) {
 		issueDrawCall(new RasterizationDrawCall());
+
+		// Allocation accounting: a primitive whose vertices are all outside the
+		// same clip plane can't produce any pixel, but its memory is still used.
+		int clipCode = 0x3f;
+		for (int i = 0; i < vertex_cnt; i++)
+			clipCode &= vertex[i].clip_code;
+		if (clipCode) {
+			_frameAllocStats[_currentAllocatorIndex].addOffscreen(_frameAllocLabel,
+				sizeof(RasterizationDrawCall) + vertex_cnt * sizeof(GLVertex));
+		}
 	}
 
 	in_begin = 0;

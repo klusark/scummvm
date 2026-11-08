@@ -268,10 +268,72 @@ public:
 	void reset() {
 		_memoryPosition = 0;
 	}
+
+	bool canAllocate(size_t size) const { return _memoryPosition + size < _memorySize; }
+	size_t getUsed() const { return _memoryPosition; }
+	size_t getCapacity() const { return _memorySize; }
 private:
 	void *_memoryBuffer;
 	size_t _memorySize;
 	size_t _memoryPosition;
+};
+
+/**
+ * Breakdown of what has been allocated from a LinearAllocator during one frame.
+ */
+struct FrameAllocStats {
+	struct Entry {
+		uint32 count;
+		size_t bytes;
+		size_t largest;
+
+		void add(size_t size) {
+			count++;
+			bytes += size;
+			if (size > largest)
+				largest = size;
+		}
+	};
+
+	enum {
+		kMaxLabels = 64,
+		kMaxLabelLength = 48,
+		kNumPrimitiveTypes = 10, // TGL_POINTS .. TGL_POLYGON
+		kNumVertexBuckets = 7
+	};
+
+	uint32 frameNumber;
+	size_t totalBytes;
+	uint32 totalCount;
+	Entry categories[kFrameAllocCategoryCount];
+	// Vertex arrays of rasterization draw calls, split by primitive type and by vertex count.
+	Entry primitives[kNumPrimitiveTypes + 1]; // last one: unknown primitive
+	Entry vertexBuckets[kNumVertexBuckets];
+	// Rasterization draw calls (call + vertex array) whose vertices are all outside
+	// the same clip plane: they are allocated but can never put a pixel on screen.
+	Entry offscreen;
+	// Caller supplied labels, see TinyGL::setFrameAllocLabel(). The text is copied,
+	// so labels may be built on the fly (e.g. from an object name).
+	char labelNames[kMaxLabels][kMaxLabelLength];
+	Entry labels[kMaxLabels];
+	Entry labelCategories[kMaxLabels][kFrameAllocCategoryCount];
+	Entry labelOffscreen[kMaxLabels];
+	int numLabels;
+	Entry overflowLabels; // labels that didn't fit in the table
+	Entry overflowOffscreen;
+	// Lookup cache: the label pointer used last and its index.
+	const char *lastLabelPtr;
+	int lastLabelIndex;
+
+	FrameAllocStats() { clear(); }
+	void clear();
+	int findOrAddLabel(const char *label); // -1 when the table is full
+	void add(FrameAllocCategory category, const char *label, size_t size, int primitive, int vertexCount);
+	void addOffscreen(const char *label, size_t size);
+	Common::String format(const char *title, size_t capacity) const;
+
+	static int getVertexBucket(int vertexCount);
+	static const char *getVertexBucketName(int bucket);
 };
 
 struct GLContext;
@@ -469,6 +531,11 @@ struct GLContext {
 	Common::List<DrawCall *> _previousFrameDrawCallsQueue;
 	int _currentAllocatorIndex;
 	LinearAllocator _drawCallAllocator[2];
+	FrameAllocStats _frameAllocStats[2];   // what's live in each _drawCallAllocator
+	FrameAllocStats _lastFrameAllocStats;  // snapshot of the last presented frame
+	FrameAllocStats _peakFrameAllocStats;  // snapshot of the biggest presented frame
+	const char *_frameAllocLabel;
+	uint32 _frameAllocFrameNumber;
 	bool _debugRectsEnabled;
 	bool _profilingEnabled;
 
@@ -523,6 +590,9 @@ public:
 	void gl_PixelStore(TGLenum pname, TGLint param);
 
 	void issueDrawCall(DrawCall *drawCall);
+	void *allocateFrame(size_t size, FrameAllocCategory category);
+	void finishFrameAllocStats();
+	void resetFrameAllocator(int index);
 	void disposeResources();
 	void disposeDrawCallLists();
 

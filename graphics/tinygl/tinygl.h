@@ -22,6 +22,7 @@
 #ifndef GRAPHICS_TINYGL_H
 #define GRAPHICS_TINYGL_H
 
+#include "common/str.h"
 #include "graphics/pixelformat.h"
 #include "graphics/surface.h"
 #include "graphics/tinygl/gl.h"
@@ -41,6 +42,36 @@ void presentBuffer();
 void presentBuffer(Common::List<Common::Rect> &dirtyAreas);
 void getSurfaceRef(Graphics::Surface &surface);
 Graphics::Surface *copyFromFrameBuffer(const Graphics::PixelFormat &dstFormat);
+
+/**
+ * Draw call memory (linear frame allocator) accounting.
+ *
+ * Every allocation made from the per-frame draw call allocator is tagged with
+ * a category (which draw call structure it belongs to) and with the label that
+ * is current at the time of the allocation. Labels are set by the caller with
+ * setFrameAllocLabel() and let an engine attribute memory to its own code
+ * (e.g. "model", "bitmap", "text"). The label text is copied into the
+ * statistics, so it only has to stay valid while it is the current label.
+ */
+const char *setFrameAllocLabel(const char *label); // returns the previous label
+
+enum FrameAllocReport {
+	kFrameAllocReportCurrent,   // the frame being built right now
+	kFrameAllocReportLastFrame, // the last presented frame
+	kFrameAllocReportPeakFrame  // the presented frame with the highest usage so far
+};
+
+Common::String getFrameAllocReport(FrameAllocReport which = kFrameAllocReportLastFrame);
+void resetFrameAllocPeak();
+
+/** RAII helper that sets a frame allocation label for the current scope. */
+class FrameAllocLabelScope {
+public:
+	FrameAllocLabelScope(const char *label) : _previous(setFrameAllocLabel(label)) {}
+	~FrameAllocLabelScope() { setFrameAllocLabel(_previous); }
+private:
+	const char *_previous;
+};
 
 } // end of namespace TinyGL
 

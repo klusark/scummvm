@@ -21,7 +21,12 @@
 
 #include "common/config-manager.h"
 
+#include "common/system.h"
+
 #include "graphics/renderer.h"
+#ifdef USE_TINYGL
+#include "graphics/tinygl/tinygl.h"
+#endif
 
 #include "engines/grim/debugger.h"
 #include "engines/grim/md5check.h"
@@ -41,6 +46,7 @@ Debugger::Debugger() :
 	registerCmd("save", WRAP_METHOD(Debugger, cmd_save));
 	registerCmd("load", WRAP_METHOD(Debugger, cmd_load));
 	registerCmd("imuse", WRAP_METHOD(Debugger, cmd_imuse));
+	registerCmd("tinygl_alloc", WRAP_METHOD(Debugger, cmd_tinygl_alloc));
 }
 
 Debugger::~Debugger() {
@@ -120,6 +126,40 @@ bool Debugger::cmd_renderer_set(int argc, const char **argv) {
 bool Debugger::cmd_renderer_get(int argc, const char **argv) {
 	auto rendererCodeStr = Graphics::Renderer::getTypeCode(g_grim->getRendererType());
 	debugPrintf("%s\n", rendererCodeStr.c_str());
+	return true;
+}
+
+bool Debugger::cmd_tinygl_alloc(int argc, const char **argv) {
+#ifdef USE_TINYGL
+	if (g_grim->getRendererType() != Graphics::kRendererTypeTinyGL) {
+		debugPrintf("The TinyGL renderer is not active\n");
+		return true;
+	}
+	TinyGL::FrameAllocReport which = TinyGL::kFrameAllocReportLastFrame;
+	if (argc >= 2) {
+		Common::String mode = argv[1];
+		if (mode == "current") {
+			which = TinyGL::kFrameAllocReportCurrent;
+		} else if (mode == "last") {
+			which = TinyGL::kFrameAllocReportLastFrame;
+		} else if (mode == "peak") {
+			which = TinyGL::kFrameAllocReportPeakFrame;
+		} else if (mode == "reset") {
+			TinyGL::resetFrameAllocPeak();
+			debugPrintf("Peak frame statistics reset\n");
+			return true;
+		} else {
+			debugPrintf("Usage: tinygl_alloc [last|current|peak|reset]\n");
+			return true;
+		}
+	}
+	Common::String report = TinyGL::getFrameAllocReport(which);
+	debugPrintf("%s", report.c_str());
+	// The table is wide; also send it to stdout/the log file.
+	g_system->logMessage(LogMessageType::kInfo, report.c_str());
+#else
+	debugPrintf("TinyGL support is not compiled in\n");
+#endif
 	return true;
 }
 
