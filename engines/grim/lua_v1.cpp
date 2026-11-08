@@ -78,9 +78,9 @@ void Lua_V1::new_dofile() {
 // Debugging message functions
 
 #ifdef CR_GCOV
-// (a coverage build of the engine tests, grim_tools/cleanroom, built with -DCR_GCOV: the counters are written before the
-// engine quits, as it may crash on the way out, and when the tests ask (PrintDebug("CRGCOV")): a crash that ends the
-// process at once (a fast fail, a corrupt heap) loses only what ran since)
+// (a coverage build of the engine tests, grim_tools/cleanroom, built with -DCR_GCOV: gcov writes the counters when the
+// process ends, shutdown included, and also when the tests ask (PrintDebug("CRGCOV")), with a reset after it so that
+// the write at the end still happens: a run killed as hung loses only what ran since)
 extern "C" void __gcov_dump(void);
 extern "C" void __gcov_reset(void);
 #endif
@@ -549,9 +549,6 @@ void Lua_V1::GetControlState() {
 }
 
 void Lua_V1::Exit() {
-#ifdef CR_GCOV
-	__gcov_dump();
-#endif
 	g_grim->quitGame();
 }
 
