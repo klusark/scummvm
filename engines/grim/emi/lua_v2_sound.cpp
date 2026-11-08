@@ -256,6 +256,12 @@ void Lua_V2::LoadSound() {
 	Common::String filename = addSoundSuffix(str);
 
 	PoolSound *sound = new PoolSound(filename);
+	// (a sound that is not there: nil, as Monkey4.exe gives)
+	if (!sound->isLoaded()) {
+		delete sound;
+		lua_pushnil();
+		return;
+	}
 	lua_pushusertag(sound->getId(), MKTAG('A', 'I', 'F', 'F'));
 }
 
@@ -316,8 +322,8 @@ void Lua_V2::PlayLoadedSoundFrom() {
 		return;
 	}
 
-	if (!lua_isnumber(xObj) || !lua_isnumber(yObj) || !lua_isnumber(zObj) ||
-	    !lua_isnumber(volumeObj)) {
+	// (the sixth argument is optional: Monkey4.exe plays PlayLoadedSoundFrom(sound, x, y, z, volume))
+	if (!lua_isnumber(xObj) || !lua_isnumber(yObj) || !lua_isnumber(zObj)) {
 		warning("Lua_V2::PlayLoadedSoundFrom - ERROR: Unknown parameters");
 		return;
 	}
@@ -334,10 +340,10 @@ void Lua_V2::PlayLoadedSoundFrom() {
 		// special handling if 5th parameter is a boolean
 		if (volume <= 1) {
 			looping = volume;
-			volume = (int)lua_getnumber(volumeObj);
+			volume = lua_isnumber(volumeObj) ? (int)lua_getnumber(volumeObj) : MAX_EMI_VOLUME;
 		}
 	} else {
-		volume = (int)lua_getnumber(volumeObj);
+		volume = lua_isnumber(volumeObj) ? (int)lua_getnumber(volumeObj) : MAX_EMI_VOLUME;
 		looping = !lua_isnil(volumeOrLoopingObj);
 	}
 
