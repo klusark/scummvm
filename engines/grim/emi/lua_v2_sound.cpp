@@ -62,7 +62,7 @@ void Lua_V2::ImGetMillisecondPosition() {
 		// push -1 for now
 		// Currently a bit of guesswork, and probably wrong, as the stateId
 		// is ignored by emisound (which only has one music-track now).
-		uint32 msPos = g_emiSound->getMsPos(sound);
+		int32 msPos = g_emiSound->getMsPos(sound);
 		Debug::debug(Debug::Scripts, "Lua_V2::ImGetMillisecondPosition: sound: %d ms: %d", sound, msPos);
 		lua_pushnumber(msPos);
 	}
