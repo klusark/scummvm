@@ -370,9 +370,11 @@ void TextSplitter::processLine() {
 		strend--;
 	*strend = '\0';
 
-	// Skip blank lines
-	if (*_currLine == '\0')
+	// Skip blank lines (nextLine processes the next one, and keeps its original case)
+	if (*_currLine == '\0') {
 		nextLine();
+		return;
+	}
 
 	// Convert to lower case
 	_currLineOriginal = _currLine;
