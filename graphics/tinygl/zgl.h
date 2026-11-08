@@ -309,18 +309,21 @@ struct FrameAllocStats {
 	// Vertex arrays of rasterization draw calls, split by primitive type and by vertex count.
 	Entry primitives[kNumPrimitiveTypes + 1]; // last one: unknown primitive
 	Entry vertexBuckets[kNumVertexBuckets];
-	// Rasterization draw calls (call + vertex array) whose vertices are all outside
-	// the same clip plane: they are allocated but can never put a pixel on screen.
-	Entry offscreen;
+	// Rasterization draw calls rejected in glopEnd before allocation (sizes are what the
+	// call + vertex array would have taken). Not included in the totals above.
+	Entry offscreen; // all vertices outside the same clip plane
+	Entry scissored; // entirely outside the scissor box
 	// Caller supplied labels, see TinyGL::setFrameAllocLabel(). The text is copied,
 	// so labels may be built on the fly (e.g. from an object name).
 	char labelNames[kMaxLabels][kMaxLabelLength];
 	Entry labels[kMaxLabels];
 	Entry labelCategories[kMaxLabels][kFrameAllocCategoryCount];
 	Entry labelOffscreen[kMaxLabels];
+	Entry labelScissored[kMaxLabels];
 	int numLabels;
 	Entry overflowLabels; // labels that didn't fit in the table
 	Entry overflowOffscreen;
+	Entry overflowScissored;
 	// Lookup cache: the label pointer used last and its index.
 	const char *lastLabelPtr;
 	int lastLabelIndex;
@@ -330,6 +333,7 @@ struct FrameAllocStats {
 	int findOrAddLabel(const char *label); // -1 when the table is full
 	void add(FrameAllocCategory category, const char *label, size_t size, int primitive, int vertexCount);
 	void addOffscreen(const char *label, size_t size);
+	void addScissored(const char *label, size_t size);
 	Common::String format(const char *title, size_t capacity) const;
 
 	static int getVertexBucket(int vertexCount);
@@ -588,6 +592,13 @@ public:
 	void gl_GenTextures(TGLsizei n, TGLuint *textures);
 	void gl_DeleteTextures(TGLsizei n, const TGLuint *textures);
 	void gl_PixelStore(TGLenum pname, TGLint param);
+
+	enum PrimitiveRejection {
+		kPrimitiveAccepted,
+		kPrimitiveOffscreen, // all vertices outside the same clip plane
+		kPrimitiveScissored  // entirely outside the scissor box
+	};
+	PrimitiveRejection getPrimitiveRejection() const;
 
 	void issueDrawCall(DrawCall *drawCall);
 	void *allocateFrame(size_t size, FrameAllocCategory category);

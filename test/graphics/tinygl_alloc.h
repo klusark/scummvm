@@ -277,10 +277,11 @@ public:
 		TS_ASSERT_EQUALS(cur.offscreen.count, 4u);
 		TS_ASSERT_EQUALS(cur.offscreen.bytes, 4 * triBytes);
 		TS_ASSERT_EQUALS(cur.offscreen.largest, triBytes);
-		// Off-screen calls are still allocated.
-		TS_ASSERT_EQUALS(cur.totalBytes, 7 * triBytes);
-		TS_ASSERT_EQUALS(cur.categories[TinyGL::kFrameAllocRasterCall].count, 7u);
-		TS_ASSERT_EQUALS(ctx()->_drawCallAllocator[ctx()->_currentAllocatorIndex].getUsed(), 7 * triBytes);
+		// Off-screen calls are rejected before allocation.
+		TS_ASSERT_EQUALS(cur.totalBytes, 3 * triBytes);
+		TS_ASSERT_EQUALS(cur.categories[TinyGL::kFrameAllocRasterCall].count, 3u);
+		TS_ASSERT_EQUALS(ctx()->_drawCallAllocator[ctx()->_currentAllocatorIndex].getUsed(), 3 * triBytes);
+		TS_ASSERT_EQUALS(cur.scissored.count, 0u);
 		int visible = findLabel(cur, "visible");
 		int hidden = findLabel(cur, "hidden");
 		int corner = findLabel(cur, "corner");
@@ -289,12 +290,14 @@ public:
 		TS_ASSERT_EQUALS(cur.labelOffscreen[corner].count, 0u);
 		TS_ASSERT_EQUALS(cur.labelOffscreen[hidden].count, 4u);
 		TS_ASSERT_EQUALS(cur.labelOffscreen[hidden].bytes, 4 * triBytes);
-		TS_ASSERT_EQUALS(cur.labelOffscreen[hidden].bytes, cur.labels[hidden].bytes);
+		TS_ASSERT_EQUALS(cur.labels[hidden].bytes, 0u);
 		TS_ASSERT_EQUALS(cur.labels[visible].bytes, 2 * triBytes);
 
 		Common::String report = TinyGL::getFrameAllocReport(TinyGL::kFrameAllocReportCurrent);
-		TS_ASSERT(report.contains("Off-screen rasterization"));
-		TS_ASSERT(report.contains("off-screen draw calls (incl. vertices)"));
+		TS_ASSERT(report.contains("Rejected before allocation"));
+		TS_ASSERT(report.contains("off-screen (outside one clip plane)"));
+		TS_ASSERT(report.contains("rejected: off-screen"));
+		TS_ASSERT(!report.contains("outside scissor"));
 
 		TinyGL::presentBuffer();
 		TS_ASSERT_EQUALS(ctx()->_lastFrameAllocStats.offscreen.count, 4u);
@@ -320,7 +323,137 @@ public:
 		tglVertex3f(0.0f, 0.5f, 5.0f);
 		tglEnd();
 		TS_ASSERT_EQUALS(ctx()->_frameAllocStats[ctx()->_currentAllocatorIndex].offscreen.count, 1u);
-		TS_ASSERT_EQUALS(ctx()->_frameAllocStats[ctx()->_currentAllocatorIndex].totalCount, 2u);
+		TS_ASSERT_EQUALS(ctx()->_frameAllocStats[ctx()->_currentAllocatorIndex].totalCount, 0u);
+	}
+
+	// Pixel coordinates (top-left origin) to NDC for the 16x16 test buffer, matching
+	// TinyGL's viewport transform: x = (ndc + 1) * (16 - 0.5) / 2.
+	static float pxToNdcX(float px) { return px / 7.75f - 1.0f; }
+	static float pxToNdcY(float py) { return 1.0f - py / 7.75f; }
+
+	void drawPixelTriangle(float x0, float y0, float x1, float y1, float x2, float y2) {
+		tglBegin(TGL_TRIANGLES);
+		tglVertex2f(pxToNdcX(x0), pxToNdcY(y0));
+		tglVertex2f(pxToNdcX(x1), pxToNdcY(y1));
+		tglVertex2f(pxToNdcX(x2), pxToNdcY(y2));
+		tglEnd();
+	}
+
+	static uint32 readPixel(int x, int y) {
+		Graphics::Surface surface;
+		TinyGL::getSurfaceRef(surface);
+		return surface.getPixel(x, y);
+	}
+
+	void testScissorRejectsOutside() {
+		createContext(false);
+		// Scissor box: pixels x in [4, 12), y in [4, 12) (bottom-left origin in GL, symmetric here).
+		tglScissor(4, 4, 8, 8);
+		tglEnable(TGL_SCISSOR_TEST);
+		const size_t triBytes = sizeof(TinyGL::RasterizationDrawCall) + 3 * sizeof(TinyGL::GLVertex);
+		{
+			TinyGL::FrameAllocLabelScope label("in");
+			drawPixelTriangle(5, 5, 10, 5, 7, 10);      // inside
+			drawPixelTriangle(1, 1, 6, 1, 3, 6);        // overlaps the top-left corner
+		}
+		{
+			TinyGL::FrameAllocLabelScope label("out");
+			drawPixelTriangle(0, 0, 2, 0, 1, 2);        // top-left, outside
+			drawPixelTriangle(13.5f, 5, 15, 5, 14, 9);  // right, outside
+			drawPixelTriangle(5, 13.5f, 9, 13.5f, 7, 15); // below, outside
+		}
+		{
+			// Within the one pixel of slack next to the box: kept (conservative).
+			TinyGL::FrameAllocLabelScope label("edge");
+			drawPixelTriangle(12, 5, 12.5f, 5, 12, 8);
+		}
+		const TinyGL::FrameAllocStats &cur = ctx()->_frameAllocStats[ctx()->_currentAllocatorIndex];
+		TS_ASSERT_EQUALS(cur.scissored.count, 3u);
+		TS_ASSERT_EQUALS(cur.scissored.bytes, 3 * triBytes);
+		TS_ASSERT_EQUALS(cur.offscreen.count, 0u);
+		TS_ASSERT_EQUALS(cur.totalBytes, 3 * triBytes);
+		TS_ASSERT_EQUALS(cur.labelScissored[findLabel(cur, "out")].count, 3u);
+		TS_ASSERT_EQUALS(cur.labelScissored[findLabel(cur, "in")].count, 0u);
+		TS_ASSERT_EQUALS(cur.labelScissored[findLabel(cur, "edge")].count, 0u);
+		Common::String report = TinyGL::getFrameAllocReport(TinyGL::kFrameAllocReportCurrent);
+		TS_ASSERT(report.contains("outside scissor box"));
+		TS_ASSERT(report.contains("rejected: outside scissor"));
+
+		// Without the scissor test nothing is rejected.
+		tglDisable(TGL_SCISSOR_TEST);
+		drawPixelTriangle(0, 0, 2, 0, 1, 2);
+		TS_ASSERT_EQUALS(cur.scissored.count, 3u);
+		TS_ASSERT_EQUALS(cur.totalBytes, 4 * triBytes);
+	}
+
+	void testScissorNotUsedForClippedVertices() {
+		createContext(false);
+		tglScissor(4, 4, 8, 8);
+		tglEnable(TGL_SCISSOR_TEST);
+		// One vertex off-screen: window coordinates aren't known, the call is kept.
+		drawPixelTriangle(-20, 0, 2, 0, 1, 2);
+		const TinyGL::FrameAllocStats &cur = ctx()->_frameAllocStats[ctx()->_currentAllocatorIndex];
+		TS_ASSERT_EQUALS(cur.scissored.count, 0u);
+		TS_ASSERT_EQUALS(cur.offscreen.count, 0u);
+		TS_ASSERT_EQUALS(cur.categories[TinyGL::kFrameAllocRasterCall].count, 1u);
+	}
+
+	// Rejection must never change the image: every triangle of a sweep around the
+	// scissor box (and the screen edges) is drawn with the scissor on, and compared
+	// with the same triangle drawn without scissor, masked to the box.
+	void checkRejectionKeepsImage(bool dirtyRects) {
+		createContext(dirtyRects);
+		const Common::Rect box(4, 5, 11, 12); // pixel buffer coordinates
+		uint32 black = 0;
+		{
+			Graphics::Surface s;
+			TinyGL::getSurfaceRef(s);
+			black = s.format.ARGBToColor(255, 0, 0, 0);
+		}
+		int rejectedTotal = 0;
+		for (float oy = -3.0f; oy <= 16.0f; oy += 0.75f) {
+			for (float ox = -3.0f; ox <= 16.0f; ox += 0.75f) {
+				for (int pass = 0; pass < 2; pass++) {
+					tglDisable(TGL_SCISSOR_TEST);
+					tglClearColor(0, 0, 0, 1);
+					tglClear(TGL_COLOR_BUFFER_BIT);
+					if (pass == 1) {
+						tglScissor(box.left, 16 - box.bottom, box.width(), box.height());
+						tglEnable(TGL_SCISSOR_TEST);
+					}
+					tglColor4f(1, 1, 1, 1);
+					drawPixelTriangle(ox, oy, ox + 1.6f, oy + 0.3f, ox + 0.4f, oy + 1.4f);
+					rejectedTotal += ctx()->_frameAllocStats[ctx()->_currentAllocatorIndex].scissored.count;
+					TinyGL::presentBuffer();
+					for (int y = 0; y < 16; y++) {
+						for (int x = 0; x < 16; x++) {
+							uint32 p = readPixel(x, y);
+							if (pass == 0) {
+								_reference[y][x] = p;
+							} else {
+								uint32 expected = box.contains(x, y) ? _reference[y][x] : black;
+								if (p != expected) {
+									TS_FAIL(Common::String::format("pixel (%d,%d) differs for triangle at (%.2f,%.2f)", x, y, ox, oy).c_str());
+									return;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		// The sweep must actually exercise the rejection, and draw something.
+		TS_ASSERT(rejectedTotal > 100);
+	}
+
+	uint32 _reference[16][16];
+
+	void testRejectionKeepsImage() {
+		checkRejectionKeepsImage(false);
+	}
+
+	void testRejectionKeepsImageDirtyRects() {
+		checkRejectionKeepsImage(true);
 	}
 
 	void testLabelTextIsCopied() {

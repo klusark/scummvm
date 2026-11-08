@@ -69,6 +69,7 @@ public:
 	void drawShadowPlanes() override;
 	void setShadowMode() override;
 	void clearShadowMode() override;
+	bool isShadowVisible() override { return _shadowVisible; }
 	void setShadowColor(byte r, byte g, byte b) override;
 	void getShadowColor(byte *r, byte *g, byte *b) override;
 
@@ -140,6 +141,11 @@ private:
 	// TinyGL draw call memory accounting label while an actor is drawn.
 	Common::String _actorAllocLabel;
 	const char *_prevAllocLabel;
+
+	// Shadow pass culling, computed in setShadowMode().
+	bool computeShadowPlanesRect(Common::Rect &rect, bool &bounded);
+	bool _shadowVisible;
+	bool _shadowScissor;
 	TGLenum _depthFunc;
 
 	void readPixels(int x, int y, int width, int height, uint8 *buffer);

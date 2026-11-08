@@ -50,7 +50,8 @@ GfxBase *CreateGfxTinyGL() {
 GfxTinyGL::GfxTinyGL() :
 		_alpha(1.f),
 		_currentActor(nullptr), _smushImage(nullptr),
-		_storedDisplay(nullptr), _prevAllocLabel(nullptr) {
+		_storedDisplay(nullptr), _prevAllocLabel(nullptr),
+		_shadowVisible(true), _shadowScissor(false) {
 	type = Graphics::RendererType::kRendererTypeTinyGL;
 	// TGL_LEQUAL as tglDepthFunc ensures that subsequent drawing attempts for
 	// the same triangles are not ignored by the depth test.
@@ -613,12 +614,129 @@ void GfxTinyGL::setShadow(Shadow *shadow) {
 	_currentShadowArray = shadow;
 }
 
+/**
+ * Computes the screen area the current shadow's planes cover, in TinyGL pixel
+ * buffer coordinates (top-left origin, right/bottom exclusive), using the same
+ * transforms as drawShadowPlanes().
+ * Returns false if no plane can be on screen. When it returns true, 'bounded'
+ * tells whether 'rect' is meaningful: a plane crossing the eye plane can't be
+ * boxed by projecting its vertices, the whole screen is assumed then.
+ */
+bool GfxTinyGL::computeShadowPlanesRect(Common::Rect &rect, bool &bounded) {
+	TGLfloat modelView[16], projection[16];
+	TGLint viewport[4];
+
+	tglMatrixMode(TGL_MODELVIEW);
+	tglPushMatrix();
+	if (g_grim->getGameType() == GType_MONKEY4) {
+		tglMultMatrixf(_currentRot.getData());
+		tglTranslatef(-_currentPos.x(), -_currentPos.y(), -_currentPos.z());
+	}
+	tglGetFloatv(TGL_MODELVIEW_MATRIX, modelView);
+	tglPopMatrix();
+	tglGetFloatv(TGL_PROJECTION_MATRIX, projection);
+	tglGetIntegerv(TGL_VIEWPORT, viewport);
+
+	// Slightly generous frustum, so planes touching the border are never culled.
+	const float slack = 1.001f;
+	bool anyVisible = false;
+	bounded = true;
+	float minX = FLT_MAX, minY = FLT_MAX, maxX = -FLT_MAX, maxY = -FLT_MAX;
+
+	for (SectorListType::iterator it = _currentShadowArray->planeList.begin(); it != _currentShadowArray->planeList.end(); ++it) {
+		Sector *sector = it->sector;
+		int clipAnd = 0x3f;
+		bool behindEye = false;
+		float pMinX = FLT_MAX, pMinY = FLT_MAX, pMaxX = -FLT_MAX, pMaxY = -FLT_MAX;
+		for (int k = 0; k < sector->getNumVertices(); k++) {
+			const Math::Vector3d &v = sector->getVertices()[k];
+			float eye[4], clip[4];
+			for (int r = 0; r < 4; r++)
+				eye[r] = modelView[r] * v.x() + modelView[4 + r] * v.y() + modelView[8 + r] * v.z() + modelView[12 + r];
+			for (int r = 0; r < 4; r++)
+				clip[r] = projection[r] * eye[0] + projection[4 + r] * eye[1] + projection[8 + r] * eye[2] + projection[12 + r] * eye[3];
+
+			const float w = clip[3] * slack;
+			int code = 0;
+			if (clip[0] < -w) code |= 0x01;
+			if (clip[0] > w) code |= 0x02;
+			if (clip[1] < -w) code |= 0x04;
+			if (clip[1] > w) code |= 0x08;
+			if (clip[2] < -w) code |= 0x10;
+			if (clip[2] > w) code |= 0x20;
+			clipAnd &= code;
+
+			if (clip[3] <= 1e-6f) {
+				behindEye = true;
+				continue;
+			}
+			// Same mapping as TinyGL's gl_transform_to_viewport().
+			const float x = viewport[0] + (viewport[2] - 0.5f) * 0.5f * (clip[0] / clip[3] + 1.0f);
+			const float y = viewport[1] + (viewport[3] - 0.5f) * 0.5f * (1.0f - clip[1] / clip[3]);
+			pMinX = MIN(pMinX, x);
+			pMaxX = MAX(pMaxX, x);
+			pMinY = MIN(pMinY, y);
+			pMaxY = MAX(pMaxY, y);
+		}
+		if (clipAnd)
+			continue; // this plane is entirely off-screen
+		anyVisible = true;
+		if (behindEye) {
+			bounded = false;
+		} else {
+			minX = MIN(minX, pMinX);
+			maxX = MAX(maxX, pMaxX);
+			minY = MIN(minY, pMinY);
+			maxY = MAX(maxY, pMaxY);
+		}
+	}
+
+	if (!anyVisible)
+		return false;
+	if (!bounded)
+		return true;
+
+	// A couple of pixels of margin for the rasterizer's rounding.
+	const int margin = 2;
+	const int left = MAX<int>(0, (int)floorf(minX) - margin);
+	const int top = MAX<int>(0, (int)floorf(minY) - margin);
+	const int right = MIN<int>(_screenWidth, (int)ceilf(maxX) + margin + 1);
+	const int bottom = MIN<int>(_screenHeight, (int)ceilf(maxY) + margin + 1);
+	if (left >= right || top >= bottom)
+		return false;
+	rect = Common::Rect(left, top, right, bottom);
+	return true;
+}
+
 void GfxTinyGL::setShadowMode() {
 	GfxBase::setShadowMode();
+
+	_shadowVisible = true;
+	_shadowScissor = false;
+	if (!_currentShadowArray)
+		return;
+
+	Common::Rect rect;
+	bool bounded;
+	_shadowVisible = computeShadowPlanesRect(rect, bounded);
+	if (_shadowVisible && bounded) {
+		// The stencil already limits the shadow to the planes' pixels; the matching
+		// scissor box lets TinyGL drop the shadow faces outside it before
+		// allocating draw calls for them. tglScissor() uses a bottom-left origin.
+		tglScissor(rect.left, _screenHeight - rect.bottom, rect.width(), rect.height());
+		tglEnable(TGL_SCISSOR_TEST);
+		_shadowScissor = true;
+	}
 }
 
 void GfxTinyGL::clearShadowMode() {
 	GfxBase::clearShadowMode();
+
+	if (_shadowScissor) {
+		tglDisable(TGL_SCISSOR_TEST);
+		_shadowScissor = false;
+	}
+	_shadowVisible = true;
 
 	tglDisable(TGL_STENCIL_TEST);
 	tglDepthMask(TGL_TRUE);

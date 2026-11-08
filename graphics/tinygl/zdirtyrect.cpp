@@ -884,6 +884,14 @@ void FrameAllocStats::addOffscreen(const char *label, size_t size) {
 		labelOffscreen[i].add(size);
 }
 
+void FrameAllocStats::addScissored(const char *label, size_t size) {
+	scissored.add(size);
+	int i = findOrAddLabel(label);
+	if (i < 0)
+		overflowScissored.add(size);
+	else
+		labelScissored[i].add(size);
+}
 
 int FrameAllocStats::findOrAddLabel(const char *label) {
 	if (!label)
@@ -920,6 +928,11 @@ static Common::String formatEntry(const char *name, const FrameAllocStats::Entry
 		e.count, formatBytes(e.bytes).c_str(), total ? 100.0 * e.bytes / total : 0.0, formatBytes(e.largest).c_str());
 }
 
+static Common::String formatRejected(const char *name, const FrameAllocStats::Entry &e, int indent = 2) {
+	return Common::String::format("%*s%-40s %8u calls  %12s saved  largest %s\n", indent, "", name,
+		e.count, formatBytes(e.bytes).c_str(), formatBytes(e.largest).c_str());
+}
+
 Common::String FrameAllocStats::format(const char *title, size_t capacity) const {
 	Common::String out = Common::String::format("%s (frame %u): %s in %u allocations, capacity %s (%.1f%% used)\n",
 		title, frameNumber, formatBytes(totalBytes).c_str(), totalCount, formatBytes(capacity).c_str(),
@@ -950,15 +963,22 @@ Common::String FrameAllocStats::format(const char *title, size_t capacity) const
 				out += formatEntry(kFrameAllocCategoryNames[c], labelCategories[i][c], totalBytes, 6);
 		}
 		if (labelOffscreen[i].count)
-			out += formatEntry("off-screen draw calls (incl. vertices)", labelOffscreen[i], totalBytes, 6);
+			out += formatRejected("rejected: off-screen", labelOffscreen[i], 6);
+		if (labelScissored[i].count)
+			out += formatRejected("rejected: outside scissor", labelScissored[i], 6);
 	}
 	if (overflowLabels.count)
 		out += formatEntry("(label table full)", overflowLabels, totalBytes);
 	if (overflowOffscreen.count)
-		out += formatEntry("(label table full) off-screen", overflowOffscreen, totalBytes, 6);
-	if (offscreen.count) {
-		out += "Off-screen rasterization (all vertices outside one clip plane; allocated, never drawn):\n";
-		out += formatEntry("draw calls incl. vertices", offscreen, totalBytes);
+		out += formatRejected("(label table full) rejected: off-screen", overflowOffscreen, 6);
+	if (overflowScissored.count)
+		out += formatRejected("(label table full) rejected: outside scissor", overflowScissored, 6);
+	if (offscreen.count || scissored.count) {
+		out += "Rejected before allocation (draw call + vertices, not in the totals):\n";
+		if (offscreen.count)
+			out += formatRejected("off-screen (outside one clip plane)", offscreen);
+		if (scissored.count)
+			out += formatRejected("outside scissor box", scissored);
 	}
 
 	if (categories[kFrameAllocRasterVertices].count) {

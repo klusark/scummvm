@@ -254,20 +254,61 @@ void GLContext::glopVertex(GLParam *p) {
 	vertex_n = n;
 }
 
+GLContext::PrimitiveRejection GLContext::getPrimitiveRejection() const {
+	// Selection mode is left alone, it's not worth the risk.
+	if (render_mode != TGL_RENDER)
+		return kPrimitiveAccepted;
+
+	// All vertices outside the same clip plane: the clipper (gl_draw_point/line/triangle)
+	// rejects every part of the primitive with the very same test.
+	int clipAnd = 0x3f, clipOr = 0;
+	for (int i = 0; i < vertex_cnt; i++) {
+		clipAnd &= vertex[i].clip_code;
+		clipOr |= vertex[i].clip_code;
+	}
+	if (clipAnd)
+		return kPrimitiveOffscreen;
+
+	// Entirely outside the scissor box. Only decided when every vertex is inside the
+	// view volume: only then are the window coordinates (zp) valid.
+	if (scissor_test_enabled && clipOr == 0) {
+		int minX = vertex[0].zp.x, maxX = minX;
+		int minY = vertex[0].zp.y, maxY = minY;
+		for (int i = 1; i < vertex_cnt; i++) {
+			minX = MIN(minX, vertex[i].zp.x);
+			maxX = MAX(maxX, vertex[i].zp.x);
+			minY = MIN(minY, vertex[i].zp.y);
+			maxY = MAX(maxY, vertex[i].zp.y);
+		}
+		// Same rectangle as FrameBuffer::setupScissor() (right/bottom exclusive),
+		// with one pixel of slack for the rasterizer's rounding.
+		const int pbufHeight = fb->getPixelBufferHeight();
+		const int left = scissor[0];
+		const int top = pbufHeight - scissor[1] - scissor[3];
+		const int right = scissor[0] + scissor[2];
+		const int bottom = pbufHeight - scissor[1];
+		if (maxX < left - 1 || minX > right || maxY < top - 1 || minY > bottom)
+			return kPrimitiveScissored;
+	}
+
+	return kPrimitiveAccepted;
+}
+
 void GLContext::glopEnd(GLParam *) {
 	assert(in_begin == 1);
 
 	if (vertex_cnt > 0) {
-		issueDrawCall(new RasterizationDrawCall());
-
-		// Allocation accounting: a primitive whose vertices are all outside the
-		// same clip plane can't produce any pixel, but its memory is still used.
-		int clipCode = 0x3f;
-		for (int i = 0; i < vertex_cnt; i++)
-			clipCode &= vertex[i].clip_code;
-		if (clipCode) {
-			_frameAllocStats[_currentAllocatorIndex].addOffscreen(_frameAllocLabel,
-				sizeof(RasterizationDrawCall) + vertex_cnt * sizeof(GLVertex));
+		PrimitiveRejection rejection = getPrimitiveRejection();
+		if (rejection == kPrimitiveAccepted) {
+			issueDrawCall(new RasterizationDrawCall());
+		} else {
+			// The draw call would never put a pixel on screen: don't allocate it at all.
+			const size_t size = sizeof(RasterizationDrawCall) + vertex_cnt * sizeof(GLVertex);
+			FrameAllocStats &stats = _frameAllocStats[_currentAllocatorIndex];
+			if (rejection == kPrimitiveOffscreen)
+				stats.addOffscreen(_frameAllocLabel, size);
+			else
+				stats.addScissored(_frameAllocLabel, size);
 		}
 	}
 

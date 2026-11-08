@@ -1824,10 +1824,12 @@ void Actor::drawCostume(Costume *costume) {
 			continue;
 		g_driver->setShadow(&_shadowArray[l]);
 		g_driver->setShadowMode();
-		g_driver->drawShadowPlanes();
-		g_driver->startActorDraw(this);
-		costume->draw();
-		g_driver->finishActorDraw();
+		if (g_driver->isShadowVisible()) {
+			g_driver->drawShadowPlanes();
+			g_driver->startActorDraw(this);
+			costume->draw();
+			g_driver->finishActorDraw();
+		}
 		g_driver->clearShadowMode();
 		g_driver->setShadow(nullptr);
 	}

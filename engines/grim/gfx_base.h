@@ -119,6 +119,12 @@ public:
 	virtual void setShadowMode();
 	virtual void clearShadowMode();
 	virtual bool isShadowModeActive();
+	/**
+	 * Called after setShadow()/setShadowMode(). Returns false when the renderer
+	 * knows the shadow can't appear on screen (none of its planes is visible),
+	 * so the shadow pass can be skipped.
+	 */
+	virtual bool isShadowVisible() { return true; }
 	virtual void setShadowColor(byte r, byte g, byte b) = 0;
 	virtual void getShadowColor(byte *r, byte *g, byte *b) = 0;
 	virtual void destroyShadow(Shadow *shadow) {}
