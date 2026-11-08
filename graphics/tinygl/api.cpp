@@ -76,7 +76,7 @@ void tglNormal3fv(const TGLfloat *v)  {
 
 void tglColor4f(TGLfloat r, TGLfloat g, TGLfloat b, TGLfloat a) {
 	TinyGL::GLContext *c = TinyGL::gl_get_context();
-	TinyGL::GLParam p[9];
+	TinyGL::GLParam p[5];
 
 	p[0].op = TinyGL::OP_Color;
 	p[1].f = r;
@@ -296,7 +296,7 @@ void tglPolygonStipple(const TGLubyte *mask) {
 
 void tglStippleColor(TGLubyte r, TGLubyte g, TGLubyte b) {
 	TinyGL::GLContext *c = TinyGL::gl_get_context();
-	TinyGL::GLParam p[7];
+	TinyGL::GLParam p[4];
 
 	p[0].op = TinyGL::OP_StippleColor;
 	p[1].f = r;
@@ -530,7 +530,7 @@ void tglOrtho(TGLdouble left, TGLdouble right, TGLdouble bottom, TGLdouble top, 
 
 void tglMaterialfv(TGLenum mode, TGLenum type, const TGLfloat *v) {
 	TinyGL::GLContext *c = TinyGL::gl_get_context();
-	TinyGL::GLParam p[7];
+	TinyGL::GLParam p[7] = {};
 	int n;
 
 	assert(mode == TGL_FRONT  || mode == TGL_BACK || mode == TGL_FRONT_AND_BACK);
@@ -543,22 +543,18 @@ void tglMaterialfv(TGLenum mode, TGLenum type, const TGLfloat *v) {
 		n = 1;
 	for (int i = 0; i < n; i++)
 		p[3 + i].f = v[i];
-	for (int i = n; i < 4; i++)
-		p[3 + i].f = 0;
 
 	c->gl_add_op(p);
 }
 
 void tglMaterialf(TGLenum mode, TGLenum type, TGLfloat v) {
 	TinyGL::GLContext *c = TinyGL::gl_get_context();
-	TinyGL::GLParam p[7];
+	TinyGL::GLParam p[7] = {};
 
 	p[0].op = TinyGL::OP_Material;
 	p[1].i = mode;
 	p[2].i = type;
 	p[3].f = v;
-	for (int i = 0; i < 3; i++)
-		p[4 + i].f = 0;
 
 	c->gl_add_op(p);
 }
@@ -577,15 +573,13 @@ void tglColorMaterial(TGLenum mode, TGLenum type) {
 void tglLightfv(TGLenum light, TGLenum type, const TGLfloat *v) {
 	TinyGL::GLContext *c = TinyGL::gl_get_context();
 	TinyGL::GLParam p[7];
+	int vectorSize = type == TGL_SPOT_DIRECTION ? 3 : 4;
 
 	p[0].op = TinyGL::OP_Light;
 	p[1].i = light;
 	p[2].i = type;
-	for (int i = 0; i < 4; i++) {
-		if (type != TGL_SPOT_DIRECTION)
-			p[3 + i].f = v[i];
-		else
-			p[3 + i].f = 0.0f;
+	for (int i = 0; i < vectorSize; i++) {
+		p[3 + i].f = v[i];
 	}
 
 	c->gl_add_op(p);
@@ -593,27 +587,23 @@ void tglLightfv(TGLenum light, TGLenum type, const TGLfloat *v) {
 
 void tglLightf(TGLenum light, TGLenum type, TGLfloat v) {
 	TinyGL::GLContext *c = TinyGL::gl_get_context();
-	TinyGL::GLParam p[7];
+	TinyGL::GLParam p[7] = {};
 
 	p[0].op = TinyGL::OP_Light;
 	p[1].i = light;
 	p[2].i = type;
 	p[3].f = v;
-	for (int i = 0; i < 3; i++)
-		p[4 + i].f = 0;
 
 	c->gl_add_op(p);
 }
 
 void tglLightModeli(TGLenum pname, TGLint param) {
 	TinyGL::GLContext *c = TinyGL::gl_get_context();
-	TinyGL::GLParam p[6];
+	TinyGL::GLParam p[6] = {};
 
 	p[0].op = TinyGL::OP_LightModel;
 	p[1].i = pname;
 	p[2].f = (float)param;
-	for (int i = 0; i < 3; i++)
-		p[3 + i].f = 0;
 
 	c->gl_add_op(p);
 }
@@ -683,6 +673,8 @@ void tglPolygonOffset(TGLfloat factor, TGLfloat units) {
 	TinyGL::GLContext *c = TinyGL::gl_get_context();
 	TinyGL::GLParam p[3];
 
+	//TinyGL::op_table_size[TinyGL::OP_PolygonOffset] = 3;
+
 	p[0].op = TinyGL::OP_PolygonOffset;
 	p[1].f = factor;
 	p[2].f = units;
@@ -710,7 +702,7 @@ void tglHint(TGLenum target, TGLenum mode) {
 void tglTexImage2D(TGLenum target, TGLint level, TGLint internalformat, TGLsizei width,
 	           TGLsizei height, TGLint border, TGLenum format, TGLenum type, const void *pixels) {
 	TinyGL::GLContext *c = TinyGL::gl_get_context();
-	TinyGL::GLParam p[10];
+	TinyGL::GLParam p[10] = {};
 
 	p[0].op = TinyGL::OP_TexImage2D;
 	p[1].i = target;
