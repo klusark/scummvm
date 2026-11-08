@@ -272,6 +272,7 @@ static void io_read() {
 	const char *p = luaL_opt_string(arg, "[^\n]*{\n}");
 	int inskip = 0;  // to control {skips}
 	int c = NEED_OTHER;
+	int clen = 1;  // the bytes c took in the file (2 for a \r\n)
 	luaL_resetbuffer();
 	while (*p) {
 		if (*p == '{') {
@@ -287,10 +288,23 @@ static void io_read() {
 			int m;  // match result
 			if (c == NEED_OTHER) {
 				char z;
+				clen = 1;
 				if (f->read(&z, 1) != 1)
 					c = EOF;
 				else
 					c = z;
+				// The original reads in text mode: a \r\n is one \n
+				if (c == '\r') {
+					char z2;
+					if (f->read(&z2, 1) == 1) {
+						if (z2 == '\n') {
+							c = '\n';
+							clen = 2;
+						} else {
+							f->seek(-1, SEEK_CUR);
+						}
+					}
+				}
 			}
 			m = luaI_singlematch((c == EOF) ? 0 : (char)c, p, &ep);
 			if (m) {
@@ -316,7 +330,7 @@ static void io_read() {
 	}
 break_while:
 	if (c >= 0) // not EOF nor NEED_OTHER?
-		f->seek(-1, SEEK_CUR);
+		f->seek(-clen, SEEK_CUR);
 	luaL_addchar(0);
 	buff = luaL_buffer();
 	if (*buff != 0 || *p == 0)  // read something or did not fail?
