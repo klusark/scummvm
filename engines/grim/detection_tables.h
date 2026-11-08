@@ -41,6 +41,19 @@ static const GrimGameDescription gameDescriptions[] = {
 		GType_GRIM
 	},
 	{
+		// The same test data in the Remastered's mode (grim_tools/cleanroom: run.py scummvm --remastered)
+		{
+			"grim",
+			"Remastered test data",
+			AD_ENTRY1("grimremasteredtestdata.txt", nullptr),
+			Common::EN_ANY,
+			Common::kPlatformWindows,
+			GF_TESTDATA | ADGF_REMASTERED,
+			GUI_OPTIONS_GRIME
+		},
+		GType_GRIM
+	},
+	{
 		// Engine test data for Escape from Monkey Island (grim_tools/cleanroom): our own .m4b archives and this marker
 		{
 			"monkey4",
