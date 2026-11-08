@@ -375,6 +375,7 @@ void TextSplitter::processLine() {
 		nextLine();
 
 	// Convert to lower case
+	_currLineOriginal = _currLine;
 	if (!isEof())
 		for (char *s = _currLine; *s != '\0'; s++)
 			*s = tolower(*s);

@@ -44,6 +44,8 @@ public:
 
 	char *getCurrentLine() { return _currLine; }
 	const char *getCurrentLine() const { return _currLine; }
+	// The current line before it was converted to lower case (the names a Lua script sees keep their case)
+	const char *getCurrentLineOriginalCase() const { return _currLineOriginal.c_str(); }
 	bool isEof() const { return _lineIndex == _numLines; }
 	int getLineNumber() { return _lineIndex; }
 	void setLineNumber(int line) { _lineIndex = line - 1; processLine(); }
@@ -75,6 +77,7 @@ private:
 	Common::String _fname;
 	char *_stringData;
 	char *_currLine;
+	Common::String _currLineOriginal;
 	int _numLines, _lineIndex;
 	char **_lines;
 

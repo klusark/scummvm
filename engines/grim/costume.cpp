@@ -134,6 +134,7 @@ void Costume::load(Common::SeekableReadStream *data) {
 	for (int i = 0; i < _numComponents; i++) {
 		int id, tagID, hash, parentID, namePos;
 		const char *line = ts.getCurrentLine();
+		Common::String lineOriginalCase = ts.getCurrentLineOriginalCase();
 		Component *prevComponent = nullptr;
 
 		if (sscanf(line, " %d %d %d %d %n", &id, &tagID, &hash, &parentID, &namePos) < 4)
@@ -160,7 +161,9 @@ void Costume::load(Common::SeekableReadStream *data) {
 			}
 		}
 		// Actually load the appropriate component
-		_components[id] = loadComponent(tags[tagID], parentID < 0 ? nullptr : _components[parentID], parentID, line + namePos, prevComponent);
+		// (a Lua Variable component sets the global its name gives, in the case the costume has it, as the original does)
+		const char *name = tags[tagID] == MKTAG('L','U','A','V') ? lineOriginalCase.c_str() + namePos : line + namePos;
+		_components[id] = loadComponent(tags[tagID], parentID < 0 ? nullptr : _components[parentID], parentID, name, prevComponent);
 		_components[id]->setCostume(this);
 	}
 
