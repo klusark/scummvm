@@ -202,7 +202,7 @@ void GLContext::gl_NewList(TGLuint list, TGLenum mode) {
 }
 
 void GLContext::gl_EndList() {
-	GLParam p[1];
+	GLParam p[OP_EndList_SIZE];
 
 	assert(compile_flag == 1);
 

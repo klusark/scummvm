@@ -44,7 +44,7 @@ void GLContext::glopArrayElement(GLParam *param) {
 	int idx = param[1].i;
 
 	if (states & COLOR_ARRAY) {
-		GLParam p[5];
+		GLParam p[OP_Color_SIZE];
 		int size = color_array_size;
 		offset = idx * color_array_stride;
 		switch (color_array_type) {
@@ -194,7 +194,7 @@ void GLContext::glopArrayElement(GLParam *param) {
 		}
 	}
 	if (states & VERTEX_ARRAY) {
-		GLParam p[5];
+		GLParam p[OP_Vertex_SIZE];
 		int size = vertex_array_size;
 		offset = idx * vertex_array_stride;
 		switch (vertex_array_type) {
@@ -238,8 +238,8 @@ void GLContext::glopArrayElement(GLParam *param) {
 }
 
 void GLContext::glopDrawArrays(GLParam *p) {
-	GLParam array_element[2];
-	GLParam begin[2];
+	GLParam array_element[OP_ArrayElement_SIZE];
+	GLParam begin[OP_Begin_SIZE];
 
 	begin[1].i = p[1].i;
 	glopBegin(begin);
@@ -251,9 +251,9 @@ void GLContext::glopDrawArrays(GLParam *p) {
 }
 
 void GLContext::glopDrawElements(GLParam *p) {
-	GLParam array_element[2];
+	GLParam array_element[OP_ArrayElement_SIZE];
 	void *indices;
-	GLParam begin[2];
+	GLParam begin[OP_Begin_SIZE];
 
 	indices = (char *)p[4].p;
 	begin[1].i = p[1].i;
