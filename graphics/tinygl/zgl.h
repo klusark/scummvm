@@ -54,6 +54,21 @@ enum {
 	DUMMY
 };
 
+// Number of GLParam slots each op occupies (the opcode plus its arguments),
+// taken from opinfo.h, e.g. OP_Color_SIZE.
+enum {
+
+#define ADD_OP(a,b,c) OP_ ## a ## _SIZE = (b) + 1,
+
+#include "graphics/tinygl/opinfo.h"
+
+	OP_DUMMY_SIZE
+};
+
+// Declares a zero-initialized GLParam array named `var`, sized from opinfo.h
+// for opcode OP_<opName>, and stores the opcode in var[0].
+#define TGL_OP_PARAMS(var, opName) 	TinyGL::GLParam var[TinyGL::OP_ ## opName ## _SIZE] = {}; 	var[0].op = TinyGL::OP_ ## opName
+
 // initially # of allocated GLVertexes (will grow when necessary)
 #define POLYGON_MAX_VERTEX 16
 

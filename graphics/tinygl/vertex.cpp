@@ -55,7 +55,7 @@ void GLContext::glopColor(GLParam *p) {
 	current_color.W = p[4].f;
 
 	if (color_material_enabled) {
-		GLParam q[7];
+		GLParam q[OP_Material_SIZE];
 		q[0].op = OP_Material;
 		q[1].i = current_color_material_mode;
 		q[2].i = current_color_material_type;
