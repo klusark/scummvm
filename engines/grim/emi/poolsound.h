@@ -44,6 +44,7 @@ public:
 	void stop();
 	int getVolume();
 	bool isPlaying();
+	bool isLoaded() const { return _loaded; }
 	void saveState(SaveGame *state);
 	void restoreState(SaveGame *state);
 

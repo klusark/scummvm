@@ -256,6 +256,12 @@ void Lua_V2::LoadSound() {
 	Common::String filename = addSoundSuffix(str);
 
 	PoolSound *sound = new PoolSound(filename);
+	// (a sound that is not there: nil, as Monkey4.exe gives)
+	if (!sound->isLoaded()) {
+		delete sound;
+		lua_pushnil();
+		return;
+	}
 	lua_pushusertag(sound->getId(), MKTAG('A', 'I', 'F', 'F'));
 }
 
