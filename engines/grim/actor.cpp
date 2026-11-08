@@ -3976,7 +3976,8 @@ const Math::Matrix4 Actor::getFinalMatrix() const {
 		EMICostume *cost = static_cast<EMICostume *>(attachedActor->getCurrentCostume());
 		if (cost && cost->_emiSkel && cost->_emiSkel->_obj) {
 			Joint *j = cost->_emiSkel->_obj->getJointNamed(_attachedJoint);
-			m = m * j->_finalMatrix;
+			if (j)
+				m = m * j->_finalMatrix;
 		}
 	}
 
@@ -4135,7 +4136,8 @@ Joint *Actor::getAttachedJoint(Actor *parent) const {
 	if (!cost || !cost->_emiSkel || !cost->_emiSkel->_obj)
 		return nullptr;
 
-	assert(cost->_emiSkel->_obj->hasJoint(_attachedJoint));
+	if (!cost->_emiSkel->_obj->hasJoint(_attachedJoint))
+		return nullptr;
 	return cost->_emiSkel->_obj->getJointNamed(_attachedJoint);
 }
 
@@ -4154,9 +4156,19 @@ void Actor::attachToActor(Actor *parent, const char *joint) {
 	// If the parent has a skeleton and the requested joint exists, use the joint transform.
 	// Some models (pile o' boulders) don't have a skeleton.
 	Common::String jointStr = joint ? joint : "";
+	// (the joint looked up is the requested one: getAttachedJoint reads _attachedJoint, which still named the last one)
+	_attachedJoint = jointStr;
 	const Joint *attachedJoint = getAttachedJoint(parent);
+	if (!attachedJoint)
+		_attachedJoint = "";
 
 	Math::Quaternion newRot;
+
+	// The world position is the parent's final matrix times the joint's (relative to the parent) times ours: the
+	// position goes into the parent actor's local space first, then into the joint's. The actor stays where it is.
+	_pos = _pos - parentMatrix.getPosition();
+	parentMatrix.transpose();
+	parentMatrix.transform(&_pos, true);
 
 	// A joint attachment already provides the final joint orientation calculated by
 	// Skeleton::commitAnim(). Use it directly instead of applying an additional
@@ -4179,14 +4191,8 @@ void Actor::attachToActor(Actor *parent, const char *joint) {
 	// Get the final rotation Euler coordinates
 	newRot.getEuler(&_roll, &_yaw, &_pitch, Math::EO_ZYX);
 
-	// Convert position into the parent actor's local space.
-	_pos = _pos - parentMatrix.getPosition();
-	parentMatrix.transpose();
-	parentMatrix.transform(&_pos, true);
-
 	// Save the attachment info
 	_attachedActor = parent->getId();
-	_attachedJoint = jointStr;
 
 	// Use the parent actor's sort order.
 	_useParentSortOrder = true;
