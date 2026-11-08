@@ -564,10 +564,11 @@ void EMISound::setMusicState(int stateId) {
 	}
 }
 
-uint32 EMISound::getMsPos(int stateId) {
+int32 EMISound::getMsPos(int stateId) {
 	if (!_musicTrack) {
 		Debug::debug(Debug::Sound, "EMISound::getMsPos: Music track is null", stateId);
-		return 0;
+		// (no music: -1, as Monkey4.exe gives)
+		return -1;
 	}
 	return _musicTrack->getPos().msecs();
 }

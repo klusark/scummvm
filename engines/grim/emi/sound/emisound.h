@@ -91,7 +91,7 @@ public:
 	void pause(bool paused);
 	void flushTracks();
 
-	uint32 getMsPos(int stateId);
+	int32 getMsPos(int stateId);
 
 	void updateSoundPositions();
 
