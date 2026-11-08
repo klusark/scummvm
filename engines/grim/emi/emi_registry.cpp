@@ -94,7 +94,10 @@ float EmiRegistry::convertGammaFromRegistry(const Common::String &gamma) const {
 }
 
 uint EmiRegistry::convertVolumeToMixer(uint emiVolume) const {
-	float vol = float(emiVolume - 25)/(100 - 25)*Audio::Mixer::kMaxMixerVolume;
+	// (signed: a volume below 25 is silence; unsigned, it wrapped round to the loudest)
+	float vol = (float(emiVolume) - 25)/(100 - 25)*Audio::Mixer::kMaxMixerVolume;
+	if (vol < 0)
+		vol = 0;
 	return CLIP<uint>(uint(vol), 0, Audio::Mixer::kMaxMixerVolume);
 }
 
