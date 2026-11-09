@@ -759,25 +759,31 @@ ADDetectedGames AdvancedMetaEngineDetectionBase::detectGame(const Common::FSNode
 	// Check which files are included in some ADGameDescription *and* whether
 	// they are present. Compute MD5s and file sizes for the available files.
 	// Only the checks that one of the present files can satisfy are run, each
-	// once; all others stay missing (size -1).
-	Common::Array<FileProperties> filesProps(_fileChecks.size());
-	Common::Array<byte> checked(_fileChecks.size(), 0);
+	// once; all others count as missing. Results are kept for the checks that
+	// ran only, so a large table costs little in a directory with few files.
+	const uint kNotChecked = 0xFFFFFFFF;
+	Common::Array<uint> propsIndex(_fileChecks.size(), kNotChecked);
+	Common::Array<FileProperties> checkedProps;
 	for (const auto &file : allFiles) {
 		CheckNameMap::const_iterator checks = _checksByName.find(file._key.getLastComponent());
 		if (checks == _checksByName.end())
 			continue;
 
 		for (uint c : checks->_value) {
-			if (checked[c])
+			if (propsIndex[c] != kNotChecked)
 				continue;
-			checked[c] = 1;
 
 			const FileCheck &check = _fileChecks[c];
-			if (getFileProperties(allFiles, check.md5prop, check.path, filesProps[c])) {
-				debugC(3, kDebugGlobalDetection, "> '%s': '%s' %ld", check.key.c_str(), filesProps[c].md5.c_str(), long(filesProps[c].size));
+			FileProperties props;
+			if (getFileProperties(allFiles, check.md5prop, check.path, props)) {
+				debugC(3, kDebugGlobalDetection, "> '%s': '%s' %ld", check.key.c_str(), props.md5.c_str(), long(props.size));
 			}
+			propsIndex[c] = checkedProps.size();
+			checkedProps.push_back(props);
 		}
 	}
+
+	const FileProperties missingProps;
 
 	int maxFilesMatched = 0;
 	int maxCandidateFiles = 0;
@@ -805,16 +811,31 @@ ADDetectedGames AdvancedMetaEngineDetectionBase::detectGame(const Common::FSNode
 			continue;
 		}
 
+		// An entry with a missing file cannot match: skip it before setting
+		// anything up for it, as that is the case for nearly every entry.
+		bool anyFileMissing = false;
+		uint checkPos = _entryFileChecks[i];
+		for (fileDesc = g->filesDescriptions; fileDesc->fileName; fileDesc++) {
+			const uint idx = propsIndex[_fileCheckIndex[checkPos++]];
+			if (idx == kNotChecked || checkedProps[idx].size == -1) {
+				anyFileMissing = true;
+				break;
+			}
+		}
+		if (anyFileMissing)
+			continue;
+
 		ADDetectedGame game(g);
 		bool allFilesPresent = true;
 		int curFilesMatched = 0;
 		int numFilesInEntry = 0;
-		uint checkPos = _entryFileChecks[i];
+		checkPos = _entryFileChecks[i];
 
 		// Try to match all files for this game
 		for (fileDesc = game.desc->filesDescriptions; fileDesc->fileName; fileDesc++) {
 			const char *tstr = fileDesc->fileName;
-			const FileProperties &fileProps = filesProps[_fileCheckIndex[checkPos++]];
+			const uint idx = propsIndex[_fileCheckIndex[checkPos++]];
+			const FileProperties &fileProps = (idx == kNotChecked) ? missingProps : checkedProps[idx];
 
 			numFilesInEntry++;
 
