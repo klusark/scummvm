@@ -165,7 +165,8 @@ AbstractFSNode *CloudFilesystemNode::getParent() const {
 }
 
 Common::SeekableReadStream *CloudFilesystemNode::createReadStream() {
-	// Opening a missing file must not start a download.
+	// FSNode::tryCreateReadStream() does not check exists() first, and a
+	// missing file must not start a download.
 	if (!exists())
 		return nullptr;
 

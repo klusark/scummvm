@@ -248,6 +248,13 @@ SeekableReadStream *FSNode::createReadStream() const {
 	return _realNode->createReadStream();
 }
 
+SeekableReadStream *FSNode::tryCreateReadStream() const {
+	if (_realNode == nullptr || _realNode->isDirectory())
+		return nullptr;
+
+	return _realNode->createReadStream();
+}
+
 SeekableReadStream *FSNode::createReadStreamForAltStream(AltStreamType altStreamType) const {
 	if (_realNode == nullptr)
 		return nullptr;

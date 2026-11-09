@@ -262,6 +262,19 @@ public:
 	SeekableReadStream *createReadStream() const override;
 
 	/**
+	 * Like createReadStream(), but without asking the filesystem first
+	 * whether the file exists, and without a warning when it cannot be
+	 * opened.
+	 *
+	 * Meant for code that opens many files it got from a directory listing,
+	 * such as game detection, where the existence check would cost one more
+	 * filesystem call for each file.
+	 *
+	 * @return Pointer to the stream object, nullptr in case of a failure.
+	 */
+	SeekableReadStream *tryCreateReadStream() const;
+
+	/**
 	 * Create a SeekableReadStream instance corresponding to an alternate stream
 	 * of the file referred by this node. This assumes that the node actually
 	 * refers to a readable file and the alternate stream exists.  If either is

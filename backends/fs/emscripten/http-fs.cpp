@@ -213,7 +213,8 @@ AbstractFSNode *HTTPFilesystemNode::getParent() const {
 }
 
 Common::SeekableReadStream *HTTPFilesystemNode::createReadStream() {
-	// Opening a missing file must not start a download.
+	// FSNode::tryCreateReadStream() does not check exists() first, and a
+	// missing file must not start a download.
 	if (!exists())
 		return nullptr;
 
