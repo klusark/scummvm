@@ -213,6 +213,10 @@ AbstractFSNode *HTTPFilesystemNode::getParent() const {
 }
 
 Common::SeekableReadStream *HTTPFilesystemNode::createReadStream() {
+	// Opening a missing file must not start a download.
+	if (!exists())
+		return nullptr;
+
 	debug(5, "*HTTPFilesystemNode::createReadStream() %s (size %d) ", _path.c_str(), _size);
 	Common::String fsCachePath = Common::normalizePath("/.cache/" + _path, '/');
 	POSIXFilesystemNode *cacheFile = new POSIXFilesystemNode(fsCachePath);

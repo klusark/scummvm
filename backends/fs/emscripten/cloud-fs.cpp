@@ -165,6 +165,10 @@ AbstractFSNode *CloudFilesystemNode::getParent() const {
 }
 
 Common::SeekableReadStream *CloudFilesystemNode::createReadStream() {
+	// Opening a missing file must not start a download.
+	if (!exists())
+		return nullptr;
+
 	debug(5, "CloudFilesystemNode::createReadStream() %s", _path.c_str());
 	Common::String fsCachePath = Common::normalizePath("/.cache/" + _path, '/');
 	POSIXFilesystemNode *cacheFile = new POSIXFilesystemNode(fsCachePath);
