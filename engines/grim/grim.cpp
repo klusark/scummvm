@@ -1848,8 +1848,10 @@ Set *GrimEngine::loadSet(const Common::String &name) {
 		}
 		Common::SeekableReadStream *stream;
 		stream = g_resourceloader->openNewStreamFile(filename.c_str());
-		if (!stream)
-			error("Could not find scene file %s", name.c_str());
+		if (!stream) {
+			warning("Could not find scene file %s", name.c_str());
+			return nullptr;
+		}
 
 		s = new Set(name, stream);
 		delete stream;
@@ -1859,7 +1861,12 @@ Set *GrimEngine::loadSet(const Common::String &name) {
 }
 
 void GrimEngine::setSet(const char *name) {
-	setSet(loadSet(name));
+	Set *set = loadSet(name);
+	if (!set) {
+		warning("Set '%s' could not be loaded", name);
+		return;
+	}
+	setSet(set);
 }
 
 void GrimEngine::setSet(Set *scene) {

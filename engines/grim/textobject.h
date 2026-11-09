@@ -94,7 +94,7 @@ public:
 
 	int getBitmapWidth() const;
 	int getBitmapHeight() const;
-	int getTextCharPosition(int pos);
+	int getTextCharPosition(uint pos);
 
 	int getLineX(int line) const;
 	int getLineY(int line) const;

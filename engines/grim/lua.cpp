@@ -404,8 +404,9 @@ bool LuaBase::findCostume(lua_Object costumeObj, Actor *actor, Costume **costume
 		return true;
 	if (lua_isnumber(costumeObj)) {
 		//int num = (int)lua_getnumber(costumeObj);
-		error("findCostume: search by Id not implemented");
+		warning("findCostume: search by Id not implemented");
 		// TODO get costume by ID ?
+		return false;
 	}
 	if (lua_isstring(costumeObj)) {
 		*costume = actor->findCostume(lua_getstring(costumeObj));

@@ -78,6 +78,7 @@ void Lua_V1::GetCameraActor() {
 	// needs its orientation, which comes from the current setup instead.
 	Actor *actor = g_grim->getSelectedActor();
 	if (!actor) {
+		warning("GetCameraActor: no selected actor");
 		lua_pushnil();
 		return;
 	}
@@ -691,7 +692,7 @@ void Lua_V1::GetActorNodeLocation() {
 		return;
 
 	Actor *actor = getactor(actorObj);
-	if (!actor->getCurrentCostume() || !actor->getCurrentCostume()->getModelNodes())
+	if (!actor || !actor->getCurrentCostume() || !actor->getCurrentCostume()->getModelNodes())
 		return;
 
 	int nodeId = (int)lua_getnumber(nodeObj);
@@ -775,6 +776,8 @@ void Lua_V1::PushActorCostume() {
 		return;
 
 	Actor *actor = getactor(actorObj);
+	if (!actor)
+		return;
 	const char *costumeName = lua_getstring(nameObj);
 	actor->pushCostume(costumeName);
 }
@@ -787,6 +790,10 @@ void Lua_V1::SetActorCostume() {
 		return;
 
 	Actor *actor = getactor(actorObj);
+	if (!actor) {
+		pushbool(false);
+		return;
+	}
 	if (lua_isnil(costumeObj)) {
 		actor->clearCostumes();
 		pushbool(true);
@@ -812,6 +819,10 @@ void Lua_V1::GetActorCostume() {
 	}
 
 	Actor *actor = getactor(actorObj);
+	if (!actor) {
+		lua_pushnil();
+		return;
+	}
 	Costume *costume = actor->getCurrentCostume();
 	if (lua_isnil(costumeObj)) {
 		// dummy
@@ -980,6 +991,8 @@ void Lua_V1::SetActorChoreLooping() {
 		return;
 
 	Actor *actor = getactor(actorObj);
+	if (!actor)
+		return;
 
 	Costume *costume;
 	if (!findCostume(costumeObj, actor, &costume))
@@ -1492,6 +1505,10 @@ void Lua_V1::GetVisibleThings() {
 	} else if (lua_isuserdata(actorObj) && lua_tag(actorObj) == MKTAG('A','C','T','R')) {
 		actor = getactor(actorObj);
 	}
+	if (!actor) {
+		lua_pushnil();
+		return;
+	}
 	assert(actor);
 
 	lua_Object result = lua_createtable();
@@ -1537,6 +1554,10 @@ void Lua_V1::KillActorShadows() {
 		return;
 	}
 	Actor *actor = getactor(actorObj);
+	if (!actor) {
+		lua_pushnil();
+		return;
+	}
 	actor->clearShadowPlanes();
 }
 
@@ -1549,6 +1570,10 @@ void Lua_V1::SetActiveShadow() {
 		return;
 	}
 	Actor *actor = getactor(actorObj);
+	if (!actor) {
+		lua_pushnil();
+		return;
+	}
 	int shadowId = (int)lua_getnumber(shadowIdObj);
 	actor->setActiveShadow(shadowId);
 }
@@ -1564,6 +1589,10 @@ void Lua_V1::SetActorShadowPoint() {
 		return;
 	}
 	Actor *actor = getactor(actorObj);
+	if (!actor) {
+		lua_pushnil();
+		return;
+	}
 	float x = lua_getnumber(xObj);
 	float y = lua_getnumber(yObj);
 	float z = lua_getnumber(zObj);
@@ -1580,6 +1609,10 @@ void Lua_V1::SetActorShadowPlane() {
 		return;
 	}
 	Actor *actor = getactor(actorObj);
+	if (!actor) {
+		lua_pushnil();
+		return;
+	}
 	const char *name = lua_getstring(nameObj);
 
 	actor->setShadowPlane(name);
@@ -1594,6 +1627,10 @@ void Lua_V1::AddShadowPlane() {
 		return;
 	}
 	Actor *actor = getactor(actorObj);
+	if (!actor) {
+		lua_pushnil();
+		return;
+	}
 	const char *name = lua_getstring(nameObj);
 
 	actor->addShadowPlane(name);
@@ -1609,6 +1646,10 @@ void Lua_V1::ActivateActorShadow() {
 		return;
 	}
 	Actor *actor = getactor(actorObj);
+	if (!actor) {
+		lua_pushnil();
+		return;
+	}
 	int shadowId = (int)lua_getnumber(shadowIdObj);
 	bool state = !lua_isnil(stateObj);
 
@@ -1625,6 +1666,10 @@ void Lua_V1::SetActorShadowValid() {
 		return;
 	}
 	Actor *actor = getactor(actorObj);
+	if (!actor) {
+		lua_pushnil();
+		return;
+	}
 	int valid = (int)floorf(lua_getnumber(numObj) + 0.5f);
 
 	// The shadow of the actor is drawn only on one side of its plane (0: on both)

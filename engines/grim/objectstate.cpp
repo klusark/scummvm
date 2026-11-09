@@ -26,13 +26,8 @@
 
 namespace Grim {
 
-ObjectState::ObjectState(int setup, ObjectState::Position position, const char *bitmap, const char *zbitmap, bool transparency) :
-		_setupID(setup), _pos(position), _visibility(false) {
-	_bitmap = Bitmap::create(bitmap);
-	if (zbitmap) {
-		_zbitmap = Bitmap::create(zbitmap);
-	} else
-		_zbitmap = nullptr;
+ObjectState::ObjectState(int setup, ObjectState::Position position, Bitmap *bitmap, Bitmap *zbitmap, bool transparency) :
+		_setupID(setup), _pos(position), _visibility(false), _bitmap(bitmap), _zbitmap(zbitmap) {
 }
 
 ObjectState::ObjectState() :
