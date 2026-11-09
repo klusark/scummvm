@@ -562,7 +562,7 @@ void GLContext::gl_get_pname(TGLenum pname, union uglValue *data, eDataType &dat
 		error("gl_get_pname: TGL_NAME_STACK_DEPTH option not implemented");
 		break;
 	case TGL_NORMALIZE:
-		data->_int = 0;
+		data->_int = (TGLint)normalize_enabled;
 		dataType = kIntType;
 		break;
 	case TGL_NORMAL_ARRAY:

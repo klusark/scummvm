@@ -412,6 +412,87 @@ public:
 			}
 		}
 	}
+
+	// Context defaults. GLContext comes from plain `new`, so a member that
+	// init() forgets keeps whatever was in the heap block. Dirty the state,
+	// recreate the context (a same-size allocation usually reuses the freed
+	// block) and check every default is back to the GL 1.x value.
+	void recreateDirtyContext() {
+		tglEnable(TGL_NORMALIZE);
+		tglEnable(TGL_TWO_COLOR_STIPPLE);
+		tglTexParameteri(TGL_TEXTURE_2D, TGL_TEXTURE_WRAP_S, TGL_CLAMP);
+		tglTexParameteri(TGL_TEXTURE_2D, TGL_TEXTURE_WRAP_T, TGL_CLAMP);
+		TS_ASSERT(ctx()->normalize_enabled);
+		TS_ASSERT(ctx()->two_color_stipple_enabled);
+		TS_ASSERT_EQUALS(ctx()->texture_wrap_s, (int)TGL_CLAMP);
+		TS_ASSERT_EQUALS(ctx()->texture_wrap_t, (int)TGL_CLAMP);
+		tearDown();
+		setUp();
+	}
+
+	void testDefaultNormalizeDisabled() {
+		recreateDirtyContext();
+		TS_ASSERT(!ctx()->normalize_enabled);
+		TGLint enabled = 1;
+		tglGetIntegerv(TGL_NORMALIZE, &enabled);
+		TS_ASSERT_EQUALS(enabled, 0);
+	}
+
+	void testDefaultTwoColorStippleDisabled() {
+		recreateDirtyContext();
+		TS_ASSERT(!ctx()->two_color_stipple_enabled);
+	}
+
+	void testDefaultTextureWrapRepeat() {
+		recreateDirtyContext();
+		TS_ASSERT_EQUALS(ctx()->texture_wrap_s, (int)TGL_REPEAT);
+		TS_ASSERT_EQUALS(ctx()->texture_wrap_t, (int)TGL_REPEAT);
+	}
+
+	// Without GL_NORMALIZE a half-length normal halves the diffuse term
+	// (the light is straight overhead, so N.L = |N|). With it, full brightness.
+	byte drawHalfNormalTriangle() {
+		const TGLfloat pos[] = { 0, 0, 1, 0 };
+		const TGLfloat white[] = { 1, 1, 1, 1 };
+		setUpLighting();
+		tglLightfv(TGL_LIGHT0, TGL_DIFFUSE, white);
+		tglLightfv(TGL_LIGHT0, TGL_POSITION, pos);
+
+		const float S = 10.0f;
+		tglBegin(TGL_TRIANGLES);
+		tglNormal3f(0, 0, 0.5f);
+		tglVertex3f(-S, -S, 0);
+		tglVertex3f(+S, -S, 0);
+		tglVertex3f(0, +S, 0);
+		tglEnd();
+
+		byte a, r, g, b;
+		Graphics::Surface surface;
+		TinyGL::presentBuffer();
+		TinyGL::getSurfaceRef(surface);
+		surface.format.colorToARGB(surface.getPixel(0, 0), a, r, g, b);
+		return r;
+	}
+
+	void testNormalizeOffByDefaultRendering() {
+		recreateDirtyContext();
+		TS_ASSERT_DELTA(drawHalfNormalTriangle(), 0.5f * 255, 1);
+	}
+
+	void testNormalizeGet() {
+		TGLint enabled = 0;
+		tglEnable(TGL_NORMALIZE);
+		tglGetIntegerv(TGL_NORMALIZE, &enabled);
+		TS_ASSERT_EQUALS(enabled, 1);
+		tglDisable(TGL_NORMALIZE);
+		tglGetIntegerv(TGL_NORMALIZE, &enabled);
+		TS_ASSERT_EQUALS(enabled, 0);
+	}
+
+	void testNormalizeEnabledRendering() {
+		tglEnable(TGL_NORMALIZE);
+		TS_ASSERT_EQUALS(drawHalfNormalTriangle(), 255);
+	}
 };
 
 #endif

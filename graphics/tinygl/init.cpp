@@ -216,6 +216,7 @@ void GLContext::init(int screenW, int screenH, Graphics::PixelFormat pixelFormat
 	ambient_light_model = Vector4(0.2f, 0.2f, 0.2f, 1);
 	local_light_model = 0;
 	lighting_enabled = 0;
+	normalize_enabled = false;
 	light_model_two_side = 0;
 
 	// default materials */
@@ -238,6 +239,8 @@ void GLContext::init(int screenW, int screenH, Graphics::PixelFormat pixelFormat
 	maxTextureName = 0;
 	texture_mag_filter = TGL_LINEAR;
 	texture_min_filter = TGL_NEAREST_MIPMAP_LINEAR;
+	texture_wrap_s = TGL_REPEAT;
+	texture_wrap_t = TGL_REPEAT;
 	colorAssociationList.push_back({Graphics::PixelFormat::createFormatRGBA32(),        TGL_RGBA, TGL_UNSIGNED_BYTE});
 	colorAssociationList.push_back({Graphics::PixelFormat::createFormatRGB24(),         TGL_RGB,  TGL_UNSIGNED_BYTE});
 	colorAssociationList.push_back({Graphics::PixelFormat(2, 5, 6, 5, 0, 11, 5, 0, 0),  TGL_RGB,  TGL_UNSIGNED_SHORT_5_6_5});
@@ -302,6 +305,7 @@ void GLContext::init(int screenW, int screenH, Graphics::PixelFormat pixelFormat
 
 	// stipple
 	polygon_stipple_enabled = false;
+	two_color_stipple_enabled = false;
 	memset(polygon_stipple_pattern, 0xff, sizeof(polygon_stipple_pattern));
 
 	// stencil
