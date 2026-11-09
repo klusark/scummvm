@@ -302,6 +302,116 @@ public:
 		TS_ASSERT_DELTA(ctx()->lights[0].norm_spot_direction.Z, -1.0f, 1e-6f);
 		TS_ASSERT_EQUALS(drawLitTriangle(), 255);
 	}
+
+	// Array pointers with stride 0 are tightly packed: stride = size *
+	// sizeof(type). Each check first sets a different explicit stride so a
+	// stale value can't pass by accident (gl_ColorPointer used to multiply the
+	// old stride, uninitialised on a fresh context).
+
+	void checkColorStride(TGLint size, TGLenum type, int expected) {
+		static const TGLubyte dummy[64] = {};
+		tglColorPointer(4, TGL_UNSIGNED_BYTE, 100, dummy);
+		tglColorPointer(size, type, 0, dummy);
+		TS_ASSERT_EQUALS(ctx()->color_array_size, size);
+		TS_ASSERT_EQUALS(ctx()->color_array_type, (int)type);
+		TS_ASSERT_EQUALS(ctx()->color_array_stride, expected);
+		tglColorPointer(size, type, 7, dummy);
+		TS_ASSERT_EQUALS(ctx()->color_array_stride, 7);
+	}
+
+	void testColorPointerPackedStride() {
+		checkColorStride(3, TGL_BYTE, 3);
+		checkColorStride(4, TGL_BYTE, 4);
+		checkColorStride(3, TGL_UNSIGNED_BYTE, 3);
+		checkColorStride(4, TGL_UNSIGNED_BYTE, 4);
+		checkColorStride(3, TGL_SHORT, 6);
+		checkColorStride(4, TGL_UNSIGNED_SHORT, 8);
+		checkColorStride(3, TGL_INT, 12);
+		checkColorStride(4, TGL_UNSIGNED_INT, 16);
+		checkColorStride(3, TGL_FLOAT, 12);
+		checkColorStride(4, TGL_FLOAT, 16);
+		checkColorStride(3, TGL_DOUBLE, 24);
+		checkColorStride(4, TGL_DOUBLE, 32);
+	}
+
+	void testColorPointerPackedStrideFreshContext() {
+		static const TGLubyte dummy[16] = {};
+		tglColorPointer(4, TGL_UNSIGNED_BYTE, 0, dummy);
+		TS_ASSERT_EQUALS(ctx()->color_array_stride, 4);
+	}
+
+	void testVertexPointerPackedStride() {
+		static const TGLfloat dummy[16] = {};
+		tglVertexPointer(4, TGL_FLOAT, 100, dummy);
+		tglVertexPointer(2, TGL_FLOAT, 0, dummy);
+		TS_ASSERT_EQUALS(ctx()->vertex_array_stride, 8);
+		tglVertexPointer(3, TGL_SHORT, 0, dummy);
+		TS_ASSERT_EQUALS(ctx()->vertex_array_stride, 6);
+		tglVertexPointer(3, TGL_DOUBLE, 0, dummy);
+		TS_ASSERT_EQUALS(ctx()->vertex_array_stride, 24);
+	}
+
+	void testNormalPointerPackedStride() {
+		static const TGLfloat dummy[16] = {};
+		tglNormalPointer(TGL_FLOAT, 100, dummy);
+		tglNormalPointer(TGL_FLOAT, 0, dummy);
+		TS_ASSERT_EQUALS(ctx()->normal_array_stride, 12);
+		tglNormalPointer(TGL_SHORT, 0, dummy);
+		TS_ASSERT_EQUALS(ctx()->normal_array_stride, 6);
+	}
+
+	void testTexCoordPointerPackedStride() {
+		static const TGLfloat dummy[16] = {};
+		tglTexCoordPointer(4, TGL_FLOAT, 100, dummy);
+		tglTexCoordPointer(2, TGL_FLOAT, 0, dummy);
+		TS_ASSERT_EQUALS(ctx()->texcoord_array_stride, 8);
+		tglTexCoordPointer(3, TGL_SHORT, 0, dummy);
+		TS_ASSERT_EQUALS(ctx()->texcoord_array_stride, 6);
+	}
+
+	// Rendering version: three packed orange vertices followed by blue. A
+	// stale stride of 8 makes vertex 2 read the blue bytes.
+	void testDrawArraysPackedColorAfterStride() {
+		const float S = 10.0f;
+		const TGLfloat verts[] = { -S, -S, +S, -S, 0, +S };
+		const TGLubyte colors[] = {
+			255, 127, 0, 255,  255, 127, 0, 255,  255, 127, 0, 255,
+			0, 0, 255, 255,  0, 0, 255, 255
+		};
+
+		tglDisable(TGL_TEXTURE_2D);
+		tglDisable(TGL_BLEND);
+		tglDisable(TGL_DEPTH_TEST);
+		tglDisable(TGL_LIGHTING);
+		tglMatrixMode(TGL_PROJECTION);
+		tglLoadIdentity();
+		tglMatrixMode(TGL_MODELVIEW);
+		tglLoadIdentity();
+		tglViewport(0, 0, 2, 2);
+
+		tglEnableClientState(TGL_VERTEX_ARRAY);
+		tglEnableClientState(TGL_COLOR_ARRAY);
+		tglVertexPointer(2, TGL_FLOAT, 0, verts);
+		tglColorPointer(4, TGL_UNSIGNED_BYTE, 8, colors);
+		tglColorPointer(4, TGL_UNSIGNED_BYTE, 0, colors);
+		tglDrawArrays(TGL_TRIANGLES, 0, 3);
+		tglDisableClientState(TGL_COLOR_ARRAY);
+		tglDisableClientState(TGL_VERTEX_ARRAY);
+
+		byte a, r, g, b;
+		Graphics::Surface surface;
+		TinyGL::presentBuffer();
+		TinyGL::getSurfaceRef(surface);
+		for (int y = 0; y < 2; y++) {
+			for (int x = 0; x < 2; x++) {
+				surface.format.colorToARGB(surface.getPixel(x, y), a, r, g, b);
+				TS_ASSERT_EQUALS(r, 255);
+				TS_ASSERT_EQUALS(g, 127);
+				TS_ASSERT_EQUALS(b, 0);
+				TS_ASSERT_EQUALS(a, 255);
+			}
+		}
+	}
 };
 
 #endif

@@ -317,21 +317,21 @@ void GLContext::gl_ColorPointer(GLParam *p) {
 	switch (color_array_type) {
 	case TGL_BYTE:
 	case TGL_UNSIGNED_BYTE:
-		color_array_stride = p[3].i != 0 ? p[3].i : color_array_stride * sizeof(TGLbyte);
+		color_array_stride = p[3].i != 0 ? p[3].i : color_array_size * sizeof(TGLbyte);
 		break;
 	case TGL_SHORT:
 	case TGL_UNSIGNED_SHORT:
-		color_array_stride = p[3].i != 0 ? p[3].i : color_array_stride * sizeof(TGLshort);
+		color_array_stride = p[3].i != 0 ? p[3].i : color_array_size * sizeof(TGLshort);
 		break;
 	case TGL_INT:
 	case TGL_UNSIGNED_INT:
-		color_array_stride = p[3].i != 0 ? p[3].i : color_array_stride * sizeof(TGLint);
+		color_array_stride = p[3].i != 0 ? p[3].i : color_array_size * sizeof(TGLint);
 		break;
 	case TGL_FLOAT:
-		color_array_stride = p[3].i != 0 ? p[3].i : color_array_stride * sizeof(TGLfloat);
+		color_array_stride = p[3].i != 0 ? p[3].i : color_array_size * sizeof(TGLfloat);
 		break;
 	case TGL_DOUBLE:
-		color_array_stride = p[3].i != 0 ? p[3].i : color_array_stride * sizeof(TGLdouble);
+		color_array_stride = p[3].i != 0 ? p[3].i : color_array_size * sizeof(TGLdouble);
 		break;
 	default:
 		assert(0);
