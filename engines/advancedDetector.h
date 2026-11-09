@@ -573,6 +573,15 @@ private:
 	Common::Array<uint> _fileCheckIndex;
 	/** For every detection entry: where its files start in _fileCheckIndex. */
 	Common::Array<uint> _entryFileChecks;
+	/**
+	 * The file checks that a file with this name (last path component) can
+	 * satisfy. detectGame() looks up the files of a directory here, so its
+	 * cost follows the directory size rather than the size of the table.
+	 */
+	typedef Common::HashMap<Common::Path, Common::Array<uint>, Common::Path::IgnoreCase_Hash, Common::Path::IgnoreCase_EqualTo> CheckNameMap;
+	CheckNameMap _checksByName;
+
+	void addCheckName(const Common::Path &name, uint check);
 
 protected:
 	/**

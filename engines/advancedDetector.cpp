@@ -758,12 +758,24 @@ ADDetectedGames AdvancedMetaEngineDetectionBase::detectGame(const Common::FSNode
 
 	// Check which files are included in some ADGameDescription *and* whether
 	// they are present. Compute MD5s and file sizes for the available files.
-	// Each distinct file is checked once; missing files keep size -1.
+	// Only the checks that one of the present files can satisfy are run, each
+	// once; all others stay missing (size -1).
 	Common::Array<FileProperties> filesProps(_fileChecks.size());
-	for (uint c = 0; c < _fileChecks.size(); c++) {
-		const FileCheck &check = _fileChecks[c];
-		if (getFileProperties(allFiles, check.md5prop, check.path, filesProps[c])) {
-			debugC(3, kDebugGlobalDetection, "> '%s': '%s' %ld", check.key.c_str(), filesProps[c].md5.c_str(), long(filesProps[c].size));
+	Common::Array<byte> checked(_fileChecks.size(), 0);
+	for (const auto &file : allFiles) {
+		CheckNameMap::const_iterator checks = _checksByName.find(file._key.getLastComponent());
+		if (checks == _checksByName.end())
+			continue;
+
+		for (uint c : checks->_value) {
+			if (checked[c])
+				continue;
+			checked[c] = 1;
+
+			const FileCheck &check = _fileChecks[c];
+			if (getFileProperties(allFiles, check.md5prop, check.path, filesProps[c])) {
+				debugC(3, kDebugGlobalDetection, "> '%s': '%s' %ld", check.key.c_str(), filesProps[c].md5.c_str(), long(filesProps[c].size));
+			}
 		}
 	}
 
@@ -1012,6 +1024,12 @@ AdvancedMetaEngineDetectionBase::AdvancedMetaEngineDetectionBase(const void *des
 		_grayListMap.setVal(*f, true);
 }
 
+void AdvancedMetaEngineDetectionBase::addCheckName(const Common::Path &name, uint check) {
+	Common::Array<uint> &checks = _checksByName.getOrCreateVal(name);
+	if (checks.empty() || checks.back() != check)
+		checks.push_back(check);
+}
+
 void AdvancedMetaEngineDetectionBase::preprocessDescriptions() {
 	if (_hashMapsInited)
 		return;
@@ -1030,6 +1048,7 @@ void AdvancedMetaEngineDetectionBase::preprocessDescriptions() {
 	_fileChecks.clear();
 	_fileCheckIndex.clear();
 	_entryFileChecks.clear();
+	_checksByName.clear();
 
 	// Now scan all detection entries
 	for (const byte *descPtr = _gameDescriptors; ((const ADGameDescription *)descPtr)->gameId != nullptr; descPtr += _descItemSize) {
@@ -1050,9 +1069,26 @@ void AdvancedMetaEngineDetectionBase::preprocessDescriptions() {
 			}
 
 			check.path = Common::Path(fileDesc->fileName);
-			checkByKey[check.key] = _fileChecks.size();
-			_fileCheckIndex.push_back(_fileChecks.size());
+			const uint checkId = _fileChecks.size();
+			checkByKey[check.key] = checkId;
+			_fileCheckIndex.push_back(checkId);
 			_fileChecks.push_back(check);
+
+			// Index the check under every file name that can satisfy it,
+			// following getFilePropertiesIntern(): Mac forks may come from
+			// several files, archived files from their archive.
+			if (check.md5prop & (kMD5MacResFork | kMD5MacDataFork)) {
+				Common::Array<Common::Path> names;
+				Common::MacResManager::getLookupFileNames(check.path, names);
+				for (const Common::Path &name : names)
+					addCheckName(name, checkId);
+			} else if (check.md5prop & kMD5Archive) {
+				Common::StringTokenizer tok(check.path.toString(), ":");
+				tok.nextToken();
+				addCheckName(Common::Path(tok.nextToken()).getLastComponent(), checkId);
+			} else {
+				addCheckName(check.path.getLastComponent(), checkId);
+			}
 		}
 
 		// Scan for potential directory globs
