@@ -107,6 +107,11 @@ void Lua_V1::MakeTextObject() {
 	if (lua_istable(tableObj))
 		setTextObjectParams(textObject, tableObj);
 
+	if (textObject->getFont() == nullptr) {
+		warning("MakeTextObject: No font set");
+		return;
+	}
+
 	textObject->setText(line, false);
 
 	lua_pushusertag(textObject->getId(), MKTAG('T', 'E', 'X', 'T'));
@@ -137,6 +142,10 @@ void Lua_V1::GetTextCharPosition() {
 	lua_Object textObj = lua_getparam(1);
 	if (lua_isuserdata(textObj) && lua_tag(textObj) == MKTAG('T', 'E', 'X', 'T')) {
 		TextObject *textObject = gettextobject(textObj);
+		if (!textObject) {
+			warning("GetTextCharPosition: Invalid text object");
+			return;
+		}
 		int pos = (int)lua_getnumber(lua_getparam(2));
 		lua_pushnumber(textObject->getTextCharPosition(pos));
 	}
@@ -158,6 +167,11 @@ void Lua_V1::BlastText() {
 	lua_Object tableObj = lua_getparam(2);
 	if (lua_istable(tableObj))
 		setTextObjectParams(textObject, tableObj);
+
+	if (textObject->getFont() == nullptr) {
+		warning("BlastText: No font set");
+		return;
+	}
 
 	textObject->setText(line, false);
 	textObject->draw();

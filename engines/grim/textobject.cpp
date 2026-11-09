@@ -147,10 +147,11 @@ int TextObject::getBitmapHeight() const {
 	return MAX(_numberLines, 1) * _font->getKernedHeight();
 }
 
-int TextObject::getTextCharPosition(int pos) {
+int TextObject::getTextCharPosition(uint pos) {
 	int width = 0;
 	Common::String msg = LuaBase::instance()->parseMsgText(_textID.c_str(), nullptr);
-	for (int i = 0; (msg[i] != '\0') && (i < pos); ++i) {
+	uint size = msg.size(); // Ensure the string is properly initialized
+	for (uint i = 0; (i < size) && (msg[i] != '\0') && (i < pos); ++i) {
 		width += _font->getCharKernedWidth(msg[i]);
 	}
 	return width;

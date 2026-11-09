@@ -388,7 +388,10 @@ void Lua_V1::GetShrinkPos() {
 }
 
 void Lua_V1::NewObjectState() {
-	int setupID = (int)lua_getnumber(lua_getparam(1));
+	lua_Object param = lua_getparam(1);
+	if (!lua_isnumber(param))
+		return;
+	int setupID = (int)lua_getnumber(param);
 	int val = (int)lua_getnumber(lua_getparam(2));
 	ObjectState::Position pos = (ObjectState::Position)val;
 	const char *bitmap = lua_getstring(lua_getparam(3));
@@ -412,18 +415,26 @@ void Lua_V1::FreeObjectState() {
 
 void Lua_V1::SendObjectToBack() {
 	lua_Object param = lua_getparam(1);
-	if (lua_isuserdata(param) && lua_tag(param) == MKTAG('S','T','A','T')) {
-		ObjectState *state =  getobjectstate(param);
-		g_grim->getCurrSet()->moveObjectStateToBack(state);
+	if (!lua_isuserdata(param) || lua_tag(param) != MKTAG('S','T','A','T')) {
+		return;
 	}
+	ObjectState *state =  getobjectstate(param);
+	if (!state) {
+		return;
+	}
+	g_grim->getCurrSet()->moveObjectStateToBack(state);
 }
 
 void Lua_V1::SendObjectToFront() {
 	lua_Object param = lua_getparam(1);
-	if (lua_isuserdata(param) && lua_tag(param) == MKTAG('S','T','A','T')) {
-		ObjectState *state =  getobjectstate(param);
-		g_grim->getCurrSet()->moveObjectStateToFront(state);
+	if (!lua_isuserdata(param) || lua_tag(param) != MKTAG('S','T','A','T')) {
+		return;
 	}
+	ObjectState *state =  getobjectstate(param);
+	if (!state) {
+		return;
+	}
+	g_grim->getCurrSet()->moveObjectStateToFront(state);
 }
 
 void Lua_V1::SetObjectType() {
@@ -431,6 +442,9 @@ void Lua_V1::SetObjectType() {
 	if (!lua_isuserdata(param) || lua_tag(param) != MKTAG('S','T','A','T'))
 		return;
 	ObjectState *state =  getobjectstate(param);
+	if (!state) {
+		return;
+	}
 	int val = (int)lua_getnumber(lua_getparam(2));
 	ObjectState::Position pos = (ObjectState::Position)val;
 	state->setPos(pos);

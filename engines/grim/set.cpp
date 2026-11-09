@@ -1221,11 +1221,21 @@ void Set::addObjectState(const ObjectState::Ptr &s) {
 	_states.push_front(s);
 }
 
-ObjectState *Set::addObjectState(int setupID, ObjectState::Position pos, const char *bitmap, const char *zbitmap, bool transparency) {
-	ObjectState *state = findState(bitmap);
+ObjectState *Set::addObjectState(int setupID, ObjectState::Position pos, const char *bitmapName, const char *zbitmapName, bool transparency) {
+	ObjectState *state = findState(bitmapName);
 
 	if (state) {
 		return state;
+	}
+
+	Bitmap *bitmap = Bitmap::create(bitmapName);
+	if (!bitmap) {
+		Debug::warning(Debug::Sets, "Unable to load bitmap: %s", bitmapName);
+		return nullptr;
+	}
+	Bitmap *zbitmap = nullptr;
+	if (zbitmapName) {
+		zbitmap = Bitmap::create(zbitmapName);
 	}
 
 	state = new ObjectState(setupID, pos, bitmap, zbitmap, transparency);

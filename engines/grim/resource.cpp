@@ -334,7 +334,8 @@ void ResourceLoader::putIntoCache(const Common::Path &fname, byte *res, uint32 l
 CMap *ResourceLoader::loadColormap(const Common::String &filename) {
 	Common::SeekableReadStream *stream = openNewStreamFile(filename.c_str());
 	if (!stream) {
-		error("Could not find colormap %s", filename.c_str());
+		warning("Could not find colormap %s", filename.c_str());
+		return nullptr;
 	}
 
 	CMap *result = new CMap(filename, stream);
@@ -366,7 +367,8 @@ Costume *ResourceLoader::loadCostume(const Common::String &filename, Actor *owne
 
 	Common::SeekableReadStream *stream = openNewStreamFile(fname.c_str(), true);
 	if (!stream) {
-		error("Could not find costume \"%s\"", filename.c_str());
+		warning("Could not find costume \"%s\"", filename.c_str());
+		return nullptr;
 	}
 	Costume *result;
 	if (g_grim->getGameType() == GType_MONKEY4) {
@@ -433,8 +435,10 @@ Font *ResourceLoader::loadFont(const Common::String &filename) {
 	}
 
 	stream = openNewStreamFile(filename.c_str(), true);
-	if (!stream)
-		error("Could not find font file %s", filename.c_str());
+	if (!stream) {
+		warning("Could not find font file %s", filename.c_str());
+		return nullptr;
+	}
 
 	BitmapFont *result = new BitmapFont();
 	result->load(filename, stream);
@@ -447,8 +451,10 @@ KeyframeAnim *ResourceLoader::loadKeyframe(const Common::String &filename) {
 	Common::SeekableReadStream *stream;
 
 	stream = openNewStreamFile(filename.c_str());
-	if (!stream)
-		error("Could not find keyframe file %s", filename.c_str());
+	if (!stream) {
+		warning("Could not find keyframe file %s", filename.c_str());
+		return nullptr;
+	}
 
 	KeyframeAnim *result = new KeyframeAnim(filename, stream);
 	_keyframeAnims.push_back(result);
@@ -493,13 +499,15 @@ Material *ResourceLoader::loadMaterial(const Common::String &filename, CMap *c, 
 			warning("Could not find material %s, using %s instead", filename.c_str(), replacement.c_str());
 			return loadMaterial(replacement, nullptr, clamp);
 		} else {
-			error("Could not find material %s", filename.c_str());
+			warning("Could not find material %s", filename.c_str());
+			return nullptr;
 		}
 	}
 	if (!stream) {
 		// Specialty materials are not loaded from files.
 		if (!filename.hasPrefix("specialty")) {
-			error("Couldn't open %s", fname.c_str());
+			warning("Couldn't open %s", fname.c_str());
+			return nullptr;
 		}
 	}
 
@@ -514,8 +522,10 @@ Model *ResourceLoader::loadModel(const Common::String &filename, CMap *c, Model 
 	Common::SeekableReadStream *stream;
 
 	stream = openNewStreamFile(fname.c_str());
-	if (!stream)
-		error("Could not find model %s", filename.c_str());
+	if (!stream) {
+		warning("Could not find model %s", filename.c_str());
+		return nullptr;
+	}
 
 	Model *result = new Model(filename, stream, c, parent);
 	_models.push_back(result);
