@@ -43,13 +43,19 @@
 
 /**
  * Adapter to be able to use Common::Archive based code from the AD.
+ *
+ * With encodeNames, the paths asked for are real file names and are
+ * converted to the keys composeFileHashMap() makes (punycode, no trailing
+ * dot) before the lookup. This lets MacResManager derive names such as
+ * "._name" from the real name. Otherwise the paths are used as keys as is.
+ * Files in __MACOSX folders are then only found if allFiles lists them.
  */
 class FileMapArchive : public Common::Archive {
 public:
-	FileMapArchive(const AdvancedMetaEngineDetectionBase::FileMap &fileMap) : _fileMap(fileMap) {}
+	FileMapArchive(const AdvancedMetaEngineDetectionBase::FileMap &fileMap, bool encodeNames = false) : _fileMap(fileMap), _encodeNames(encodeNames) {}
 
 	bool hasFile(const Common::Path &path) const override {
-		return _fileMap.contains(path);
+		return _fileMap.contains(key(path));
 	}
 
 	int listMembers(Common::ArchiveMemberList &list) const override {
@@ -63,10 +69,16 @@ public:
 	}
 
 	const Common::ArchiveMemberPtr getMember(const Common::Path &path) const override {
-		AdvancedMetaEngineDetectionBase::FileMap::const_iterator it = _fileMap.find(path);
+		AdvancedMetaEngineDetectionBase::FileMap::const_iterator it = _fileMap.find(key(path));
 		if (it == _fileMap.end()) {
 			return Common::ArchiveMemberPtr();
 		}
+
+		// When looking up real names, hand out members that are not FSNodes:
+		// MacResManager then looks for __MACOSX files in the map only, rather
+		// than also asking the filesystem for every file.
+		if (_encodeNames)
+			return Common::ArchiveMemberPtr(new Common::GenericArchiveMember(path, *this));
 
 		return Common::ArchiveMemberPtr(new Common::FSNode(it->_value));
 	}
@@ -74,12 +86,23 @@ public:
 	Common::SeekableReadStream *createReadStreamForMember(const Common::Path &path) const override {
 		// The map holds files from a directory listing: open them without
 		// asking the filesystem first whether they exist.
-		Common::FSNode fsNode = _fileMap.getValOrDefault(path);
+		Common::FSNode fsNode = _fileMap.getValOrDefault(key(path));
 		return fsNode.tryCreateReadStream();
 	}
 
 private:
+	Common::Path key(const Common::Path &path) const {
+		if (!_encodeNames)
+			return path;
+
+		Common::String encoded = path.punycodeEncode().toString('/');
+		if (encoded.lastChar() == '.')
+			encoded.deleteLastChar();
+		return Common::Path(encoded, '/');
+	}
+
 	const AdvancedMetaEngineDetectionBase::FileMap &_fileMap;
+	bool _encodeNames;
 };
 
 Common::String AdvancedMetaEngineDetectionBase::sanitizeName(const char *name, int maxLen) {
@@ -630,6 +653,11 @@ bool AdvancedMetaEngineDetectionBase::getFileProperties(const FileMap &allFiles,
 	}
 
 	return res;
+}
+
+bool AdvancedMetaEngineDetectionBase::getFileFinderInfo(const FileMap &allFiles, const Common::Path &fname, Common::MacFinderInfo &finderInfo) const {
+	FileMapArchive fileMapArchive(allFiles, true);
+	return Common::MacResManager::getFileFinderInfo(fname, fileMapArchive, finderInfo);
 }
 
 bool AdvancedMetaEngineBase::getFilePropertiesExtern(uint md5Bytes, const FileMap &allFiles, MD5Properties md5prop, const Common::Path &fname, FileProperties &fileProps) const {

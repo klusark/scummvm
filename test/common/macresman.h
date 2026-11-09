@@ -200,6 +200,42 @@ static Common::String readAll(Common::SeekableReadStream *s) {
 	return out;
 }
 
+// Keyed by punycode-encoded names, like the game detector's file map. With
+// encodeLookups, requested paths are encoded before the lookup, as the
+// detector does when MacResManager is given real file names.
+class PunycodeArchive : public Common::Archive {
+public:
+	explicit PunycodeArchive(bool encodeLookups) : _encodeLookups(encodeLookups) {}
+
+	void addReal(const char *realName, const Bytes &data) {
+		_files.add(Common::Path(realName).punycodeEncode().toString().c_str(), data);
+	}
+
+	bool hasFile(const Common::Path &path) const override {
+		return _files.hasFile(key(path));
+	}
+
+	int listMembers(Common::ArchiveMemberList &list) const override {
+		return _files.listMembers(list);
+	}
+
+	const Common::ArchiveMemberPtr getMember(const Common::Path &path) const override {
+		return _files.getMember(key(path));
+	}
+
+	Common::SeekableReadStream *createReadStreamForMember(const Common::Path &path) const override {
+		return _files.createReadStreamForMember(key(path));
+	}
+
+private:
+	Common::Path key(const Common::Path &path) const {
+		return _encodeLookups ? path.punycodeEncode() : path;
+	}
+
+	MemArchive _files;
+	bool _encodeLookups;
+};
+
 // Records every member path MacResManager asks for.
 class RecordingArchive : public MemArchive {
 public:
@@ -516,6 +552,101 @@ public:
 		MemArchive empty;
 		Common::MacFinderInfo finfo3;
 		TS_ASSERT(!Common::MacResManager::getFileFinderInfo(Common::Path("app"), empty, finfo3));
+	}
+
+	// The WAGE detector looks up the Finder info of every file by its real
+	// name in a map keyed by punycode names. AppleDouble names are derived
+	// from the name asked for, so the lookups have to encode, not the caller.
+	void test_finder_info_of_non_ascii_names_in_punycode_map() {
+		using namespace MacResManTest;
+		const char *const name = "Caf\xc3\xa9 Wage";
+		const Common::Path realName(name);
+		const uint32 appl = MKTAG('A', 'P', 'P', 'L'), wedt = MKTAG('W', 'E', 'D', 'T');
+
+		{
+			PunycodeArchive a(true);
+			a.addReal(name, makeBytes(""));
+			a.addReal("._Caf\xc3\xa9 Wage", makeAppleDoubleFinderInfo(appl, wedt));
+			Common::MacFinderInfo finfo;
+			TS_ASSERT(Common::MacResManager::getFileFinderInfo(realName, a, finfo));
+			TS_ASSERT_EQUALS(finfo.type, appl);
+			TS_ASSERT_EQUALS(finfo.creator, wedt);
+		}
+
+		{
+			PunycodeArchive a(true);
+			a.addReal(name, makeMacBinary("", "fork"));
+			Common::MacFinderInfo finfo;
+			TS_ASSERT(Common::MacResManager::getFileFinderInfo(realName, a, finfo));
+		}
+
+		// Asking with the encoded name instead misses the AppleDouble file:
+		// "._" + encoded name is not the encoding of "._" + name.
+		{
+			PunycodeArchive a(false);
+			a.addReal(name, makeBytes(""));
+			a.addReal("._Caf\xc3\xa9 Wage", makeAppleDoubleFinderInfo(appl, wedt));
+			Common::MacFinderInfo finfo;
+			TS_ASSERT(!Common::MacResManager::getFileFinderInfo(realName.punycodeEncode(), a, finfo));
+		}
+
+		// Plain ASCII names are left alone by the encoding.
+		TS_ASSERT_EQUALS(Common::Path("My Wage Game").punycodeEncode().toString(), "My Wage Game");
+		TS_ASSERT_EQUALS(Common::Path("._My Wage Game").punycodeEncode().toString(), "._My Wage Game");
+	}
+
+	// Finder info in a __MACOSX folder next to a real file is found even when
+	// the archive only lists the folder's own files, as the detector's map does.
+	void test_finder_info_from_macosx_sidecar_on_disk() {
+#if NULL_OSYSTEM_IS_AVAILABLE
+		using namespace MacResManTest;
+		const uint32 appl = MKTAG('A', 'P', 'P', 'L'), wedt = MKTAG('W', 'E', 'D', 'T');
+		TS_ASSERT(writeFile("test/macresman-tmp/wage/My Wage Game", makeBytes("")));
+		TS_ASSERT(writeFile("test/macresman-tmp/wage/__MACOSX/._My Wage Game", makeAppleDoubleFinderInfo(appl, wedt)));
+		TS_ASSERT(writeFile("test/macresman-tmp/wage/Other File", makeBytes("plain")));
+
+		NodeArchive nodes;
+		nodes.add("My Wage Game", Common::FSNode(Common::Path("test/macresman-tmp/wage/My Wage Game")));
+		nodes.add("Other File", Common::FSNode(Common::Path("test/macresman-tmp/wage/Other File")));
+
+		Common::MacFinderInfo finfo;
+		TS_ASSERT(Common::MacResManager::getFileFinderInfo(Common::Path("My Wage Game"), nodes, finfo));
+		TS_ASSERT_EQUALS(finfo.type, appl);
+		TS_ASSERT_EQUALS(finfo.creator, wedt);
+
+		Common::MacFinderInfo finfo2;
+		TS_ASSERT(!Common::MacResManager::getFileFinderInfo(Common::Path("Other File"), nodes, finfo2));
+#endif
+	}
+
+	// Members that are not plain files on disk (as the WAGE detector hands
+	// out) never make MacResManager look on disk: a __MACOSX file there is
+	// only found if the archive lists it.
+	void test_archive_members_do_not_probe_disk_for_macosx() {
+#if NULL_OSYSTEM_IS_AVAILABLE
+		using namespace MacResManTest;
+		const uint32 appl = MKTAG('A', 'P', 'P', 'L'), wedt = MKTAG('W', 'E', 'D', 'T');
+		TS_ASSERT(writeFile("test/macresman-tmp/nofs/__MACOSX/._app", makeAppleDoubleFinderInfo(appl, wedt)));
+
+		MemArchive a;
+		a.add("test/macresman-tmp/nofs/app", makeBytes(""));
+		Common::MacFinderInfo finfo;
+		TS_ASSERT(!Common::MacResManager::getFileFinderInfo(Common::Path("test/macresman-tmp/nofs/app"), a, finfo));
+
+		// Listed in the archive, it is found.
+		a.add("test/macresman-tmp/nofs/__MACOSX/._app", makeAppleDoubleFinderInfo(appl, wedt));
+		Common::MacFinderInfo finfo2;
+		TS_ASSERT(Common::MacResManager::getFileFinderInfo(Common::Path("test/macresman-tmp/nofs/app"), a, finfo2));
+		TS_ASSERT_EQUALS(finfo2.creator, wedt);
+
+		// Listed under its bare name, as the detector's map also has it.
+		MemArchive b;
+		b.add("app", makeBytes(""));
+		b.add("._app", makeAppleDoubleFinderInfo(appl, wedt));
+		Common::MacFinderInfo finfo3;
+		TS_ASSERT(Common::MacResManager::getFileFinderInfo(Common::Path("app"), b, finfo3));
+		TS_ASSERT_EQUALS(finfo3.type, appl);
+#endif
 	}
 
 	// A file that is not in the archive must not be found through a

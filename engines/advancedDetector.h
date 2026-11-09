@@ -32,6 +32,7 @@
 namespace Common {
 class Error;
 class FSList;
+struct MacFinderInfo;
 }
 /**
  * @defgroup engines_advdetector Advanced Detector
@@ -643,6 +644,14 @@ protected:
 
 	/** Get the properties (size and MD5) of this file. */
 	bool getFileProperties(const FileMap &allFiles, MD5Properties md5prop, const Common::Path &fname, FileProperties &fileProps) const;
+
+	/**
+	 * Get the Mac Finder info of a file, looking only among @p allFiles.
+	 *
+	 * Supports the same storage formats as
+	 * Common::MacResManager::getFileFinderInfo() (MacBinary, AppleDouble, ...).
+	 */
+	bool getFileFinderInfo(const FileMap &allFiles, const Common::Path &fname, Common::MacFinderInfo &finderInfo) const;
 
 	/** Convert an AD game description into the shared game description format. */
 	virtual DetectedGame toDetectedGame(const ADDetectedGame &adGame, ADDetectedGameExtraInfo *extraInfo = nullptr) const;
