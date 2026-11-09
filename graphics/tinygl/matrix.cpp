@@ -172,21 +172,22 @@ void GLContext::glopRotate(GLParam *p) {
 
 		// fill in the values
 		m._m[3][0] = 0.0f;
+		m._m[3][1] = 0.0f;
 		m._m[3][2] = 0.0f;
 		m._m[0][3] = 0.0f;
 		m._m[1][3] = 0.0f;
 		m._m[2][3] = 0.0f;
 		m._m[3][3] = 1.0f;
 
-		// do the math
+		// OpenGL 1.x spec, section 2.10.2 (row-major _m[row][col])
 		m._m[0][0] = u[0] * u[0] + cost * (1 - u[0] * u[0]);
-		m._m[1][0] = u[0] * u[1] * (1 -cost) - u[2] * sint;
-		m._m[2][0] = u[2] * u[0] * (1 -cost) + u[1] * sint;
-		m._m[0][1] = u[0] * u[1] * (1 -cost) + u[2] * sint;
+		m._m[1][0] = u[0] * u[1] * (1 - cost) + u[2] * sint;
+		m._m[2][0] = u[2] * u[0] * (1 - cost) - u[1] * sint;
+		m._m[0][1] = u[0] * u[1] * (1 - cost) - u[2] * sint;
 		m._m[1][1] = u[1] * u[1] + cost * (1 - u[1] * u[1]);
-		m._m[2][1] = u[1] * u[2] * (1 - cost) - u[0] * sint;
-		m._m[0][2] = u[2] * u[0] * (1 - cost) - u[1] * sint;
-		m._m[1][2] = u[1] * u[2] * (1 - cost) + u[0] * sint;
+		m._m[2][1] = u[1] * u[2] * (1 - cost) + u[0] * sint;
+		m._m[0][2] = u[2] * u[0] * (1 - cost) + u[1] * sint;
+		m._m[1][2] = u[1] * u[2] * (1 - cost) - u[0] * sint;
 		m._m[2][2] = u[2] * u[2] + cost * (1 - u[2] * u[2]);
 	}
 	}

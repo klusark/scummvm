@@ -273,7 +273,6 @@ public:
 	virtual void SetMatrix(eMatrix aMtxType, const cMatrixf &a_mtxA) = 0;
 
 	virtual void TranslateMatrix(eMatrix aMtxType, const cVector3f &avPos) = 0;
-	virtual void RotateMatrix(eMatrix aMtxType, const cVector3f &avRot) = 0;
 	virtual void ScaleMatrix(eMatrix aMtxType, const cVector3f &avScale) = 0;
 
 	virtual void SetOrthoProjection(const cVector2f &avSize, float afMin, float afMax) = 0;

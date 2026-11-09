@@ -28,11 +28,11 @@ void GLContext::glopFog(GLParam *p) {
 
 	switch (pname) {
 	case TGL_FOG_MODE:
-		switch (p[2].i) {
+		switch ((int)p[2].f) {
 		case TGL_LINEAR:
 		case TGL_EXP:
 		case TGL_EXP2:
-			fog_mode = p[2].i;
+			fog_mode = (int)p[2].f;
 			break;
 		default:
 			error("tglFog: unknown fog mode");

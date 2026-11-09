@@ -431,18 +431,6 @@ void cLowLevelGraphicsSDL::TranslateMatrix(eMatrix aMtxType, const cVector3f &av
 
 //-----------------------------------------------------------------------
 
-/**
- * \todo fix so that there are X, Y , Z versions of this one.
- * \param aMtxType
- * \param &avRot
- */
-void cLowLevelGraphicsSDL::RotateMatrix(eMatrix aMtxType, const cVector3f &avRot) {
-	SetMatrixMode(aMtxType);
-	GL_CHECK(glRotatef(1, avRot.x, avRot.y, avRot.z));
-}
-
-//-----------------------------------------------------------------------
-
 void cLowLevelGraphicsSDL::ScaleMatrix(eMatrix aMtxType, const cVector3f &avScale) {
 	SetMatrixMode(aMtxType);
 	GL_CHECK(glScalef(avScale.x, avScale.y, avScale.z));

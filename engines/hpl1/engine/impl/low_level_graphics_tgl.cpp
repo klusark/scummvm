@@ -616,18 +616,6 @@ void LowLevelGraphicsTGL::TranslateMatrix(eMatrix aMtxType, const cVector3f &avP
 
 //-----------------------------------------------------------------------
 
-/**
- * \todo fix so that there are X, Y , Z versions of this one.
- * \param aMtxType
- * \param &avRot
- */
-void LowLevelGraphicsTGL::RotateMatrix(eMatrix aMtxType, const cVector3f &avRot) {
-	SetMatrixMode(aMtxType);
-	tglRotatef(1, avRot.x, avRot.y, avRot.z);
-}
-
-//-----------------------------------------------------------------------
-
 void LowLevelGraphicsTGL::ScaleMatrix(eMatrix aMtxType, const cVector3f &avScale) {
 	SetMatrixMode(aMtxType);
 	tglScalef(avScale.x, avScale.y, avScale.z);

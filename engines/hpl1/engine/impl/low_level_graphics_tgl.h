@@ -90,7 +90,6 @@ public:
 	void SetMatrix(eMatrix aMtxType, const cMatrixf &a_mtxA);
 
 	void TranslateMatrix(eMatrix aMtxType, const cVector3f &avPos);
-	void RotateMatrix(eMatrix aMtxType, const cVector3f &avRot);
 	void ScaleMatrix(eMatrix aMtxType, const cVector3f &avScale);
 
 	void SetOrthoProjection(const cVector2f &avSize, float afMin, float afMax);

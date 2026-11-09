@@ -138,10 +138,16 @@ void GLContext::endSharedState() {
 	GLSharedState *s = &shared_state;
 
 	for (int i = 0; i < MAX_DISPLAY_LISTS; i++) {
-		// TODO
+		if (s->lists[i])
+			delete_list(i);
 	}
 	gl_free(s->lists);
 
+	// Textures the caller never deleted (and ones only created by binding).
+	for (int i = 0; i < TEXTURE_HASH_TABLE_SIZE; i++) {
+		while (s->texture_hash_table[i])
+			free_texture(s->texture_hash_table[i]);
+	}
 	gl_free(s->texture_hash_table);
 }
 

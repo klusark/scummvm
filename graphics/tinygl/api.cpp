@@ -760,13 +760,13 @@ void tglTexEnvfv(TGLenum target, TGLenum pname, const TGLfloat *params) {
 	p[0].op = TinyGL::OP_TexEnv;
 	p[1].i = target;
 	p[2].i = pname;
-	p[3].i = 0;
 
-	int n = 0;
-	if (target == TGL_TEXTURE_ENV && pname == TGL_TEXTURE_ENV_COLOR)
-		n = 4;
-	for (int i = 0; i < n; i++)
-		p[4 + i].f = params[i];
+	// The color goes in the float slots; every other pname is a single enum
+	// value, passed as the int param like tglTexEnvi.
+	const bool isColor = target == TGL_TEXTURE_ENV && pname == TGL_TEXTURE_ENV_COLOR;
+	p[3].i = isColor ? 0 : (TGLint)params[0];
+	for (int i = 0; i < 4; i++)
+		p[4 + i].f = isColor ? params[i] : 0.0f;
 
 	c->gl_add_op(p);
 }
@@ -1030,80 +1030,51 @@ void tglTexCoordPointer(TGLint size, TGLenum type, TGLsizei stride, const TGLvoi
 
 // fog
 
-void tglFogfv(TGLenum pname, const TGLfloat *params) {
+// OP_Fog is always pname followed by 4 floats (the mode too, like
+// OP_LightModel); unused values are 0.
+static void addFogOp(TGLenum pname, TGLfloat v0, TGLfloat v1, TGLfloat v2, TGLfloat v3) {
 	TinyGL::GLContext *c = TinyGL::gl_get_context();
 	TinyGL::GLParam p[6];
 
 	p[0].op = TinyGL::OP_Fog;
 	p[1].i = pname;
-	switch (pname) {
-		case TGL_FOG_MODE:
-		case TGL_FOG_DENSITY:
-		case TGL_FOG_START:
-		case TGL_FOG_END:
-			p[2].f = params[0];
-			break;
-		case TGL_FOG_COLOR:
-			p[2].f = params[0];
-			p[3].f = params[1];
-			p[4].f = params[2];
-			p[5].f = params[3];
-			break;
-		default:
-			warning("tglFogfv: Unknown param");
-			return;
-	}
+	p[2].f = v0;
+	p[3].f = v1;
+	p[4].f = v2;
+	p[5].f = v3;
 
 	c->gl_add_op(p);
+}
+
+static bool isScalarFogParam(TGLenum pname) {
+	return pname == TGL_FOG_MODE || pname == TGL_FOG_DENSITY ||
+	       pname == TGL_FOG_START || pname == TGL_FOG_END;
+}
+
+void tglFogfv(TGLenum pname, const TGLfloat *params) {
+	if (isScalarFogParam(pname))
+		addFogOp(pname, params[0], 0, 0, 0);
+	else if (pname == TGL_FOG_COLOR)
+		addFogOp(pname, params[0], params[1], params[2], params[3]);
+	else
+		warning("tglFogfv: Unknown param");
 }
 
 void tglFogf(TGLenum pname, TGLfloat param) {
-	TinyGL::GLContext *c = TinyGL::gl_get_context();
-	TinyGL::GLParam p[3];
-
-	p[0].op = TinyGL::OP_Fog;
-	p[1].i = pname;
-	p[2].f = param;
-
-	c->gl_add_op(p);
+	addFogOp(pname, param, 0, 0, 0);
 }
 
 void tglFogiv(TGLenum pname, const TGLint *params) {
-	TinyGL::GLContext *c = TinyGL::gl_get_context();
-	TinyGL::GLParam p[6];
-
-	p[0].op = TinyGL::OP_Fog;
-	p[1].i = pname;
-	switch (pname) {
-		case TGL_FOG_MODE:
-		case TGL_FOG_DENSITY:
-		case TGL_FOG_START:
-		case TGL_FOG_END:
-			p[2].f = (float)params[0];
-			break;
-		case TGL_FOG_COLOR:
-			p[2].f = (float)params[0];
-			p[3].f = (float)params[1];
-			p[4].f = (float)params[2];
-			p[5].f = (float)params[3];
-			break;
-		default:
-			warning("tglFogiv: Unknown param");
-			return;
-	}
-
-	c->gl_add_op(p);
+	if (isScalarFogParam(pname))
+		addFogOp(pname, (float)params[0], 0, 0, 0);
+	else if (pname == TGL_FOG_COLOR)
+		addFogOp(pname, (float)params[0], (float)params[1], (float)params[2], (float)params[3]);
+	else
+		warning("tglFogiv: Unknown param");
 }
 
 void tglFogi(TGLenum pname, TGLint param) {
-	TinyGL::GLContext *c = TinyGL::gl_get_context();
-	TinyGL::GLParam p[6];
-
-	p[0].op = TinyGL::OP_Fog;
-	p[1].i = pname;
-	p[2].i = (float)param;
-
-	c->gl_add_op(p);
+	addFogOp(pname, (float)param, 0, 0, 0);
 }
 
 // gets

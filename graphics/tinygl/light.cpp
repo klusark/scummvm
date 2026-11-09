@@ -36,8 +36,12 @@ void GLContext::glopMaterial(GLParam *p) {
 	GLMaterial *m;
 
 	if (mode == TGL_FRONT_AND_BACK) {
-		p[1].i = TGL_FRONT;
-		glopMaterial(p);
+		// Recurse on a copy: p may point into a display list.
+		GLParam front[7];
+		for (int i = 0; i < 7; i++)
+			front[i] = p[i];
+		front[1].i = TGL_FRONT;
+		glopMaterial(front);
 		mode = TGL_BACK;
 	}
 	if (mode == TGL_FRONT)

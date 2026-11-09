@@ -262,13 +262,13 @@ void GLContext::glopDrawElements(GLParam *p) {
 	for (int i = 0; i < p[2].i; i++) {
 		switch (p[3].i) {
 		case TGL_UNSIGNED_BYTE:
-			array_element[1].i = ((TGLbyte *)indices)[i];
+			array_element[1].i = ((const TGLubyte *)indices)[i];
 			break;
 		case TGL_UNSIGNED_SHORT:
-			array_element[1].i = ((TGLshort *)indices)[i];
+			array_element[1].i = ((const TGLushort *)indices)[i];
 			break;
 		case TGL_UNSIGNED_INT:
-			array_element[1].i = ((TGLint *)indices)[i];
+			array_element[1].i = ((const TGLuint *)indices)[i];
 			break;
 		default:
 			assert(0);
