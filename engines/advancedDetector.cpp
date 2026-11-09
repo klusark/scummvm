@@ -254,9 +254,44 @@ bool AdvancedMetaEngineDetectionBase::cleanupPirated(ADDetectedGames &matched) c
 	return false;
 }
 
-DetectedGames AdvancedMetaEngineDetectionBase::detectGames(const Common::FSList &fslist, uint32 skipADFlags, bool skipIncomplete) {
-	FileMap allFiles;
+// The file maps shared by the engines while EngineManager::detectGames()
+// scans one directory: one without and one with kADFlagMatchFullPaths.
+static const Common::FSList *g_sharedFileList = nullptr;
+static AdvancedMetaEngineBase::FileMap *g_sharedFileMaps[2] = { nullptr, nullptr };
 
+void AdvancedMetaEngineDetectionBase::beginSharedFileMaps(const Common::FSList &fslist) {
+	endSharedFileMaps();
+	g_sharedFileList = &fslist;
+}
+
+void AdvancedMetaEngineDetectionBase::endSharedFileMaps() {
+	g_sharedFileList = nullptr;
+	for (int i = 0; i < 2; i++) {
+		delete g_sharedFileMaps[i];
+		g_sharedFileMaps[i] = nullptr;
+	}
+}
+
+const AdvancedMetaEngineDetectionBase::FileMap &AdvancedMetaEngineDetectionBase::getFileMap(const Common::FSList &fslist, FileMap &ownMap) const {
+	const int depth = (_maxScanDepth == 0 ? 1 : _maxScanDepth);
+
+	// With depth 1 the map holds just the files of the directory itself,
+	// so it does not depend on the directory globs, only on whether paths
+	// are recorded in full.
+	if (depth == 1 && g_sharedFileList == &fslist) {
+		const int slot = (_flags & kADFlagMatchFullPaths) ? 1 : 0;
+		if (!g_sharedFileMaps[slot]) {
+			g_sharedFileMaps[slot] = new FileMap();
+			composeFileHashMap(*g_sharedFileMaps[slot], fslist, depth);
+		}
+		return *g_sharedFileMaps[slot];
+	}
+
+	composeFileHashMap(ownMap, fslist, depth);
+	return ownMap;
+}
+
+DetectedGames AdvancedMetaEngineDetectionBase::detectGames(const Common::FSList &fslist, uint32 skipADFlags, bool skipIncomplete) {
 	if (fslist.empty())
 		return DetectedGames();
 
@@ -265,7 +300,8 @@ DetectedGames AdvancedMetaEngineDetectionBase::detectGames(const Common::FSList 
 	preprocessDescriptions();
 
 	// Compose a hashmap of all files in fslist.
-	composeFileHashMap(allFiles, fslist, (_maxScanDepth == 0 ? 1 : _maxScanDepth));
+	FileMap ownFiles;
+	const FileMap &allFiles = getFileMap(fslist, ownFiles);
 
 	// Run the detector on this
 	ADDetectedGames matches = detectGame(fslist.begin()->getParent(), allFiles, Common::UNK_LANG, Common::kPlatformUnknown, "", skipADFlags, skipIncomplete);

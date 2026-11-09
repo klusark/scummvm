@@ -509,6 +509,17 @@ public:
 	Common::Error identifyGame(DetectedGame &game, const void **descriptor) override;
 
 	/**
+	 * Let all engines detecting games in @p fslist share the file maps
+	 * composeFileHashMap() would build, until endSharedFileMaps().
+	 *
+	 * Most engines scan only the directory itself and so build identical
+	 * maps; building them once per directory saves that work for every
+	 * other engine. @p fslist must stay alive and unchanged until then.
+	 */
+	static void beginSharedFileMaps(const Common::FSList &fslist);
+	static void endSharedFileMaps();
+
+	/**
 	 * Run the engine's game detector on the given list of files, and return a
 	 * (possibly empty) list of games supported by the engine that were
 	 * found among the given files.
@@ -621,6 +632,14 @@ protected:
 	 * Removes trailing dots and ignores case in the process.
 	 */
 	void composeFileHashMap(FileMap &allFiles, const Common::FSList &fslist, int depth, const Common::Path &parentName = Common::Path()) const;
+
+	/**
+	 * The map of the files in @p fslist for this engine's scan depth, as
+	 * composeFileHashMap() builds it. It is the map shared by all engines
+	 * when beginSharedFileMaps() was called for @p fslist and this engine
+	 * scans only the directory itself; otherwise it is built in @p ownMap.
+	 */
+	const FileMap &getFileMap(const Common::FSList &fslist, FileMap &ownMap) const;
 
 	/** Get the properties (size and MD5) of this file. */
 	bool getFileProperties(const FileMap &allFiles, MD5Properties md5prop, const Common::Path &fname, FileProperties &fileProps) const;

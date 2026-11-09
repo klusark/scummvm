@@ -76,13 +76,12 @@ AGSMetaEngineDetection::AGSMetaEngineDetection() : AdvancedMetaEngineDetection(A
 }
 
 DetectedGames AGSMetaEngineDetection::detectGames(const Common::FSList &fslist, uint32 skipADFlags, bool skipIncomplete) {
-	FileMap allFiles;
-
 	if (fslist.empty())
 		return DetectedGames();
 
 	// Compose a hashmap of all files in fslist.
-	composeFileHashMap(allFiles, fslist, (_maxScanDepth == 0 ? 1 : _maxScanDepth));
+	FileMap ownFiles;
+	const FileMap &allFiles = getFileMap(fslist, ownFiles);
 
 	// Run the detector on this
 	ADDetectedGames matches = detectGame(fslist.begin()->getParent(), allFiles, Common::UNK_LANG, Common::kPlatformUnknown, "", skipADFlags, skipIncomplete);
@@ -97,7 +96,7 @@ DetectedGames AGSMetaEngineDetection::detectGames(const Common::FSList &fslist, 
 			// Check the game is an AGS game
 			for (FilePropertiesMap::const_iterator it = game.matchedFiles.begin(); it != game.matchedFiles.end(); it++) {
 				Common::File f;
-				if (f.open(allFiles[it->_key]) && AGS3::isAGSFile(f)) {
+				if (f.open(allFiles.getValOrDefault(it->_key)) && AGS3::isAGSFile(f)) {
 					detectedGames.push_back(game);
 					break;
 				}

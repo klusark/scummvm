@@ -691,6 +691,9 @@ DetectionResults EngineManager::detectGames(const Common::FSList &fslist, uint32
 	// Clear md5 cache before each detection starts, just in case.
 	ADCacheMan.clear();
 
+	// The engines that scan only this directory share one map of its files.
+	AdvancedMetaEngineDetectionBase::beginSharedFileMaps(fslist);
+
 	// Iterate over all known games and for each check if it might be
 	// the game in the presented directory.
 	for (const auto &plugin : plugins) {
@@ -705,6 +708,8 @@ DetectionResults EngineManager::detectGames(const Common::FSList &fslist, uint32
 			candidates.push_back(engineCandidates[i]);
 		}
 	}
+
+	AdvancedMetaEngineDetectionBase::endSharedFileMaps();
 
 	// Close all archives that were opened during detection
 	ADCacheMan.clearArchives();
