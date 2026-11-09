@@ -200,6 +200,62 @@ static Common::String readAll(Common::SeekableReadStream *s) {
 	return out;
 }
 
+// Records every member path MacResManager asks for.
+class RecordingArchive : public MemArchive {
+public:
+	mutable Common::Array<Common::Path> requests;
+
+	bool hasFile(const Common::Path &path) const override {
+		requests.push_back(path);
+		return MemArchive::hasFile(path);
+	}
+
+	const Common::ArchiveMemberPtr getMember(const Common::Path &path) const override {
+		requests.push_back(path);
+		return MemArchive::getMember(path);
+	}
+
+	Common::SeekableReadStream *createReadStreamForMember(const Common::Path &path) const override {
+		requests.push_back(path);
+		return MemArchive::createReadStreamForMember(path);
+	}
+};
+
+// AppleDouble holding only Finder info (entry 9) for type/creator.
+static Bytes makeAppleDoubleFinderInfo(uint32 type, uint32 creator) {
+	Bytes b;
+	putBE32(b, 0x00051607);
+	putBE32(b, 0x00020000);
+	for (int i = 0; i < 16; i++)
+		b.push_back(0);
+	putBE16(b, 1);
+	putBE32(b, 9);
+	putBE32(b, 26 + 12);
+	putBE32(b, 32);
+	putBE32(b, type);
+	putBE32(b, creator);
+	for (int i = 0; i < 24; i++)
+		b.push_back(0);
+	return b;
+}
+
+static bool containsName(const Common::Array<Common::Path> &names, const Common::Path &name) {
+	for (const Common::Path &n : names) {
+		if (n.equalsIgnoreCase(name))
+			return true;
+	}
+	return false;
+}
+
+// Runs every lookup MacResManager offers for fileName against the archive.
+static void lookUpEverything(const Common::Path &fileName, Common::Archive &archive) {
+	Common::MacResManager res;
+	res.open(fileName, archive);
+	delete Common::MacResManager::openFileOrDataFork(fileName, archive);
+	Common::MacFinderInfo finfo;
+	Common::MacResManager::getFileFinderInfo(fileName, archive, finfo);
+}
+
 static bool writeFile(const char *path, const Bytes &data) {
 	Common::DumpFile f;
 	if (!f.open(Common::Path(path), true))
@@ -339,6 +395,127 @@ public:
 		MemArchive a;
 		a.add("game.data", makeBytes("suffix"));
 		TS_ASSERT_EQUALS(readAll(Common::MacResManager::openFileOrDataFork(Common::Path("game"), a)), "suffix");
+	}
+
+	void test_lookup_file_names_list() {
+		using namespace MacResManTest;
+		Common::Array<Common::Path> names;
+		Common::MacResManager::getLookupFileNames(Common::Path("Disk 1/Game Data"), names);
+		TS_ASSERT_EQUALS(names.size(), 5u);
+		TS_ASSERT(containsName(names, Common::Path("Game Data")));
+		TS_ASSERT(containsName(names, Common::Path("Game Data.rsrc")));
+		TS_ASSERT(containsName(names, Common::Path("Game Data.bin")));
+		TS_ASSERT(containsName(names, Common::Path("Game Data.data")));
+		TS_ASSERT(containsName(names, Common::Path("._Game Data")));
+		for (const Common::Path &n : names)
+			TS_ASSERT_EQUALS(n.numComponents(), 1u);
+
+		// Existing contents are kept.
+		Common::MacResManager::getLookupFileNames(Common::Path("x"), names);
+		TS_ASSERT_EQUALS(names.size(), 10u);
+		TS_ASSERT(containsName(names, Common::Path("Game Data")));
+		TS_ASSERT(containsName(names, Common::Path("._x")));
+	}
+
+	// The guarantee the game detector relies on: when the file is missing,
+	// every member MacResManager asks the archive for ends in one of the
+	// names from getLookupFileNames().
+	void test_lookup_file_names_cover_every_request() {
+		using namespace MacResManTest;
+		static const char *const fileNames[] = {
+			"game", "Game Data", "dir/game", "a/b/c/My Game.v2", "xn--Main Menu-zd0e", "game.rsrc", "._game", nullptr
+		};
+
+		for (int i = 0; fileNames[i]; i++) {
+			const Common::Path fileName(fileNames[i]);
+			Common::Array<Common::Path> names;
+			Common::MacResManager::getLookupFileNames(fileName, names);
+
+			RecordingArchive a;
+			a.add("unrelated", makeBytes("x"));
+			a.add("__MACOSX/._unrelated", makeAppleDouble("x"));
+			lookUpEverything(fileName, a);
+
+			TS_ASSERT(!a.requests.empty());
+			for (const Common::Path &req : a.requests) {
+				if (!containsName(names, req.getLastComponent())) {
+					TS_FAIL(Common::String::format("'%s' looked up '%s', which getLookupFileNames() does not list",
+						fileNames[i], req.toString().c_str()).c_str());
+				}
+			}
+		}
+	}
+
+	// And the other way round: each supported layout is found through a
+	// member whose last component is one of the listed names.
+	void test_lookup_file_names_cover_every_layout() {
+		using namespace MacResManTest;
+		struct Layout {
+			const char *member;
+			int kind; // 0 raw fork, 1 AppleDouble fork, 2 MacBinary, 3 data, 4 Finder info
+		};
+		static const Layout layouts[] = {
+			{ "dir/game.rsrc", 0 },
+			{ "dir/game.rsrc", 1 },
+			{ "dir/._game", 1 },
+			{ "__MACOSX/dir/._game", 1 },
+			{ "dir/__MACOSX/._game", 1 },
+			{ "dir/game.bin", 2 },
+			{ "dir/game", 2 },
+			{ "dir/game.data", 3 },
+			{ "dir/._game", 4 },
+			{ nullptr, 0 }
+		};
+
+		const Common::Path fileName("dir/game");
+		Common::Array<Common::Path> names;
+		Common::MacResManager::getLookupFileNames(fileName, names);
+
+		for (int i = 0; layouts[i].member; i++) {
+			const Layout &l = layouts[i];
+			MemArchive a;
+			switch (l.kind) {
+			case 0: a.add(l.member, makeRawFork("found")); break;
+			case 1: a.add(l.member, makeAppleDouble("found")); break;
+			case 2: a.add(l.member, makeMacBinary("found", "found")); break;
+			case 3: a.add(l.member, makeBytes("found")); break;
+			default: a.add(l.member, makeAppleDoubleFinderInfo(MKTAG('A', 'P', 'P', 'L'), MKTAG('W', 'E', 'D', 'T'))); break;
+			}
+
+			bool found;
+			if (l.kind <= 2) {
+				Common::MacResManager res;
+				found = res.open(fileName, a) && readTestResource(res) == "found";
+			} else if (l.kind == 3) {
+				found = readAll(Common::MacResManager::openFileOrDataFork(fileName, a)) == "found";
+			} else {
+				Common::MacFinderInfo finfo;
+				found = Common::MacResManager::getFileFinderInfo(fileName, a, finfo) &&
+					finfo.type == MKTAG('A', 'P', 'P', 'L') && finfo.creator == MKTAG('W', 'E', 'D', 'T');
+			}
+
+			TSM_ASSERT(l.member, found);
+			TSM_ASSERT(l.member, containsName(names, Common::Path(l.member).getLastComponent()));
+		}
+	}
+
+	void test_finder_info_from_macbinary_and_rsrc_appledouble() {
+		using namespace MacResManTest;
+		MemArchive a;
+		a.add("app", makeMacBinary("", "fork"));
+		Common::MacFinderInfo finfo;
+		TS_ASSERT(Common::MacResManager::getFileFinderInfo(Common::Path("app"), a, finfo));
+
+		MemArchive b;
+		b.add("app.rsrc", makeAppleDoubleFinderInfo(MKTAG('A', 'P', 'P', 'L'), MKTAG('W', 'E', 'D', 'T')));
+		Common::MacFinderInfo finfo2;
+		TS_ASSERT(Common::MacResManager::getFileFinderInfo(Common::Path("app"), b, finfo2));
+		TS_ASSERT_EQUALS(finfo2.type, MKTAG('A', 'P', 'P', 'L'));
+		TS_ASSERT_EQUALS(finfo2.creator, MKTAG('W', 'E', 'D', 'T'));
+
+		MemArchive empty;
+		Common::MacFinderInfo finfo3;
+		TS_ASSERT(!Common::MacResManager::getFileFinderInfo(Common::Path("app"), empty, finfo3));
 	}
 
 	// A file that is not in the archive must not be found through a

@@ -1154,6 +1154,20 @@ void MacResManager::readMap() {
 	}
 }
 
+void MacResManager::getLookupFileNames(const Path &fileName, Array<Path> &names) {
+	// Keep in sync with open(), openFileOrDataFork(), getFileFinderInfo()
+	// and openAppleDoubleWithAppleOrOSXNaming(). Lookups that are only made
+	// once the file itself was found (the OS X named fork, the filesystem
+	// __MACOSX probe) need no entry: the file's own name is listed.
+	const Path last = fileName.getLastComponent();
+
+	names.push_back(last);                            // data fork, MacBinary
+	names.push_back(last.append(".rsrc"));            // raw fork or AppleDouble
+	names.push_back(last.append(".bin"));             // MacBinary
+	names.push_back(last.append(".data"));            // raw data fork
+	names.push_back(constructAppleDoubleName(last));  // ._name, also in __MACOSX
+}
+
 Path MacResManager::constructAppleDoubleName(const Path &name) {
 	// Insert "._" before the last portion of a path name
 	Path ret = name.getParent();

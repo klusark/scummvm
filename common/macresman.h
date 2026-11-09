@@ -172,6 +172,21 @@ public:
 	static void writeMacBinary(SeekableWriteStream *outStream, SeekableReadStream *dataFork, SeekableReadStream *resourceFork, const Common::String &name, const MacFinderInfo &info, TimeDate *created = nullptr, TimeDate *modified = nullptr);
 
 	/**
+	 * Get the file names that open(), openFileOrDataFork() and
+	 * getFileFinderInfo() look for in an archive for @p fileName.
+	 *
+	 * Each name is a single path component (no directory). If the archive
+	 * has no member whose last path component is one of these names, those
+	 * functions find nothing for @p fileName in it, apart from alternate
+	 * streams provided by the archive itself. Callers can use this to skip
+	 * the lookups cheaply when they have an index of member names.
+	 *
+	 * @param fileName The base file name of the file
+	 * @param names Receives the names; existing contents are kept.
+	 */
+	static void getLookupFileNames(const Path &fileName, Array<Path> &names);
+
+	/**
 	 * See if a Mac data/resource fork pair exists.
 	 * @param fileName The base file name of the file
 	 * @return True if either a data fork or resource fork with this name exists
