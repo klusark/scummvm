@@ -507,8 +507,10 @@ void Lua_V1::EnableControl() {
 		return;
 	}
 	int num = (int)lua_getnumber(numObj);
-	if (num < 0 || num >= KEYCODE_EXTRA_LAST)
-		error("control identifier out of range");
+	if (num < 0 || num >= KEYCODE_EXTRA_LAST) {
+		warning("control identifier out of range");
+		return;
+	}
 
 	g_grim->enableControl(num);
 }
@@ -521,8 +523,10 @@ void Lua_V1::DisableControl() {
 		return;
 	}
 	int num = (int)lua_getnumber(numObj);
-	if (num < 0 || num >= KEYCODE_EXTRA_LAST)
-		error("control identifier out of range");
+	if (num < 0 || num >= KEYCODE_EXTRA_LAST) {
+		warning("control identifier out of range");
+		return;
+	}
 
 	g_grim->disableControl(num);
 }
@@ -534,8 +538,10 @@ void Lua_V1::GetControlState() {
 		return;
 
 	int num = (int)lua_getnumber(numObj);
-	if (num < 0 || num >= KEYCODE_EXTRA_LAST)
-		error("control identifier out of range");
+	if (num < 0 || num >= KEYCODE_EXTRA_LAST) {
+		warning("control identifier out of range");
+		return;
+	}
 	if (num >= KEYCODE_AXIS_JOY1_X && num <= KEYCODE_AXIS_MOUSE_Z)
 		lua_pushnumber(g_grim->getControlAxis(num));
 	else {

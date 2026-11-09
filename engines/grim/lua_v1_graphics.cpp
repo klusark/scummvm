@@ -46,6 +46,11 @@ void Lua_V1::GetImage() {
 	}
 	const char *bitmapName = lua_getstring(nameObj);
 	Bitmap *b = Bitmap::create(bitmapName);
+	if (!b) {
+		warning("GetImage: failed to load bitmap %s", bitmapName);
+		lua_pushnil();
+		return;
+	}
 	lua_pushusertag(b->getId(), MKTAG('V','B','U','F'));
 }
 

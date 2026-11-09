@@ -40,17 +40,15 @@ void Iris::play(Iris::Direction dir, int x, int y, int length) {
 	_targetY = y;
 	_length = length;
 	_currTime = 0;
-
-	// The original works out the region when it draws, so the very first frame
-	// already shows the start of the animation.
-	setRegion(dir == Open ? 1.0f : 0.0f);
+	setRegion(0.0);
 }
 
 void Iris::setRegion(float factor) {
-	_y1 = (int)(_targetY * factor);
-	_x1 = (int)(_targetX * factor);
-	_y2 = (int)(480 - (480 - _targetY) * factor);
-	_x2 = (int)(640 - (640 - _targetX) * factor);
+	// (each edge truncated on its own, as Render_DrawIris)
+	_x1 = (int)(_targetX * (double)factor);
+	_y1 = (int)(_targetY * (double)factor);
+	_x2 = 640 - (int)((640 - _targetX) * (double)factor);
+	_y2 = 480 - (int)((480 - _targetY) * (double)factor);
 }
 
 void Iris::draw() {
@@ -69,16 +67,21 @@ void Iris::update(int frameTime) {
 		return;
 	}
 
-	_currTime += frameTime;
-	if (_currTime >= _length) {
+	// The original reads the clock when it draws, after the Lua of the frame: the frame of the call
+	// draws the iris at 0 (IrisUp all black, IrisDown all open). This update is for the next draw,
+	// so it uses the time before this frame is added.
+	if (_length <= 0 || _currTime > _length) {
 		_playing = false;
 		return;
 	}
 
-	float factor = (float)_currTime / (float)_length;
-	if (_direction == Open) {
-		factor = 1 - factor;
-	}
+	setRegion((double)_currTime / (float)_length);
+	_currTime += frameTime;
+}
+
+void Iris::setRegion(double t) {
+	// As Render_DrawIris: the closed part is a float, each edge is truncated on its own
+	float factor = _direction == Open ? (float)(1.0 - t) : (float)t;
 
 	setRegion(factor);
 }

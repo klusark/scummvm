@@ -40,7 +40,7 @@ public:
 		OBJSTATE_STATE = 3
 	};
 
-	ObjectState(int setupID, ObjectState::Position pos, const char *bitmap, const char *zbitmap, bool visible);
+	ObjectState(int setupID, ObjectState::Position pos, Bitmap *bitmap, Bitmap *zbitmap, bool visible);
 	ObjectState();
 	~ObjectState();
 
