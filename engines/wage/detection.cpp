@@ -96,13 +96,11 @@ ADDetectedGame WageMetaEngineDetection::fallbackDetect(const FileMap &allFiles, 
 			continue;
 
 		Common::Path filePath = Common::Path(fs->getPathInArchive());
-		Common::MacResManager resManager;
-		if (!resManager.open(filePath)) {
-			continue;
-		}
 
+		// Only the Finder info matters here. Opening the resource fork
+		// first would succeed for any existing file and only add file reads.
 		Common::MacFinderInfo finderInfo;
-		if (resManager.getFileFinderInfo(filePath, finderInfo)) {
+		if (Common::MacResManager::getFileFinderInfo(filePath, finderInfo)) {
 			if (finderInfo.type != MKTAG('A', 'P', 'P', 'L')) {
 				continue;
 			}
