@@ -60,12 +60,18 @@ static ADGameDescription s_fallbackDesc = {
 	GUIO0()
 };
 
+static const char *const macosxGlobs[] = { "__MACOSX", nullptr };
+
 class WageMetaEngineDetection : public AdvancedMetaEngineDetection<ADGameDescription> {
 	mutable Common::String _filenameStr;
 
 public:
 	WageMetaEngineDetection() : AdvancedMetaEngineDetection(Wage::gameDescriptions, wageGames) {
 		_md5Bytes = 2 * 1024 * 1024;
+		// List the AppleDouble files in __MACOSX folders too, so the fallback
+		// finds their Finder info through allFiles alone.
+		_maxScanDepth = 2;
+		_directoryGlobs = macosxGlobs;
 		_guiOptions = GUIO4(GUIO_NOSPEECH, GUIO_NOMIDI, GAMEOPTION_TTS, GUIO_NOMUSIC);
 	}
 
@@ -89,18 +95,16 @@ public:
 };
 
 ADDetectedGame WageMetaEngineDetection::fallbackDetect(const FileMap &allFiles, const Common::FSList &fslist, ADDetectedGameExtraInfo **extra) const {
-	SearchMan.addDirectory("WageMetaEngineDetection::fallbackDetect", fslist.begin()->getParent());
-
 	for (Common::FSList::const_iterator fs = fslist.begin(); fs != fslist.end(); ++fs) {
 		if (fs->isDirectory())
 			continue;
 
 		Common::Path filePath = Common::Path(fs->getPathInArchive());
 
-		// Only the Finder info matters here. Opening the resource fork
-		// first would succeed for any existing file and only add file reads.
+		// Look only among this directory's files: going through SearchMan
+		// costs filesystem calls for every lookup, for every file scanned.
 		Common::MacFinderInfo finderInfo;
-		if (Common::MacResManager::getFileFinderInfo(filePath, finderInfo)) {
+		if (getFileFinderInfo(allFiles, filePath, finderInfo)) {
 			if (finderInfo.type != MKTAG('A', 'P', 'P', 'L')) {
 				continue;
 			}
@@ -122,12 +126,10 @@ ADDetectedGame WageMetaEngineDetection::fallbackDetect(const FileMap &allFiles, 
 				game.matchedFiles[filePath] = tmp;
 			}
 
-			SearchMan.remove("WageMetaEngineDetection::fallbackDetect");
 			return game;
 		}
 	}
 
-	SearchMan.remove("WageMetaEngineDetection::fallbackDetect");
 	return ADDetectedGame();
 }
 
