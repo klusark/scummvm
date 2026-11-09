@@ -86,7 +86,7 @@ void GfxTinyGL::setupScreen(int screenW, int screenH) {
 
 	_pixelFormat = g_system->getScreenFormat();
 	debug(2, "INFO: TinyGL front buffer pixel format: %s", _pixelFormat.toString().c_str());
-	TinyGL::createContext(screenW, screenH, _pixelFormat, 256, true, ConfMan.getBool("dirtyrects"), 50 * 1024 * 1024);
+	TinyGL::createContext(screenW, screenH, _pixelFormat, 256, true, ConfMan.getBool("dirtyrects"));
 
 	_storedDisplay = new Graphics::Surface;
 	_storedDisplay->create(_gameWidth, _gameHeight, _pixelFormat);

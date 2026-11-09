@@ -31,9 +31,11 @@ namespace TinyGL {
 
 typedef void *ContextHandle;
 
+// The draw calls of a frame are allocated in blocks of drawCallBlockSize bytes;
+// more blocks are added as a frame needs them.
 ContextHandle *createContext(int screenW, int screenH, Graphics::PixelFormat pixelFormat,
                    int textureSize, bool enableStencilBuffer, bool dirtyRectsEnable,
-                   uint32 drawCallMemorySize = 5 * 1024 * 1024);
+                   uint32 drawCallBlockSize = 64 * 1024);
 void destroyContext();
 void destroyContext(ContextHandle *handle);
 void setContext(ContextHandle *handle);

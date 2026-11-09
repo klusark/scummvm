@@ -240,53 +240,116 @@ struct GLSharedState {
 };
 
 /**
- * A linear allocator implementation.
- * The allocator can be initialized to a specific buffer size only once.
- * The allocation scheme is pretty simple: pointers are returned relative to a current memory position,
- * the allocator starts with an offset of 0 and increases its offset by the allocated amount every time.
- * Memory is released through the method free(), care has to be taken to call the destructors of the deallocated objects either manually (for complex struct arrays) or
+ * A linear allocator that hands out memory from a list of fixed size blocks.
+ * Memory is released all at once with reset(); the blocks are kept for reuse.
+ * Care has to be taken to call the destructors of the deallocated objects either manually (for complex struct arrays) or
  * by overriding the delete operator (with an empty implementation).
+ *
+ * Allocations are made in the current block. A request that doesn't fit in what
+ * is left of it goes to the next block instead, so the space left in the current
+ * block still serves the smaller requests that follow. Only when a request fits
+ * in neither does the next block become the current one. Requests larger than a
+ * block get a dedicated block, kept apart from the regular ones.
  */
 class LinearAllocator {
 public:
-	LinearAllocator() {
-		_memoryBuffer = nullptr;
-		_memorySize = 0;
-		_memoryPosition = 0;
-	}
+	static const size_t kAlignment = 8;
 
-	void initialize(size_t newSize) {
-		assert(_memoryBuffer == nullptr);
-		void *newBuffer = gl_malloc(newSize);
-		if (newBuffer == nullptr) {
-			error("Couldn't allocate memory for linear allocator.");
-		}
-		_memoryBuffer = newBuffer;
-		_memorySize = newSize;
-	}
+	LinearAllocator() : _blockSize(0), _current(0) {}
 
 	~LinearAllocator() {
-		if (_memoryBuffer != nullptr) {
-			gl_free(_memoryBuffer);
-		}
+		for (uint i = 0; i < _blocks.size(); i++)
+			gl_free(_blocks[i].data);
+		for (uint i = 0; i < _largeBlocks.size(); i++)
+			gl_free(_largeBlocks[i].data);
+	}
+
+	void initialize(size_t blockSize) {
+		assert(_blocks.empty() && blockSize > 0);
+		_blockSize = blockSize;
+		_blocks.push_back(newBlock(blockSize));
 	}
 
 	void *allocate(size_t size) {
-		if (_memoryPosition + size >= _memorySize) {
-			error("Allocator out of memory: couldn't allocate more memory from linear allocator.");
+		size = (size + kAlignment - 1) & ~(kAlignment - 1);
+		if (size > _blockSize)
+			return allocateLarge(size);
+
+		while (true) {
+			if (fits(_blocks[_current], size))
+				return take(_blocks[_current], size);
+			if (_current + 1 == _blocks.size())
+				_blocks.push_back(newBlock(_blockSize));
+			if (fits(_blocks[_current + 1], size))
+				return take(_blocks[_current + 1], size);
+			// Fits in neither: the current block is done for this frame.
+			_current++;
 		}
-		size_t returnPos = _memoryPosition;
-		_memoryPosition += size;
-		return ((byte *)_memoryBuffer) + returnPos;
 	}
 
 	void reset() {
-		_memoryPosition = 0;
+		for (uint i = 0; i < _blocks.size(); i++)
+			_blocks[i].used = 0;
+		for (uint i = 0; i < _largeBlocks.size(); i++)
+			_largeBlocks[i].used = 0;
+		_current = 0;
 	}
+
+	uint getBlockCount() const { return _blocks.size(); }
+	uint getLargeBlockCount() const { return _largeBlocks.size(); }
+
+	size_t getCapacity() const {
+		size_t capacity = 0;
+		for (uint i = 0; i < _blocks.size(); i++)
+			capacity += _blocks[i].size;
+		for (uint i = 0; i < _largeBlocks.size(); i++)
+			capacity += _largeBlocks[i].size;
+		return capacity;
+	}
+
 private:
-	void *_memoryBuffer;
-	size_t _memorySize;
-	size_t _memoryPosition;
+	struct Block {
+		byte *data;
+		size_t size;
+		size_t used;
+	};
+
+	static Block newBlock(size_t size) {
+		Block block;
+		block.data = (byte *)gl_malloc(size);
+		if (block.data == nullptr)
+			error("Couldn't allocate memory for linear allocator.");
+		block.size = size;
+		block.used = 0;
+		return block;
+	}
+
+	static bool fits(const Block &block, size_t size) {
+		return block.size - block.used >= size;
+	}
+
+	static void *take(Block &block, size_t size) {
+		void *ptr = block.data + block.used;
+		block.used += size;
+		return ptr;
+	}
+
+	// Reuses the first free large block that is big enough.
+	void *allocateLarge(size_t size) {
+		for (uint i = 0; i < _largeBlocks.size(); i++) {
+			if (_largeBlocks[i].used == 0 && fits(_largeBlocks[i], size))
+				return take(_largeBlocks[i], size);
+		}
+		_largeBlocks.push_back(newBlock(size));
+		return take(_largeBlocks.back(), size);
+	}
+
+	LinearAllocator(const LinearAllocator &);
+	LinearAllocator &operator=(const LinearAllocator &);
+
+	Common::Array<Block> _blocks, _largeBlocks;
+	size_t _blockSize;
+	uint _current;
 };
 
 struct GLContext;
@@ -564,7 +627,7 @@ public:
 	void endSharedState();
 
 	void init(int screenW, int screenH, Graphics::PixelFormat pixelFormat, int textureSize,
-	          bool enableStencilBuffer, bool dirtyRectsEnable, uint32 drawCallMemorySize);
+	          bool enableStencilBuffer, bool dirtyRectsEnable, uint32 drawCallBlockSize);
 	void deinit();
 
 	void gl_print_matrix(const float *m);
