@@ -725,7 +725,6 @@ void AdvancedMetaEngineDetectionBase::dumpDetectionEntries() const {
 }
 
 ADDetectedGames AdvancedMetaEngineDetectionBase::detectGame(const Common::FSNode &parent, const FileMap &allFiles, Common::Language language, Common::Platform platform, const Common::String &extra, uint32 skipADFlags, bool skipIncomplete) {
-	CachedPropertiesMap filesProps;
 	ADDetectedGames matched;
 
 	const ADGameFileDescription *fileDesc;
@@ -738,27 +737,12 @@ ADDetectedGames AdvancedMetaEngineDetectionBase::detectGame(const Common::FSNode
 
 	// Check which files are included in some ADGameDescription *and* whether
 	// they are present. Compute MD5s and file sizes for the available files.
-	for (descPtr = _gameDescriptors; ((const ADGameDescription *)descPtr)->gameId != nullptr; descPtr += _descItemSize) {
-		g = (const ADGameDescription *)descPtr;
-
-		for (fileDesc = g->filesDescriptions; fileDesc->fileName; fileDesc++) {
-			MD5Properties md5prop = gameFileToMD5Props(fileDesc, g->flags);
-			Common::String fname = fileDesc->fileName;
-			Common::String key = md5PropToCachePrefix(md5prop);
-			key += ':';
-			key += fname;
-
-			if (filesProps.contains(key))
-				continue;
-
-			FileProperties tmp;
-			if (getFileProperties(allFiles, md5prop, Common::Path(fname), tmp)) {
-				debugC(3, kDebugGlobalDetection, "> '%s': '%s' %ld", key.c_str(), tmp.md5.c_str(), long(tmp.size));
-			}
-
-			// Both positive and negative results are cached to avoid
-			// repeatedly checking for files.
-			filesProps[key] = tmp;
+	// Each distinct file is checked once; missing files keep size -1.
+	Common::Array<FileProperties> filesProps(_fileChecks.size());
+	for (uint c = 0; c < _fileChecks.size(); c++) {
+		const FileCheck &check = _fileChecks[c];
+		if (getFileProperties(allFiles, check.md5prop, check.path, filesProps[c])) {
+			debugC(3, kDebugGlobalDetection, "> '%s': '%s' %ld", check.key.c_str(), filesProps[c].md5.c_str(), long(filesProps[c].size));
 		}
 	}
 
@@ -792,23 +776,21 @@ ADDetectedGames AdvancedMetaEngineDetectionBase::detectGame(const Common::FSNode
 		bool allFilesPresent = true;
 		int curFilesMatched = 0;
 		int numFilesInEntry = 0;
+		uint checkPos = _entryFileChecks[i];
 
 		// Try to match all files for this game
 		for (fileDesc = game.desc->filesDescriptions; fileDesc->fileName; fileDesc++) {
-			Common::String tstr = fileDesc->fileName;
-			MD5Properties md5prop = gameFileToMD5Props(fileDesc, g->flags);
-			Common::String key = md5PropToCachePrefix(md5prop);
-				key += ':';
-				key += tstr;
+			const char *tstr = fileDesc->fileName;
+			const FileProperties &fileProps = filesProps[_fileCheckIndex[checkPos++]];
 
 			numFilesInEntry++;
 
-			if (!filesProps.contains(key) || filesProps[key].size == -1) {
+			if (fileProps.size == -1) {
 				allFilesPresent = false;
 				break;
 			}
 
-			game.matchedFiles[Common::Path(tstr)] = filesProps[key];
+			game.matchedFiles[Common::Path(tstr)] = fileProps;
 
 			if (game.hasUnknownFiles)
 				continue;
@@ -817,19 +799,19 @@ ADDetectedGames AdvancedMetaEngineDetectionBase::detectGame(const Common::FSNode
 			if (md5_wo_prefix && strchr(md5_wo_prefix, ':'))
 				md5_wo_prefix = strchr(md5_wo_prefix, ':') + 1;
 
-			if (md5_wo_prefix != nullptr && md5_wo_prefix != filesProps[key].md5) {
-				debugC(3, kDebugGlobalDetection, "MD5 Mismatch. Skipping (%s) (%s)", fileDesc->md5, filesProps[key].md5.c_str());
+			if (md5_wo_prefix != nullptr && md5_wo_prefix != fileProps.md5) {
+				debugC(3, kDebugGlobalDetection, "MD5 Mismatch. Skipping (%s) (%s)", fileDesc->md5, fileProps.md5.c_str());
 				game.hasUnknownFiles = true;
 				continue;
 			}
 
-			if (fileDesc->fileSize != AD_NO_SIZE && fileDesc->fileSize != filesProps[key].size) {
-				debugC(3, kDebugGlobalDetection, "Size Mismatch. Skipping (%u) (%ld)", fileDesc->fileSize, long(filesProps[key].size));
+			if (fileDesc->fileSize != AD_NO_SIZE && fileDesc->fileSize != fileProps.size) {
+				debugC(3, kDebugGlobalDetection, "Size Mismatch. Skipping (%u) (%ld)", fileDesc->fileSize, long(fileProps.size));
 				game.hasUnknownFiles = true;
 				continue;
 			}
 
-			debugC(3, kDebugGlobalDetection, "Matched file: %s", tstr.c_str());
+			debugC(3, kDebugGlobalDetection, "Matched file: %s", tstr);
 			curFilesMatched++;
 		}
 
@@ -1021,9 +1003,36 @@ void AdvancedMetaEngineDetectionBase::preprocessDescriptions() {
 			_globsMap.setVal(*glob, true);
 	}
 
+	// Collect the distinct files the entries need. Names are compared
+	// ignoring case, together with how the file is hashed.
+	Common::HashMap<Common::String, uint, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> checkByKey;
+	_fileChecks.clear();
+	_fileCheckIndex.clear();
+	_entryFileChecks.clear();
+
 	// Now scan all detection entries
 	for (const byte *descPtr = _gameDescriptors; ((const ADGameDescription *)descPtr)->gameId != nullptr; descPtr += _descItemSize) {
 		const ADGameDescription *g = (const ADGameDescription *)descPtr;
+
+		_entryFileChecks.push_back(_fileCheckIndex.size());
+		for (const ADGameFileDescription *fileDesc = g->filesDescriptions; fileDesc->fileName; fileDesc++) {
+			FileCheck check;
+			check.md5prop = gameFileToMD5Props(fileDesc, g->flags);
+			check.key = md5PropToCachePrefix(check.md5prop);
+			check.key += ':';
+			check.key += fileDesc->fileName;
+
+			Common::HashMap<Common::String, uint, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo>::const_iterator it = checkByKey.find(check.key);
+			if (it != checkByKey.end()) {
+				_fileCheckIndex.push_back(it->_value);
+				continue;
+			}
+
+			check.path = Common::Path(fileDesc->fileName);
+			checkByKey[check.key] = _fileChecks.size();
+			_fileCheckIndex.push_back(_fileChecks.size());
+			_fileChecks.push_back(check);
+		}
 
 		// Scan for potential directory globs
 		for (const ADGameFileDescription *fileDesc = g->filesDescriptions; fileDesc->fileName; fileDesc++) {

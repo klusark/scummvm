@@ -556,6 +556,24 @@ private:
 	Common::HashMap<Common::String, bool, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _globsMap;
 	bool _hashMapsInited;
 
+	/** A file that some detection entry needs, with how to hash it. */
+	struct FileCheck {
+		Common::Path path;
+		Common::String key;  ///< md5 cache prefix + ':' + file name
+		MD5Properties md5prop;
+	};
+
+	/**
+	 * The distinct files named by the detection entries, built once by
+	 * preprocessDescriptions() so detectGame() does not rebuild the same
+	 * strings for every directory it scans.
+	 */
+	Common::Array<FileCheck> _fileChecks;
+	/** For every file description, in table order: its index in _fileChecks. */
+	Common::Array<uint> _fileCheckIndex;
+	/** For every detection entry: where its files start in _fileCheckIndex. */
+	Common::Array<uint> _entryFileChecks;
+
 protected:
 	/**
 	 * Detect games in the specified directory.
