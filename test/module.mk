@@ -94,6 +94,7 @@ test/runner.cpp: $(TESTS) $(srcdir)/test/module.mk
 clean: clean-test
 clean-test:
 	-$(RM) test/runner.cpp test/runner test/engine-data/encoding.dat test/system/null_osystem.o
+	-$(RM) -r test/macresman-tmp
 	-rmdir test/engine-data
 
 test/engine-data/encoding.dat: $(srcdir)/dists/engine-data/encoding.dat

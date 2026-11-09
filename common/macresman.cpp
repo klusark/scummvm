@@ -207,7 +207,12 @@ SeekableReadStream *MacResManager::openAppleDoubleWithAppleOrOSXNaming(Archive& 
 		Common::Path newPath = Common::Path::joinComponents(newComponents);
 		stream = archive.createReadStreamForMember(newPath);
 
-		if (!stream) {
+		// Only probe the filesystem directly when the file itself is a plain
+		// file there, so newPath is a real location next to it. Otherwise
+		// newPath is relative to the current working directory, which is
+		// never where the file lives, and checking it costs a filesystem
+		// call for every missing file probed during game detection.
+		if (!stream && plainFsNode) {
 			Common::FSNode fsn(newPath);
 			if (fsn.exists()) {
 				stream = fsn.createReadStream();
