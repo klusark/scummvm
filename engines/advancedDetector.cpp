@@ -565,6 +565,27 @@ bool AdvancedMetaEngineDetectionBase::getFileProperties(const FileMap &allFiles,
 		return true;
 	}
 
+	// Mac fork lookups try several names and parse what they find, which
+	// adds up when detection entries name thousands of Mac files. Skip them
+	// when none of the names they can open is present. composeFileHashMap()
+	// also records every file under its bare name, so checking bare names
+	// covers files in subdirectories too.
+	if ((md5prop & (kMD5MacResFork | kMD5MacDataFork)) && !allFiles.contains(fname)) {
+		Common::Array<Common::Path> names;
+		Common::MacResManager::getLookupFileNames(fname, names);
+
+		bool anyPresent = false;
+		for (const Common::Path &name : names) {
+			if (allFiles.contains(name)) {
+				anyPresent = true;
+				break;
+			}
+		}
+
+		if (!anyPresent)
+			return false;
+	}
+
 	bool res = getFilePropertiesIntern(_md5Bytes, allFiles, md5prop, fname, fileProps);
 
 	if (res) {
