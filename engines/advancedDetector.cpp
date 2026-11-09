@@ -72,8 +72,10 @@ public:
 	}
 
 	Common::SeekableReadStream *createReadStreamForMember(const Common::Path &path) const override {
+		// The map holds files from a directory listing: open them without
+		// asking the filesystem first whether they exist.
 		Common::FSNode fsNode = _fileMap.getValOrDefault(path);
-		return fsNode.createReadStream();
+		return fsNode.tryCreateReadStream();
 	}
 
 private:
@@ -668,8 +670,10 @@ static bool getFilePropertiesIntern(uint md5Bytes, const AdvancedMetaEngineBase:
 		if (!allFiles.contains(fname))
 			return false;
 
-		testFile.reset(new Common::File());
-		if (!((Common::File *)testFile.get())->open(allFiles[fname]))
+		// Listed files are opened without asking the filesystem first
+		// whether they exist (Common::File would, twice).
+		testFile.reset(allFiles[fname].tryCreateReadStream());
+		if (!testFile)
 			return false;
 	}
 
