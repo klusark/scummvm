@@ -328,10 +328,13 @@ void RasterizationDrawCall::computeDirtyRegion() {
 			GLVertex *v = &_vertex[i];
 			if (v->clip_code)
 				c->gl_transform_to_viewport(v);
-			left =   MIN(left,   v->clip_code & 0x1 ?    0 : v->zp.x);
-			right =  MAX(right,  v->clip_code & 0x2 ? xmax : v->zp.x);
-			bottom = MAX(bottom, v->clip_code & 0x4 ? ymax : v->zp.y);
-			top =    MIN(top,    v->clip_code & 0x8 ?    0 : v->zp.y);
+			// (the pixels the vertex touches: the one it is in, and the one before when it is on their edge)
+			const int px = v->zp.x >> ZB_POINT_SUBPIXEL_BITS;
+			const int py = v->zp.y >> ZB_POINT_SUBPIXEL_BITS;
+			left =   MIN(left,   v->clip_code & 0x1 ?    0 : px - 1);
+			right =  MAX(right,  v->clip_code & 0x2 ? xmax : px);
+			bottom = MAX(bottom, v->clip_code & 0x4 ? ymax : py);
+			top =    MIN(top,    v->clip_code & 0x8 ?    0 : py - 1);
 		}
 		// Note: clipping outside of Rect is required despite above clip_code checks,
 		// as vertices far on the Z axis will overflow X and/or Y coordinates.

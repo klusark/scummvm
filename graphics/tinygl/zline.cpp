@@ -64,8 +64,17 @@ void FrameBuffer::drawLine(const ZBufferPoint *p1, const ZBufferPoint *p2) {
 		drawLine<kInterpRGB, kInterpZ, kDepthWrite, false>(p1, p2);
 }
 
+// The pixel a window coordinate is in (as OpenGL's points and lines: the floor), inside the buffer
+static inline int pixelOf(int v, int size) {
+	return CLIP(v >> ZB_POINT_SUBPIXEL_BITS, 0, size - 1);
+}
+
 template <bool kInterpRGB, bool kInterpZ, bool kDepthWrite, bool kEnableScissor>
 void FrameBuffer::drawLine(const ZBufferPoint *p1, const ZBufferPoint *p2) {
+	const int x1 = pixelOf(p1->x, _pbufWidth);
+	const int y1 = pixelOf(p1->y, _pbufHeight);
+	const int x2 = pixelOf(p2->x, _pbufWidth);
+	const int y2 = pixelOf(p2->y, _pbufHeight);
 	// Based on Bresenham's line algorithm, as implemented in
 	// https://rosettacode.org/wiki/Bitmap/Bresenham%27s_line_algorithm#C
 	// with a loop exit condition based on the (unidimensional) taxicab
@@ -74,17 +83,17 @@ void FrameBuffer::drawLine(const ZBufferPoint *p1, const ZBufferPoint *p2) {
 	// code duplication.
 
 	// Where we are in unidimensional framebuffer coordinate
-	unsigned int pixelOffset = p1->y * _pbufWidth + p1->x;
+	unsigned int pixelOffset = y1 * _pbufWidth + x1;
 	// and in 2d
-	int x = p1->x;
-	int y = p1->y;
+	int x = x1;
+	int y = y1;
 
 	// How to move on each axis, in both coordinates systems
-	const int dx = abs(p2->x - p1->x);
-	const int inc_x = p1->x < p2->x ? 1 : -1;
-	const int dy = abs(p2->y - p1->y);
-	const int inc_y = p1->y < p2->y ? 1 : -1;
-	const int inc_y_pixel = p1->y < p2->y ? _pbufWidth : -_pbufWidth;
+	const int dx = abs(x2 - x1);
+	const int inc_x = x1 < x2 ? 1 : -1;
+	const int dy = abs(y2 - y1);
+	const int inc_y = y1 < y2 ? 1 : -1;
+	const int inc_y_pixel = y1 < y2 ? _pbufWidth : -_pbufWidth;
 
 	// When to move on each axis
 	int err = (dx > dy ? dx : -dy) / 2;
@@ -143,13 +152,15 @@ void FrameBuffer::drawLine(const ZBufferPoint *p1, const ZBufferPoint *p2) {
 }
 
 void FrameBuffer::plot(ZBufferPoint *p) {
-	const uint pixelOffset = p->y * _pbufWidth + p->x;
+	const int x = pixelOf(p->x, _pbufWidth);
+	const int y = pixelOf(p->y, _pbufHeight);
+	const uint pixelOffset = y * _pbufWidth + x;
 	const int col = RGB_TO_PIXEL(p->r, p->g, p->b);
 	const uint z = p->z;
 	if (_depthWrite && _depthTestEnabled)
-		putPixel<true>(pixelOffset, col, p->x, p->y, z);
+		putPixel<true>(pixelOffset, col, x, y, z);
 	else
-		putPixel<false>(pixelOffset, col, p->x, p->y, z);
+		putPixel<false>(pixelOffset, col, x, y, z);
 }
 
 void FrameBuffer::fillLineFlatZ(ZBufferPoint *p1, ZBufferPoint *p2) {

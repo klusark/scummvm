@@ -203,6 +203,60 @@ end:
 	z += dzdx;
 }
 
+// The rasterization follows OpenGL: a pixel is drawn when its centre is inside the triangle, or on its left or
+// top edge. The window coordinates are fixed point (ZB_POINT_SUBPIXEL_BITS).
+
+// The first row whose centre is at or below window y
+static inline int firstRow(int y) {
+	return (y + ZB_POINT_SUBPIXEL_ONE / 2 - 1) >> ZB_POINT_SUBPIXEL_BITS;
+}
+
+// An edge walked down the rows, without any rounding: x is the first pixel of the row whose centre is at or
+// right of the edge, so a row of the triangle is [left x, right x).
+struct EdgeWalker {
+	int x;
+	int xStep;   // x moves by this for each row, and by one more when err runs out
+	int err;     // how far the edge is left of the centre of pixel x: in [0, den)
+	int errStep;
+	int den;
+
+	// The edge a-b, at row y: the centre of the row must be within the edge, so b is below a
+	void start(const ZBufferPoint *a, const ZBufferPoint *b, int y) {
+		const int dx = b->x - a->x;
+		const int dy = b->y - a->y;
+		assert(dy > 0);
+		// the edge at the centre of the row is at num / den pixels, less the 1/2 of the pixel centre
+		den = dy << ZB_POINT_SUBPIXEL_BITS;
+		const int toCentre = (y << ZB_POINT_SUBPIXEL_BITS) + ZB_POINT_SUBPIXEL_ONE / 2 - a->y;
+		const int64 num = (int64)(a->x - ZB_POINT_SUBPIXEL_ONE / 2) * dy + (int64)dx * toCentre;
+		int64 q = num / den;
+		if (num - q * den > 0)
+			q++; // the ceiling
+		x = (int)q;
+		err = (int)(q * den - num);
+		// and one row further down it is dx / dy more
+		xStep = dx / dy;
+		int rem = dx - xStep * dy;
+		if (rem < 0) {
+			xStep--; // the floor
+			rem += dy;
+		}
+		errStep = rem << ZB_POINT_SUBPIXEL_BITS;
+	}
+
+	// To the next row. Returns whether x moved by xStep + 1
+	bool step() {
+		x += xStep;
+		err -= errStep;
+		if (err < 0) {
+			err += den;
+			x++;
+			return true;
+		}
+		return false;
+	}
+};
+
 template <bool kSmoothMode, bool kDepthWrite, bool kFogMode, bool kAlphaTestEnabled, bool kEnableScissor,
           bool kBlendingEnabled, bool kStencilEnabled, bool kDepthTestEnabled>
 void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint *p2,
@@ -217,12 +271,12 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 	byte *ps1 = nullptr;
 	int part, update_left = 1, update_right = 1;
 
-	int nb_lines, dx1, dy1, tmp, dx2, dy2, y;
+	int nb_lines, y;
 
-	int error = 0, derror = 0;
-	int x1 = 0, dxdy_min = 0, dxdy_max = 0;
-	// warning: x2 is multiplied by 2^16
-	int x2 = 0, dx2dy2 = 0;
+	// the first and the last pixel of the row
+	EdgeWalker left, right;
+	int x1 = 0, x2 = 0;
+	int dxdy_min = 0;
 
 	int z1 = 0, dzdx = 0, dzdy = 0, dzdl_min = 0, dzdl_max = 0;
 	int f1 = 0, dfdx = 0, dfdy = 0, dfdl_min = 0, dfdl_max = 0;
@@ -256,16 +310,19 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 
 	// we compute dXdx and dXdy for all interpolated values
 
-	fdx1 = (float)(p1->x - p0->x);
-	fdy1 = (float)(p1->y - p0->y);
-
-	fdx2 = (float)(p2->x - p0->x);
-	fdy2 = (float)(p2->y - p0->y);
-
-	fz0 = fdx1 * fdy2 - fdx2 * fdy1;
-	if (fz0 == 0)
+	// twice the area, exactly: as a float a small one would be lost in the rounding of the products
+	const int64 area = (int64)(p1->x - p0->x) * (p2->y - p0->y) - (int64)(p2->x - p0->x) * (p1->y - p0->y);
+	if (area == 0)
 		return;
-	fz0 = (float)(1.0 / fz0);
+
+	// (in pixels)
+	fdx1 = (float)(p1->x - p0->x) / ZB_POINT_SUBPIXEL_ONE;
+	fdy1 = (float)(p1->y - p0->y) / ZB_POINT_SUBPIXEL_ONE;
+
+	fdx2 = (float)(p2->x - p0->x) / ZB_POINT_SUBPIXEL_ONE;
+	fdy2 = (float)(p2->y - p0->y) / ZB_POINT_SUBPIXEL_ONE;
+
+	fz0 = (float)((double)(ZB_POINT_SUBPIXEL_ONE * ZB_POINT_SUBPIXEL_ONE) / area);
 
 	fdx1 *= fz0;
 	fdy1 *= fz0;
@@ -351,10 +408,15 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 
 	// screen coordinates
 
-	int pp1 = _pbufWidth * p0->y;
-	pz1 = _zbuf + p0->y * _pbufWidth;
+	// the rows whose centres are in [p0, p1) and [p1, p2)
+	const int row0 = firstRow(p0->y);
+	const int row1 = firstRow(p1->y);
+	const int row2 = firstRow(p2->y);
+
+	int pp1 = _pbufWidth * row0;
+	pz1 = _zbuf + row0 * _pbufWidth;
 	if (kStencilEnabled) {
-		ps1 = _sbuf + p0->y * _pbufWidth;
+		ps1 = _sbuf + row0 * _pbufWidth;
 	}
 
 	if (colorMode != ColorMode::NoInterpolation && !kSmoothMode) {
@@ -383,80 +445,75 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 		pr1 = p0;
 		pr2 = p2;
 	}
-	nb_lines = p1->y - p0->y;
-	y = p0->y;
+	nb_lines = row1 - row0;
+	y = row0;
 	for (part = 0; part < 2; part++) {
 		if (part == 1) {
 			// second part
 			if (fz0 > 0) {
-				update_left = 0;
+				update_right = 1;
 				pr1 = p1;
 				pr2 = p2;
 			} else {
-				update_right = 0;
+				update_left = 1;
 				l1 = p1;
 				l2 = p2;
 			}
-			nb_lines = p2->y - p1->y + 1;
+			nb_lines = row2 - row1;
 		}
+
+		// a part without a row: its edges may not reach the centre of row y, so they are left for the next part
+		if (nb_lines <= 0)
+			continue;
 
 		// compute the values for the left edge
 
 		if (update_left) {
-			dy1 = l2->y - l1->y;
-			dx1 = l2->x - l1->x;
-			if (dy1 > 0) {
-				if (dx1 < 0) {
-					tmp = (-dx1 << 16) / dy1;
-					tmp = -tmp;
-				} else {
-					tmp = (dx1 << 16) / dy1;
-				}
-			} else {
-				tmp = 0;
-			}
-			x1 = l1->x;
-			error = 0;
-			derror = tmp & 0x0000ffff;
-			dxdy_min = tmp >> 16;
-			dxdy_max = dxdy_min + 1;
+			update_left = 0;
+			left.start(l1, l2, y);
+			x1 = left.x;
+			dxdy_min = left.xStep;
+
+			// the values at the centre of the first pixel of the row, from p0
+			const double cx = x1 + 0.5 - (double)p0->x / ZB_POINT_SUBPIXEL_ONE;
+			const double cy = y + 0.5 - (double)p0->y / ZB_POINT_SUBPIXEL_ONE;
 
 			if (colorMode != ColorMode::NoInterpolation && kFogMode) {
-				f1 = l1->f;
+				f1 = (int)(p0->f + dfdx * cx + dfdy * cy);
 				dfdl_min = (dfdy + dfdx * dxdy_min);
 				dfdl_max = dfdl_min + dfdx;
 			}
 
 			if (kInterpZ) {
-				z1 = l1->z + polyOffset;
+				z1 = (int)(p0->z + dzdx * cx + dzdy * cy) + polyOffset;
 				dzdl_min = (dzdy + dzdx * dxdy_min);
 				dzdl_max = dzdl_min + dzdx;
 			}
 
 			if (colorMode != ColorMode::NoInterpolation && kSmoothMode) {
-				r1 = l1->r;
+				r1 = (int)(p0->r + drdx * cx + drdy * cy);
 				drdl_min = (drdy + drdx * dxdy_min);
 				drdl_max = drdl_min + drdx;
 
-				g1 = l1->g;
+				g1 = (int)(p0->g + dgdx * cx + dgdy * cy);
 				dgdl_min = (dgdy + dgdx * dxdy_min);
 				dgdl_max = dgdl_min + dgdx;
 
-				b1 = l1->b;
+				b1 = (int)(p0->b + dbdx * cx + dbdy * cy);
 				dbdl_min = (dbdy + dbdx * dxdy_min);
 				dbdl_max = dbdl_min + dbdx;
 
-				a1 = l1->a;
+				a1 = (int)(p0->a + dadx * cx + dady * cy);
 				dadl_min = (dady + dadx * dxdy_min);
 				dadl_max = dadl_min + dadx;
 			}
 
 			if (kInterpST || kInterpSTZ) {
-				sz1 = l1->sz;
+				sz1 = (float)(p0->sz + dszdx * cx + dszdy * cy);
 				dszdl_min = (dszdy + dszdx * dxdy_min);
 				dszdl_max = dszdl_min + dszdx;
 
-				tz1 = l1->tz;
+				tz1 = (float)(p0->tz + dtzdx * cx + dtzdy * cy);
 				dtzdl_min = (dtzdy + dtzdx * dxdy_min);
 				dtzdl_max = dtzdl_min + dtzdx;
 			}
@@ -465,19 +522,9 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 		// compute values for the right edge
 
 		if (update_right) {
-			dx2 = (pr2->x - pr1->x);
-			dy2 = (pr2->y - pr1->y);
-			if (dy2 > 0) {
-				if (dx2 < 0) {
-					dx2dy2 = (-dx2 << 16) / dy2;
-					dx2dy2 = -dx2dy2;
-				} else {
-					dx2dy2 = (dx2 << 16) / dy2;
-				}
-			} else {
-				dx2dy2 = 0;
-			}
-			x2 = pr1->x << 16;
+			update_right = 0;
+			right.start(pr1, pr2, y);
+			x2 = right.x - 1;
 		}
 
 		// we draw all the scan line of the part
@@ -488,7 +535,7 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 				uint *pz = nullptr;
 				byte *ps = nullptr;
 				uint z = 0;
-				n = (x2 >> 16) - x1;
+				n = x2 - x1;
 				if (kInterpZ) {
 					pz = pz1 + x1;
 					z = z1;
@@ -526,7 +573,7 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 				byte *ps = nullptr;
 				int pp;
 				uint z = 0, r, g, b, a, fog;
-				int n = (x2 >> 16) - x1;
+				int n = x2 - x1;
 				pp = pp1 + x1;
 				r = r1;
 				g = g1;
@@ -583,7 +630,7 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 				float sz, tz, fz, zinv;
 				int dsdx, dtdx;
 
-				n = (x2 >> 16) - x1;
+				n = x2 - x1;
 				fz = (float)z1;
 				zinv = (float)(1.0 / fz);
 
@@ -659,10 +706,9 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 			}
 
 			// left edge
-			error += derror;
-			if (error > 0) {
-				error -= 0x10000;
-				x1 += dxdy_max;
+			const bool maxStep = left.step();
+			x1 = left.x;
+			if (maxStep) {
 				if (colorMode != ColorMode::NoInterpolation && kFogMode) {
 					f1 += dfdl_max;
 				}
@@ -680,7 +726,6 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 					tz1 += dtzdl_max;
 				}
 			} else {
-				x1 += dxdy_min;
 				if (colorMode != ColorMode::NoInterpolation && kFogMode) {
 					f1 += dfdl_min;
 				}
@@ -700,7 +745,8 @@ void FrameBuffer::fillTriangle(ZBufferPoint *p0, ZBufferPoint *p1, ZBufferPoint 
 			}
 
 			// right edge
-			x2 += dx2dy2;
+			right.step();
+			x2 = right.x - 1;
 
 			// screen coordinates
 			if (colorMode != ColorMode::NoInterpolation) {
