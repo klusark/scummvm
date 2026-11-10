@@ -34,6 +34,7 @@
 
 #include "common/rect.h"
 #include "common/textconsole.h"
+#include "common/util.h"
 
 namespace TinyGL {
 
@@ -69,6 +70,19 @@ namespace TinyGL {
 #define ZB_POINT_ALPHA_FRAC_BITS  8
 #define ZB_POINT_ALPHA_FRAC_SHIFT (ZB_POINT_ALPHA_FRAC_BITS - 1)
 #define ZB_POINT_ALPHA_MAX        ( (1 << ZB_POINT_ALPHA_BITS) - 1 )
+
+// An interpolated colour channel in ZB_POINT_*_BITS fixed point as a byte. Stepping it across a triangle can end a
+// little below 0 or above the maximum at its edge, so it is signed and clamped to the limits rather than wrapped.
+// Clamping the input before the shift compiles to two conditional moves, without branches.
+template <int kBits>
+static inline byte colorToByte(int v) {
+	return (byte)(CLIP(v, 0, (1 << kBits) - 1) >> (kBits - 8));
+}
+
+// The same for a 16 bit channel, but rounded to the nearest byte. 0xFF7F is the most that rounds to 255 and not 256.
+static inline byte sat16_to_8(int v) {
+	return (byte)((CLIP(v, 0, 0xFF7F) + 128) >> 8);
+}
 
 #define RGB_TO_PIXEL(r, g, b)     _pbufFormat.ARGBToColor(255, r, g, b) // Default to 255 alpha aka solid colour.
 
@@ -361,8 +375,8 @@ private:
 
 	template <bool kDepthWrite, bool kSmoothMode, bool kFogMode, bool kEnableAlphaTest, bool kEnableScissor, bool kEnableBlending, bool kStencilEnabled, bool kDepthTestEnabled>
 	void putPixelNoTexture(int fbOffset, uint *pz, byte *ps, int _a,
-	                       int x, int y, uint &z, uint &r, uint &g, uint &b, uint &a,
-	                       int &dzdx, int &drdx, int &dgdx, int &dbdx, uint dadx,
+	                       int x, int y, uint &z, int &r, int &g, int &b, int &a,
+	                       int &dzdx, int &drdx, int &dgdx, int &dbdx, int dadx,
 	                       uint &fog, int fog_r, int fog_g, int fog_b, int &dfdx,
 						   bool kStippleEnabled);
 
@@ -377,8 +391,8 @@ private:
 						 FrameBuffer::ColorMode colorMode,
 	                     uint wrap_s, uint wrap_t, uint *pz, byte *ps, int _a,
 	                     int x, int y, uint &z, int &t, int &s,
-	                     uint &r, uint &g, uint &b, uint &a,
-	                     int &dzdx, int &dsdx, int &dtdx, int &drdx, int &dgdx, int &dbdx, uint dadx,
+	                     int &r, int &g, int &b, int &a,
+	                     int &dzdx, int &dsdx, int &dtdx, int &drdx, int &dgdx, int &dbdx, int dadx,
 	                     uint &fog, int fog_r, int fog_g, int fog_b, int &dfdx);
 
 	template <bool kDepthWrite, bool kEnableScissor, bool kStencilEnabled, bool kDepthTestEnabled>
@@ -808,12 +822,12 @@ private:
 
 	void applyTextureEnvironment(
 		int internalformat,
-		uint previousA, uint previousR, uint previousG, uint previousB,
+		int previousA, int previousR, int previousG, int previousB,
 		byte &texA, byte &texR, byte &texG, byte &texB);
 
 	// the same as GL_TEXTURE_ENV_MODE == GL_MODULATE as fast-path for the default mode
 	void applyModulation(
-		uint previousA, uint previousR, uint previousG, uint previousB,
+		int previousA, int previousR, int previousG, int previousB,
 		byte &texA, byte &texR, byte &texG, byte &texB);
 
 	Buffer _offscreenBuffer;

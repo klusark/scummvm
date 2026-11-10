@@ -285,11 +285,6 @@ static byte satAdd(byte a, byte b) {
 	return (byte)(r | -(r < a));
 }
 
-static byte sat16_to_8(uint32 x) {
-	x = (x + 128) >> 8; // rounding 16 to 8 
-	return (byte)(x | -!!(x >> 8)); // branchfree saturation
-}
-
 static byte fpMul(byte a, byte b) {
 	// from: https://community.khronos.org/t/precision-curiosity-1-255-or-1-256/40539/11
 	// correct would be (a*b)/255 but that is slow, instead we use (a*b) * 257/256 / 256
@@ -300,7 +295,7 @@ static byte fpMul(byte a, byte b) {
 
 void FrameBuffer::applyTextureEnvironment(
 	int internalformat,
-	uint previousA, uint previousR, uint previousG, uint previousB,
+	int previousA, int previousR, int previousG, int previousB,
 	byte &texA, byte &texR, byte &texG, byte &texB)
 {
 	// summary notation is used from https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/glTexEnv.xml
@@ -476,7 +471,7 @@ void FrameBuffer::applyTextureEnvironment(
 }
 
 void FrameBuffer::applyModulation(
-	uint previousA, uint previousR, uint previousG, uint previousB,
+	int previousA, int previousR, int previousG, int previousB,
 	byte &texA, byte &texR, byte &texG, byte &texB) {
 	texA = fpMul(sat16_to_8(previousA), texA);
 	texR = fpMul(sat16_to_8(previousR), texR);
