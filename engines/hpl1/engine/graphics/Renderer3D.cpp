@@ -795,6 +795,13 @@ void cRenderer3D::RenderOcclusionQueries(cCamera3D *apCamera) {
 
 	mRenderSettings.mpVtxBuffer = pPrevBuffer;
 
+	// The model view matrix was set directly, so the render settings need to
+	// know whether it is still the plain view matrix. Otherwise the next pass
+	// can skip setting it for NULL matrix objects and draw them with the
+	// matrix of the last query object.
+	if (!bFirstRound)
+		mRenderSettings.mbMatrixWasNULL = pPrevMatrix == nullptr;
+
 	// mpLowLevelGraphics->FlushRendering();
 
 	// if(bPrevDepthTest==false)
