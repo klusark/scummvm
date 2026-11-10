@@ -41,8 +41,8 @@ void GLContext::gl_transform_to_viewport(GLVertex *v) {
 
 	// coordinates
 	winv = (float)(1.0 / v->pc.W);
-	// Compute and clamp X coordinate
-	result = v->pc.X * winv * viewport.scale.X + viewport.trans.X;
+	// Compute and clamp X coordinate (rounded to the sub-pixel grid)
+	result = floorf((v->pc.X * winv * viewport.scale.X + viewport.trans.X) * ZB_POINT_SUBPIXEL_ONE + 0.5f);
 	if (result > (float)INT_MAX)
 			v->zp.x = INT_MAX;
 	else if (result < (float)INT_MIN)
@@ -51,7 +51,7 @@ void GLContext::gl_transform_to_viewport(GLVertex *v) {
 			v->zp.x = (int)result;
 
 	// Compute and clamp Y coordinate
-	result = v->pc.Y * winv * viewport.scale.Y + viewport.trans.Y;
+	result = floorf((v->pc.Y * winv * viewport.scale.Y + viewport.trans.Y) * ZB_POINT_SUBPIXEL_ONE + 0.5f);
 	if (result > (float)INT_MAX)
 			v->zp.y = INT_MAX;
 	else if (result < (float)INT_MIN)
@@ -262,7 +262,6 @@ static inline void updateTmp(GLContext *c, GLVertex *q, GLVertex *p0, GLVertex *
 
 void GLContext::gl_draw_triangle(GLVertex *p0, GLVertex *p1, GLVertex *p2) {
 	int co, c_and, cc[3], front;
-	float norm;
 
 	cc[0] = p0->clip_code;
 	cc[1] = p1->clip_code;
@@ -272,12 +271,13 @@ void GLContext::gl_draw_triangle(GLVertex *p0, GLVertex *p1, GLVertex *p2) {
 
 	// we handle the non clipped case here to go faster
 	if (co == 0) {
-		norm = (float)(p1->zp.x - p0->zp.x) * (float)(p2->zp.y - p0->zp.y) -
-			   (float)(p2->zp.x - p0->zp.x) * (float)(p1->zp.y - p0->zp.y);
+		// (exactly: the products of sub-pixel coordinates do not fit a float, and a small area would be lost)
+		const int64 norm = (int64)(p1->zp.x - p0->zp.x) * (p2->zp.y - p0->zp.y) -
+		                   (int64)(p2->zp.x - p0->zp.x) * (p1->zp.y - p0->zp.y);
 		if (norm == 0)
 			return;
 
-		front = norm < 0.0;
+		front = norm < 0;
 		front = front ^ current_front_face;
 
 		// back face culling
@@ -403,17 +403,21 @@ int count_triangles, count_triangles_textured, count_pixels;
 
 void GLContext::gl_draw_triangle_fill(GLContext *c, GLVertex *p0, GLVertex *p1, GLVertex *p2) {
 	if (c->_profilingEnabled) {
-		int norm;
-		assert(p0->zp.x >= 0 && p0->zp.x < c->fb->getPixelBufferWidth());
-		assert(p0->zp.y >= 0 && p0->zp.y < c->fb->getPixelBufferHeight());
-		assert(p1->zp.x >= 0 && p1->zp.x < c->fb->getPixelBufferWidth());
-		assert(p1->zp.y >= 0 && p1->zp.y < c->fb->getPixelBufferHeight());
-		assert(p2->zp.x >= 0 && p2->zp.x < c->fb->getPixelBufferWidth());
-		assert(p2->zp.y >= 0 && p2->zp.y < c->fb->getPixelBufferHeight());
+#ifndef NDEBUG
+		const int w = c->fb->getPixelBufferWidth() << ZB_POINT_SUBPIXEL_BITS;
+		const int h = c->fb->getPixelBufferHeight() << ZB_POINT_SUBPIXEL_BITS;
+		assert(p0->zp.x >= 0 && p0->zp.x <= w);
+		assert(p0->zp.y >= 0 && p0->zp.y <= h);
+		assert(p1->zp.x >= 0 && p1->zp.x <= w);
+		assert(p1->zp.y >= 0 && p1->zp.y <= h);
+		assert(p2->zp.x >= 0 && p2->zp.x <= w);
+		assert(p2->zp.y >= 0 && p2->zp.y <= h);
+#endif
 
-		norm = (p1->zp.x - p0->zp.x) * (p2->zp.y - p0->zp.y) -
-				(p2->zp.x - p0->zp.x) * (p1->zp.y - p0->zp.y);
-		count_pixels += abs(norm) / 2;
+		// Twice the signed area in sub-pixel units; int64 so large framebuffers can't overflow
+		int64 norm = (int64)(p1->zp.x - p0->zp.x) * (p2->zp.y - p0->zp.y) -
+				(int64)(p2->zp.x - p0->zp.x) * (p1->zp.y - p0->zp.y);
+		count_pixels += (int)(ABS<int64>(norm) >> (2 * ZB_POINT_SUBPIXEL_BITS + 1));
 		count_triangles++;
 	}
 
