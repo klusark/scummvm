@@ -293,6 +293,13 @@ static byte fpMul(byte a, byte b) {
 	return (byte)((r + (r >> 8) + 127) >> 8);
 }
 
+// a(1-t) + bt, rounded once, where adding two fpMul would round each half and could be one off.
+// x + 128 + ((x + 128) >> 8) >> 8 is x / 255 rounded to the nearest, exactly for every x up to 255 * 255.
+static byte fpLerp(byte a, byte b, byte t) {
+	uint32 x = a * (255 - t) + b * t + 128;
+	return (byte)((x + (x >> 8)) >> 8);
+}
+
 void FrameBuffer::applyTextureEnvironment(
 	int internalformat,
 	int previousA, int previousR, int previousG, int previousB,
@@ -318,10 +325,10 @@ void FrameBuffer::applyTextureEnvironment(
 			opColor.b = texB;
 			break;
 		case TGL_PRIMARY_COLOR:
-			opColor.a = sat16_to_8(previousA);
-			opColor.r = sat16_to_8(previousR);
-			opColor.g = sat16_to_8(previousG);
-			opColor.b = sat16_to_8(previousB);
+			opColor.a = colorToByte<16>(previousA);
+			opColor.r = colorToByte<16>(previousR);
+			opColor.g = colorToByte<16>(previousG);
+			opColor.b = colorToByte<16>(previousB);
 			break;
 		case TGL_CONSTANT:
 			opColor.a = _textureEnv->constA;
@@ -338,7 +345,7 @@ void FrameBuffer::applyTextureEnvironment(
 			op.a = texA;
 			break;
 		case TGL_PRIMARY_COLOR:
-			op.a = sat16_to_8(previousA);
+			op.a = colorToByte<16>(previousA);
 			break;
 		case TGL_CONSTANT:
 			op.a = _textureEnv->constA;
@@ -385,7 +392,7 @@ void FrameBuffer::applyTextureEnvironment(
 	case TGL_REPLACE:
 		// GL_RGB:  Cs | Ap
 		// GL_RGBA: Cs | As
-		texA = internalformat == TGL_RGBA ? texA : sat16_to_8(previousA);
+		texA = internalformat == TGL_RGBA ? texA : colorToByte<16>(previousA);
 		break;
 	case TGL_MODULATE:
 	{
@@ -398,30 +405,30 @@ void FrameBuffer::applyTextureEnvironment(
 	{
 		// GL_RGB:  Cs              | Ap
 		// GL_RGBA: Cp(1-As) + CsAs | Ap
-		texR = satAdd(fpMul(sat16_to_8(previousR), 255 - texA), fpMul(texR, texA));
-		texG = satAdd(fpMul(sat16_to_8(previousG), 255 - texA), fpMul(texG, texA));
-		texB = satAdd(fpMul(sat16_to_8(previousB), 255 - texA), fpMul(texB, texA));
-		texA = sat16_to_8(previousA);
+		texR = fpLerp(colorToByte<16>(previousR), texR, texA);
+		texG = fpLerp(colorToByte<16>(previousG), texG, texA);
+		texB = fpLerp(colorToByte<16>(previousB), texB, texA);
+		texA = colorToByte<16>(previousA);
 		break;
 	}
 	case TGL_ADD:
 	{
 		// GL_RGB:  Cp + Cs | Ap
 		// GL_RGBA: Cp + Cs | ApAs
-		texA = fpMul(sat16_to_8(previousA), texA);
-		texR = satAdd(sat16_to_8(previousR), texR);
-		texG = satAdd(sat16_to_8(previousG), texG);
-		texB = satAdd(sat16_to_8(previousB), texB);
+		texA = fpMul(colorToByte<16>(previousA), texA);
+		texR = satAdd(colorToByte<16>(previousR), texR);
+		texG = satAdd(colorToByte<16>(previousG), texG);
+		texB = satAdd(colorToByte<16>(previousB), texB);
 		break;
 	}
 	case TGL_BLEND:
 	{
 		// GL_RGB:  Cp(1-Cs) + CcCs | Ap
 		// GL_RGBA: Cp(1-Cs) + CcCs | ApAs
-		texA = fpMul(sat16_to_8(previousA), texA);
-		texR = satAdd(fpMul(sat16_to_8(previousR), 255 - texR), fpMul(_textureEnv->constR, texR));
-		texG = satAdd(fpMul(sat16_to_8(previousG), 255 - texG), fpMul(_textureEnv->constG, texG));
-		texB = satAdd(fpMul(sat16_to_8(previousB), 255 - texB), fpMul(_textureEnv->constB, texB));
+		texA = fpMul(colorToByte<16>(previousA), texA);
+		texR = fpLerp(colorToByte<16>(previousR), _textureEnv->constR, texR);
+		texG = fpLerp(colorToByte<16>(previousG), _textureEnv->constG, texG);
+		texB = fpLerp(colorToByte<16>(previousB), _textureEnv->constB, texB);
 		break;
 	}
 	case TGL_COMBINE:
@@ -473,10 +480,10 @@ void FrameBuffer::applyTextureEnvironment(
 void FrameBuffer::applyModulation(
 	int previousA, int previousR, int previousG, int previousB,
 	byte &texA, byte &texR, byte &texG, byte &texB) {
-	texA = fpMul(sat16_to_8(previousA), texA);
-	texR = fpMul(sat16_to_8(previousR), texR);
-	texG = fpMul(sat16_to_8(previousG), texG);
-	texB = fpMul(sat16_to_8(previousB), texB);
+	texA = fpMul(colorToByte<16>(previousA), texA);
+	texR = fpMul(colorToByte<16>(previousR), texR);
+	texG = fpMul(colorToByte<16>(previousG), texG);
+	texB = fpMul(colorToByte<16>(previousB), texB);
 }
 
 } // end of namespace TinyGL
