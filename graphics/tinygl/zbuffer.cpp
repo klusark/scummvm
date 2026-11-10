@@ -286,7 +286,9 @@ static byte satAdd(byte a, byte b) {
 }
 
 static byte sat16_to_8(uint32 x) {
-	x = (x + 128) >> 8; // rounding 16 to 8 
+	if ((int32)x < 0)
+		return 0; // the interpolation stepped a little below 0 at the edge of a triangle
+	x = (x + 128) >> 8; // rounding 16 to 8
 	return (byte)(x | -!!(x >> 8)); // branchfree saturation
 }
 

@@ -34,6 +34,18 @@ namespace TinyGL {
 
 static const int NB_INTERP = 8;
 
+// A colour channel in ZB_POINT_*_BITS fixed point as a byte. The interpolation can step it a little below 0 or
+// above the maximum at the edge of a triangle, and without the clamp it would wrap around to the other extreme.
+template <int kBits>
+static inline byte colorToByte(uint v) {
+	const int c = (int)v;
+	if (c < 0)
+		return 0;
+	if (c >= (1 << kBits))
+		return 255;
+	return (byte)(c >> (kBits - 8));
+}
+
 static bool applyStipplePattern(int x, int y, const byte *stipple) {
 
 	int stippleX = x % 32;
@@ -85,10 +97,11 @@ void FrameBuffer::putPixelNoTexture(int fbOffset, uint *pz, byte *ps, int _a,
 			uint sg = (_stippleColor >> 8) & 0xFF;
 			uint sr = _stippleColor & 0xFF;
 			writePixel<kEnableAlphaTest, kEnableBlending, kDepthWrite, kFogMode>
-					(fbOffset + _a, a >> (ZB_POINT_ALPHA_BITS - 8), sr, sg, sb, z, fog, fog_r, fog_g, fog_b);
+					(fbOffset + _a, colorToByte<ZB_POINT_ALPHA_BITS>(a), sr, sg, sb, z, fog, fog_r, fog_g, fog_b);
 		} else {
 			writePixel<kEnableAlphaTest, kEnableBlending, kDepthWrite, kFogMode>
-					(fbOffset + _a, a >> (ZB_POINT_ALPHA_BITS - 8), r >> (ZB_POINT_RED_BITS - 8), g >> (ZB_POINT_GREEN_BITS - 8), b >> (ZB_POINT_BLUE_BITS - 8),
+					(fbOffset + _a, colorToByte<ZB_POINT_ALPHA_BITS>(a), colorToByte<ZB_POINT_RED_BITS>(r),
+					 colorToByte<ZB_POINT_GREEN_BITS>(g), colorToByte<ZB_POINT_BLUE_BITS>(b),
 					z, fog, fog_r, fog_g, fog_b);
 		}
 	}
