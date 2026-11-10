@@ -85,7 +85,7 @@ public:
         tglTexEnvi(TGL_TEXTURE_ENV, TGL_TEXTURE_ENV_MODE, TGL_DECAL);
         tglColor4ub(100, 200, 255, 123);
         drawPixel(200, 100, 0, 192);
-        checkOutput(176, 125, 63, 123);
+        checkOutput(175, 125, 63, 123); // exactly 175.3, 124.7, 63
     }
 
     void testAdd() {
@@ -101,9 +101,84 @@ public:
         tglColor4ub(210, 210, 200, 127);
         setConstant(123, 123, 100, 42);
         drawPixel(0, 255, 128, 200);
-        checkOutput(211, 123, 150, 100);
-		// the 211 is an unfortunate rounding problem
+        checkOutput(210, 123, 150, 100);
     }
+
+	// a(1 - t) + bt rounded to the nearest, as the GL computes it exactly
+	static byte exactLerp(int a, int b, int t) {
+		return (byte)((2 * (a * (255 - t) + b * t) + 255) / 510);
+	}
+
+	// Values at and around the limits and the middle, where rounding goes wrong
+	static const byte *lerpValues(int &count) {
+		static const byte values[] = { 0, 1, 2, 63, 64, 100, 127, 128, 129, 192, 200, 253, 254, 255 };
+		count = ARRAYSIZE(values);
+		return values;
+	}
+
+	// Every byte colour must come out unchanged when modulated with a white texture. The 16 bit colour used to be
+	// rounded to a byte where it should have been truncated, which made every value from 128 one too high.
+	void testModulateKeepsEveryColour() {
+		for (int n = 0; n < 256; n++) {
+			tglColor4ub(n, 255 - n, n, n);
+			drawPixel(255, 255, 255, 255);
+			checkOutput(n, 255 - n, n, n);
+		}
+	}
+
+	void testReplaceKeepsEveryAlpha() {
+		tglTexEnvi(TGL_TEXTURE_ENV, TGL_TEXTURE_ENV_MODE, TGL_REPLACE);
+		for (int n = 0; n < 256; n++) {
+			tglColor4ub(0, 0, 0, n);
+			const byte texData[] = { 10, 20, 30 };
+			TGLuint texture;
+			tglGenTextures(1, &texture);
+			tglBindTexture(TGL_TEXTURE_2D, texture);
+			tglTexImage2D(TGL_TEXTURE_2D, 0, TGL_RGB, 1, 1, 0, TGL_RGB, TGL_UNSIGNED_BYTE, texData);
+			tglBegin(TGL_TRIANGLES);
+			tglTexCoord2f(0.0f, 0.0f); tglVertex2f(-10, -10);
+			tglTexCoord2f(1.0f, 0.0f); tglVertex2f(+10, -10);
+			tglTexCoord2f(0.5f, 1.0f); tglVertex2f(0, +10);
+			tglEnd();
+			checkOutput(10, 20, 30, n);
+			tglDeleteTextures(1, &texture);
+		}
+	}
+
+	// Cp(1 - As) + CsAs, rounded once and not per half, against the exact result
+	void testDecalExact() {
+		tglTexEnvi(TGL_TEXTURE_ENV, TGL_TEXTURE_ENV_MODE, TGL_DECAL);
+		int count;
+		const byte *values = lerpValues(count);
+		for (int i = 0; i < count; i++) {
+			for (int j = 0; j < count; j++) {
+				for (int k = 0; k < count; k++) {
+					const byte p = values[i], t = values[j], a = values[k];
+					tglColor4ub(p, 255 - p, p, 77);
+					drawPixel(t, 255 - t, 128, a);
+					checkOutput(exactLerp(p, t, a), exactLerp(255 - p, 255 - t, a), exactLerp(p, 128, a), 77);
+				}
+			}
+		}
+	}
+
+	// Cp(1 - Cs) + CcCs, rounded once and not per half, against the exact result
+	void testBlendExact() {
+		tglTexEnvi(TGL_TEXTURE_ENV, TGL_TEXTURE_ENV_MODE, TGL_BLEND);
+		int count;
+		const byte *values = lerpValues(count);
+		for (int i = 0; i < count; i++) {
+			for (int j = 0; j < count; j++) {
+				for (int k = 0; k < count; k++) {
+					const byte p = values[i], c = values[j], t = values[k];
+					tglColor4ub(p, 255 - p, p, 255);
+					setConstant(c, 255 - c, 255, 0);
+					drawPixel(t, t, 255 - t, 255);
+					checkOutput(exactLerp(p, c, t), exactLerp(255 - p, 255 - c, t), exactLerp(p, 255, 255 - t), 255);
+				}
+			}
+		}
+	}
 
     void setCombineMode(TGLuint combineRGB, TGLuint combineAlpha) {
         tglTexEnvi(TGL_TEXTURE_ENV, TGL_TEXTURE_ENV_MODE, TGL_COMBINE);

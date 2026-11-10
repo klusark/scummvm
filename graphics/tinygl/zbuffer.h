@@ -79,11 +79,6 @@ static inline byte colorToByte(int v) {
 	return (byte)(CLIP(v, 0, (1 << kBits) - 1) >> (kBits - 8));
 }
 
-// The same for a 16 bit channel, but rounded to the nearest byte. 0xFF7F is the most that rounds to 255 and not 256.
-static inline byte sat16_to_8(int v) {
-	return (byte)((CLIP(v, 0, 0xFF7F) + 128) >> 8);
-}
-
 #define RGB_TO_PIXEL(r, g, b)     _pbufFormat.ARGBToColor(255, r, g, b) // Default to 255 alpha aka solid colour.
 
 static const int DRAW_DEPTH_ONLY = 0;
