@@ -465,6 +465,18 @@ void Lua_V1::GetActorYawToPoint() {
 		lua_pushnumber(actor->grimYawToPoint(yawVector));
 		return;
 	}
+	if (g_grim->getGameType() == GType_MONKEY4) {
+		// Monkey4.exe gives the turn from the actor's heading to the point, -180 to 180, not the heading itself (measured on the
+		// original: an actor at yaw 110 gets -20 for a point at +x, -110 at +z, 160 at -x, 70 at -z)
+		float d = actor->getYawTo(yawVector).getDegrees() - actor->getYaw().getDegrees();
+		d = fmodf(d, 360.f);
+		if (d > 180.f)
+			d -= 360.f;
+		else if (d <= -180.f)
+			d += 360.f;
+		lua_pushnumber(d);
+		return;
+	}
 	lua_pushnumber(actor->getYawTo(yawVector).getDegrees());
 }
 
