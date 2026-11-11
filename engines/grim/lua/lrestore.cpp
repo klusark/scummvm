@@ -502,6 +502,8 @@ void lua_Restore(SaveGame *savedState) {
 				task->initBase = savedState->readLESint32();
 				task->initResults = savedState->readLESint32();
 				task->executed = savedState->readBool();
+				// (not in the saved games: counted again from a load)
+				task->instrCount = 0;
 				int32 pcOffset = savedState->readLESint32();
 				task->pc = task->tf->code + pcOffset;
 				task->aux = savedState->readLESint32();

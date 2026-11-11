@@ -15,6 +15,7 @@ namespace Grim {
 
 void lua_taskinit(lua_Task *task, lua_Task *next, StkId tbase, int results) {
 	task->executed = false;
+	task->instrCount = 0;
 	task->next = next;
 	task->initBase = tbase;
 	task->initResults = results;
@@ -323,6 +324,14 @@ void lua_runtasks() {
 }
 
 void runtasks(LState *const rootState) {
+	// Every activation of every script counts its instructions again from here: the original resets them for all the tasks at the
+	// start of each update (Monkey4.exe lua_updatetasks 0x43e7f0 -> FUN_004532a0 for each frame of each task; GRIM LUA.DLL the same),
+	// so a script is ended only when it runs 10 million instructions in one activation within one update, without a break_here (see
+	// luaV_execute)
+	for (LState *s = rootState->next; s; s = s->next) {
+		for (lua_Task *t = s->task; t; t = t->next)
+			t->instrCount = 0;
+	}
 	lua_state = lua_state->next;
 	while (lua_state) {
 		LState *nextState = nullptr;

@@ -19,6 +19,10 @@ struct lua_Task {
 	bool executed;
 	StkId initBase;
 	int32 initResults;
+	// The instructions this activation has run in the current update: the original counts them for each activation (GRIM LUA.DLL
+	// ExecutionState +0x28, Monkey4.exe the same, reset when the activation starts and for every task at the start of each update,
+	// see runtasks) and ends the script after 10 million (see luaV_execute)
+	int32 instrCount;
 };
 
 void lua_taskinit(lua_Task *task, lua_Task *next, StkId tbase, int results);

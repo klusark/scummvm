@@ -352,10 +352,15 @@ StkId luaV_execute(lua_Task *task) {
 			adjust_varargs(task->base + (*task->pc++) - ZEROVARARG);
 		}
 		task->executed = true;
+		task->instrCount = 0;
 	}
 	lua_state->callLevelCounter++;
 
 	while (1) {
+		// A script that runs for a long time without a break_here is ended, as the original ends it: an activation that has run 10 million
+		// instructions of its own in one update (GRIM LUA.DLL 0x1000df74: cmp 10000000, jl; Monkey4.exe FUN_004533b0: 9999999 < count)
+		if (task->instrCount++ >= 10000000)
+			lua_error("WARNING: Killing Lua script that ran without a break_here() for a really long time!\n");
 		switch ((OpCode)(task->aux = *task->pc++)) {
 		case PUSHNIL0:
 			ttype(task->S->top++) = LUA_T_NIL;
