@@ -923,12 +923,10 @@ void GfxTinyGL::createBitmap(BitmapData *bitmap) {
 			uint32 *buf = (uint32 *)buffer.getPixels();
 			const uint16 *bufPtr = (const uint16 *)(bitmap->getImageData(pic).getPixels());
 			for (int i = 0; i < (bitmap->_width * bitmap->_height); i++) {
-				uint16 val = bufPtr[i];
-				// fix the value if it is incorrectly set to the bitmap transparency color
-				if (val == 0xf81f) {
-					val = 0;
-				}
-				buf[i] = ((uint32)val) * 0x10000 / 100 / (0x10000 - val) << 14;
+				const double zSize = 1 << (16 + 14);
+				const double zScale = -(zSize - 0.5) / 2.0;
+				const double zTrans = (zSize - 0.5) / 2.0 + (1 << 14) / 2.0;
+				buf[i] = (uint32)((bufPtr[i] * 2.0 - 1.0) * zScale + zTrans);
 			}
 			bitmap->_data[pic].free();
 			bitmap->_data[pic] = buffer;

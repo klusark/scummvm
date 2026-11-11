@@ -1011,13 +1011,27 @@ void GfxOpenGL::createBitmap(BitmapData *bitmap) {
 	if (bitmap->_format != 1) {
 		for (int pic = 0; pic < bitmap->_numImages; pic++) {
 			uint16 *zbufPtr = reinterpret_cast<uint16 *>(const_cast<void  *>(bitmap->getImageData(pic).getPixels()));
+			// Replace the depths of the original with the window depths of our frustum, in 16 bits: these are
+			// several centimetres off in the far half of the room (see zbmDepthLimit).
 			for (int i = 0; i < (bitmap->_width * bitmap->_height); i++) {
-				uint16 val = zbufPtr[i];
-				// fix the value if it is incorrectly set to the bitmap transparency color
-				if (val == 0xf81f) {
-					val = 0;
+				uint16 zbmValue = zbufPtr[i];
+					// Pixels that are incorrectly set to the bitmap transparency colour are empty.
+				if (zbmValue == 0 || zbmValue == 0xf81f) {
+					zbufPtr[i] = 0xffff;
+					continue;
 				}
-				zbufPtr[i] = 0xffff - ((uint32)val) * 0x10000 / 100 / (0x10000 - val);
+
+				const double z = 65535.0 / zbmValue - 1.0;
+				const double n = 0.01f;
+				const double f = 3276.8f;
+				if (z <= n) {
+					zbufPtr[i] = 0.0;
+					continue;
+				}
+				// glFrustum maps the distance z to the window depth f / (f - n) * (1 - n / z).
+				const double depth = f / (f - n) * (1.0 - n / z);
+				double depth2 = depth > 1.0 ? 1.0 : depth;
+				zbufPtr[i] = depth2 * 65535.0 + 0.5;
 			}
 
 			// Flip the zbuffer image to match what GL expects
@@ -1438,6 +1452,9 @@ void GfxOpenGL::drawTextObject(const TextObject *text) {
 
 	glDisable(GL_LIGHTING);
 	glEnable(GL_TEXTURE_2D);
+	// Text goes over everything, as in the shaders renderer: z-bitmap pixels of 65535 (in front of
+	// everything, as in the object states of the tube in mo) would hide it with GL_LESS.
+	glDisable(GL_DEPTH_TEST);
 	glDepthMask(GL_FALSE);
 
 	const Color &color = text->getFGColor();

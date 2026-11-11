@@ -1397,9 +1397,7 @@ void GfxOpenGLS::createBitmap(BitmapData *bitmap) {
 				if (val == 0xf81f) {
 					val = 0;
 				}
-				// This is later read as a LA pair when filling texture
-				// with L being used as the LSB in fragment shader
-				zbufPtr[i] = TO_LE_16(0xffff - ((uint32)val) * 0x10000 / 100 / (0x10000 - val));
+				zbufPtr[i] = TO_LE_16(val);
 			}
 		}
 	}

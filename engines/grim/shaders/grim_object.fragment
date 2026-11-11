@@ -11,17 +11,30 @@ uniform float alphaRef;
 
 const float offsetY = 0.0;
 
+// From the clipping planes of Grim's camera n and f (kGrimNearClip and kGrimFarClip): f / (f - n) and
+// f / (f - n) - 1, which a float holds far more precisely than 1 + it.
+const float nearClip = 0.01;
+const float depthScale = 3276.8 / (3276.8 - 0.01);
+const float depthScaleMinusOne = 0.01 / (3276.8 - 0.01);
+
 OUTPUT
 
 void checkZBuffer() {
 	// gl_FragCoord is the center of the pixel, which is the center of its texel of the z buffer.
 	vec2 zCoord = vec2(gl_FragCoord.x / screenSize.x, 1.0 - (gl_FragCoord.y - offsetY) / screenSize.y);
-	// The 16 bit depth is split in its low (luminance) and high (alpha) bytes.
+	// The 16 bit depth of the original is split in its low (luminance) and high (alpha) bytes.
 	vec2 sampled = floor(texture(texZBuf, zCoord * texcropZBuf).ra * 255.0 + 0.5);
-	float sceneZ = sampled.y * 256.0 + sampled.x;
+	float zbm = sampled.y * 256.0 + sampled.x;
+	if (zbm == 0.0)
+		return;
+
+	// The window depth up to which the fragment is in front of the background, f / (f - n) * (1 - n / z),
+	// rounded only once near 1. Keep it the same as zbmDepthLimitShader in zbm_depth.h.
+	float nearOverZ = nearClip * zbm / max(65535.0 - zbm, 1.0);
+	float depthLimit = 1.0 - (depthScale * nearOverZ - depthScaleMinusOne);
 
 	// As the GL_LESS depth test of the fixed pipeline against the depth bitmap.
-	if (gl_FragCoord.z * 65535.0 >= sceneZ)
+	if (gl_FragCoord.z >= depthLimit)
 		discard;
 }
 
