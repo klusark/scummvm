@@ -304,6 +304,10 @@ protected:
 	unsigned _simClock = 0;
 	unsigned _simRng = 12345;
 	unsigned simClockMs() const;
+	/** Moves the simulated clock on by one frame and the sound, iMuse and the movie with it; returns the time before */
+	unsigned simAdvanceFrame();
+	/** A script that has run on for g_luaBusyLimit calls without yielding: the sound gets the time of a frame (see ldo.h) */
+	static void simBusyFrame();
 	/** sim_wall_fps: a simulated run draws no more than that many pictures a second of the real clock (0 = as fast as it can), see paceDrawing */
 	unsigned _simWallFps = 0;
 	unsigned _wallLast = 0;
