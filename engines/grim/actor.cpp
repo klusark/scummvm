@@ -999,12 +999,15 @@ void Actor::moveTo(const Math::Vector3d &pos) {
 
 	Math::Vector3d moveVec = pos - _pos;
 	const Math::Vector3d askedVec = moveVec;
-	// EMI: the walker's sector before the move (the place asked for when the actor is not on one)
+	// EMI: the walker's sector after its own step, the place asked for (the one it stood in when that is on no sector). The original
+	// makes the step first and pushes from where it ends, clamped into the sector the step reached. The sector before the step held
+	// Guybrush on the edge between two sectors where the crawdaddy trap of the Hall o' Justice touched him: each step over the edge was
+	// pushed and put back into the old sector, for good.
 	Sector *walkSector = nullptr;
 	if (g_grim->getGameType() == GType_MONKEY4 && _followBoxes && g_grim->getCurrSet()) {
-		walkSector = g_grim->getCurrSet()->findPointSector(_pos, Sector::WalkType);
+		walkSector = g_grim->getCurrSet()->findPointSector(pos, Sector::WalkType);
 		if (!walkSector)
-			walkSector = g_grim->getCurrSet()->findPointSector(pos, Sector::WalkType);
+			walkSector = g_grim->getCurrSet()->findPointSector(_pos, Sector::WalkType);
 	}
 	// (not ported yet: an actor that walks a path and is pushed by another one makes the path again around the one that pushed it, from the place it
 	// was pushed to: FUN_004939f0 -> Walker_ReplanPath with the actor, FUN_004917e0. Without that the push and the next step of the path repeat for ever
