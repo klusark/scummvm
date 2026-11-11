@@ -999,6 +999,13 @@ void Actor::moveTo(const Math::Vector3d &pos) {
 
 	Math::Vector3d moveVec = pos - _pos;
 	const Math::Vector3d askedVec = moveVec;
+	// EMI: the walker's sector before the move (the place asked for when the actor is not on one)
+	Sector *walkSector = nullptr;
+	if (g_grim->getGameType() == GType_MONKEY4 && _followBoxes && g_grim->getCurrSet()) {
+		walkSector = g_grim->getCurrSet()->findPointSector(_pos, Sector::WalkType);
+		if (!walkSector)
+			walkSector = g_grim->getCurrSet()->findPointSector(pos, Sector::WalkType);
+	}
 	// (not ported yet: an actor that walks a path and is pushed by another one makes the path again around the one that pushed it, from the place it
 	// was pushed to: FUN_004939f0 -> Walker_ReplanPath with the actor, FUN_004917e0. Without that the push and the next step of the path repeat for ever
 	// at a box that is in the way of the end of the path, as at the signpost, so the steps of a path are not pushed, as they were not before.)
@@ -1011,6 +1018,11 @@ void Actor::moveTo(const Math::Vector3d &pos) {
 		_pos = pos;
 	else
 		_pos += moveVec;
+	// EMI: a place set for a walker is kept in its sector (Monkey4.exe: SetPosition 0x429270 -> 0x444b90 -> 0x443ef0, onto the plane and
+	// back over each edge it is outside of). Without it a push of another actor put Guybrush off the floor at the edge of a sector,
+	// where the next step put him back on the edge and the push off it again, for good (Jambalaya, beside Monty)
+	if (walkSector && moveVec != askedVec && !walkSector->isPointInSector(_pos))
+		_pos = walkSector->getClosestPoint(_pos);
 }
 
 void Actor::walkForward() {
