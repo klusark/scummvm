@@ -337,6 +337,10 @@ void Lua_V1::GetActorPos() {
 		return;
 
 	Actor *actor = getactor(actorObj);
+	// (the handle of an actor that has been freed: nothing, as the original's GetActorPos (Monkey4.exe 0x4161a0) returns nothing
+	// when its lookup does not find the actor)
+	if (!actor)
+		return;
 	Math::Vector3d pos = actor->getPos();
 	lua_pushnumber(pos.x());
 	lua_pushnumber(pos.y());
