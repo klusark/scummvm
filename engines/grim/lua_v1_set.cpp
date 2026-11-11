@@ -184,7 +184,9 @@ void Lua_V1::GetSectorOppositeEdge() {
 
 	// (the original looks the sector up by its whole name, puts the actor on the opposite edge itself and gives the script no values: FUN_004931f0)
 	Sector *sector = g_grim->getCurrSet()->getSectorByName(name);
-	if (sector)
+	if (sector && g_grim->getGameType() == GType_MONKEY4)
+		actor->emiOppositeEdge(sector);
+	else if (sector)
 		actor->grimOppositeEdge(sector);
 	else
 		lua_pushnil();

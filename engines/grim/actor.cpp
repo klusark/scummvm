@@ -2454,6 +2454,60 @@ void Actor::grimOppositeEdge(Sector *sector) {
 	setPos(newPos);
 }
 
+// GetSectorOppositeEdge of EMI (0x419600 -> 0x42cb10 -> 0x444780): the same as Grim's on the x-z floor, without Grim's heading frame. A
+// sector of four sides only: the line from the actor 10 units backward along the way it faces is clipped onto each edge it is outside of
+// (0x4441a0); where it leaves the sector, on the edge i between vertex i and i - 1, the fraction along that edge (along x, along z when
+// the edge has no length in x) is taken from the other end of the edge two further on, and the actor is put there. Nothing when the
+// end of the line is inside the sector. The cheat boxes of the sets (Lucre town's bait_hall_cheatbox ...) move Guybrush with it: in
+// the port nothing moved him, and he walked through them.
+void Actor::emiOppositeEdge(Sector *sector) {
+	const int n = sector->getNumVertices();
+	if (n != 4)
+		return;
+	const Math::Vector3d *vs = sector->getVertices();
+	const Math::Vector3d fwd = getSimplePuckVector();
+	const Math::Vector3d from = _pos;
+	Math::Vector3d out = from - fwd * 10.f;
+	// (inside is the side the middle of the sector is on)
+	Math::Vector3d mid;
+	for (int i = 0; i < n; i++)
+		mid += vs[i];
+	mid /= (float)n;
+	int edge = -1;
+	for (int i = 0; i < n; i++) {
+		const Math::Vector3d &p = vs[i == 0 ? n - 1 : i - 1];
+		const Math::Vector3d &c = vs[i];
+		const float ex = c.x() - p.x(), ez = c.z() - p.z();
+		const float sideIn = ez * (mid.x() - p.x()) - ex * (mid.z() - p.z());
+		const float sideOut = ez * (out.x() - p.x()) - ex * (out.z() - p.z());
+		if (fabsf(sideOut) <= 1e-05f || sideIn * sideOut >= 0.f)
+			continue;
+		// (onto the edge's line, along the line toward the actor)
+		const float sideFrom = ez * (from.x() - p.x()) - ex * (from.z() - p.z());
+		const float den = sideFrom - sideOut;
+		if (fabsf(den) <= 1e-05f)
+			continue;
+		const float t = -sideOut / den;
+		out = out + (from - out) * t;
+		edge = i;
+	}
+	if (edge == -1)
+		return;
+	const Math::Vector3d &v0 = vs[edge];
+	const Math::Vector3d &v1 = vs[edge - 1 > -1 ? edge - 1 : n - 1];
+	const float dx = v1.x() - v0.x();
+	float frac;
+	if (fabsf(dx) > 1e-05f)
+		frac = (out.x() - v0.x()) / dx;
+	else
+		frac = (out.z() - v0.z()) / (v1.z() - v0.z());
+	frac = 1.f - frac;
+	const int e2 = (edge + 2) % n;
+	const Math::Vector3d &a = vs[e2];
+	const Math::Vector3d &b = vs[e2 - 1 > -1 ? e2 - 1 : n - 1];
+	setPos(a + (b - a) * frac);
+}
+
 // TurnActorTo (FUN_0049fc60): the frame of the walker is turned toward the point by at most the turn rate of the frame (FUN_004a8450), at once; true when that
 // was all the turn rate allowed (there may be more to turn), else it is done
 bool Actor::grimTurnActorTo(const Math::Vector3d &target) {
