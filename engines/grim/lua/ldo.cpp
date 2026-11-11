@@ -126,7 +126,15 @@ void luaD_callHook(StkId base, TProtoFunc *tf, int32 isreturn) {
 ** Cstack.num is the number of arguments; Cstack.lua2C points to the
 ** first argument. Returns an index to the first result from C.
 */
+uint32 g_luaBusyLimit = 0;
+uint32 g_luaBusyCalls = 0;
+void (*g_luaBusyHook)() = nullptr;
+
 static StkId callC(lua_CFunction f, StkId base) {
+	if (g_luaBusyLimit && ++g_luaBusyCalls >= g_luaBusyLimit) {
+		g_luaBusyCalls = 0;
+		g_luaBusyHook();
+	}
 	struct C_Lua_Stack *CS = &lua_state->Cstack;
 	struct C_Lua_Stack oldCLS = *CS;
 	StkId firstResult;

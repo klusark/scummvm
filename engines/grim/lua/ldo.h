@@ -12,6 +12,12 @@
 
 namespace Grim {
 
+// A simulated run (--sim-fps) gives a script that runs on without yielding the time it would take on the original: every
+// g_luaBusyLimit calls of C functions within one frame, g_luaBusyHook moves the simulated clock of the sound on (0: off)
+extern uint32 g_luaBusyLimit;
+extern uint32 g_luaBusyCalls;
+extern void (*g_luaBusyHook)();
+
 #define MULT_RET        255
 
 

@@ -65,6 +65,7 @@
 #include "engines/grim/md5check.h"
 #include "engines/grim/md5checkdialog.h"
 #include "engines/grim/debug.h"
+#include "engines/grim/lua/ldo.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/lua.h"
 #include "engines/grim/lua_v1.h"
@@ -147,6 +148,14 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 		_simJitter = CLIP(ConfMan.getInt("sim_jitter"), 0, 100);
 	if (ConfMan.hasKey("sim_jitter_seed"))
 		_simRng = ConfMan.getInt("sim_jitter_seed");
+	// sim_busy_calls: a script that makes that many calls of C functions in one frame without yielding moves the sound on by a frame (0 = never,
+	// see simBusyFrame)
+	// (Grim only: the loop is one of Grim's scripts, and the grid planner of the EMI autorun makes that many calls in one frame)
+	g_luaBusyLimit = 0;
+	if (_simFps && getGameType() == GType_GRIM) {
+		g_luaBusyLimit = ConfMan.hasKey("sim_busy_calls") ? (uint32)MAX(ConfMan.getInt("sim_busy_calls"), 0) : 1000000;
+		g_luaBusyHook = &GrimEngine::simBusyFrame;
+	}
 	if (ConfMan.hasKey("sim_render_every"))
 		_simRenderEvery = CLIP(ConfMan.getInt("sim_render_every"), 1, 1000);
 	// sim_wall_fps and frame_marker are for a recording of a fast simulated run (autorun/tools/record_fast.sh): the run is held to a fixed rate of pictures
@@ -261,6 +270,7 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 }
 
 GrimEngine::~GrimEngine() {
+	g_luaBusyLimit = 0;
 	delete _dumpFramesIndex;
 	delete[] _controlsEnabled;
 	delete[] _controlsState;
@@ -900,24 +910,11 @@ void GrimEngine::luaUpdate() {
 	if (_simFps) {
 		// Simulated time: every frame is the same length however long it really took, so that a run does not depend on
 		// the speed of the machine (the whole milliseconds add up to exactly _simFps frames a second)
-		unsigned before = simClockMs();
-		const unsigned plain = (_simMs ? (_simFrame + 1) * _simMs : (unsigned)((uint64)(_simFrame + 1) * 1000 / _simFps)) - (_simMs ? _simFrame * _simMs : (unsigned)((uint64)_simFrame * 1000 / _simFps));
-		_simFrame++;
-		if (_simJitter) {
-			_simRng = _simRng * 1664525u + 1013904223u;
-			int delta = (int)plain + (int)((_simRng >> 16) % (2 * _simJitter + 1)) - (int)_simJitter;
-			_simClock += delta < 1 ? 1 : delta;
-		}
-		unsigned simTime = simClockMs();
-		_frameTime = simTime - before;
+		unsigned before = simAdvanceFrame();
+		_frameTime = simClockMs() - before;
 		_frameStart = newStart;
-		// the sound and iMuse move on by the same simulated time
-		static_cast<Audio::MixerImpl *>(_mixer)->simulateStep(simTime);
-		Video::g_videoSimMillis = simTime;
-		if (g_movie)
-			g_movie->simulate();
-		if (g_imuse)
-			g_imuse->simulate(simTime);
+		// (the count of a script that runs on without yielding starts again with every frame)
+		g_luaBusyCalls = 0;
 	} else {
 		if (newStart < _frameStart) {
 			_frameStart = newStart;
@@ -1170,6 +1167,34 @@ void GrimEngine::drawFrameMarker() {
 // The frames of two runs of the same simulated game, one with each renderer, are compared by devtools/grim/framediff.py: the line
 // of a frame in frames.tsv gives its number, the simulated time in ms, the set and the camera setup, and the file ("=" when the
 // picture is the one of the frame before)
+unsigned GrimEngine::simAdvanceFrame() {
+	unsigned before = simClockMs();
+	const unsigned plain = (_simMs ? (_simFrame + 1) * _simMs : (unsigned)((uint64)(_simFrame + 1) * 1000 / _simFps)) - (_simMs ? _simFrame * _simMs : (unsigned)((uint64)_simFrame * 1000 / _simFps));
+	_simFrame++;
+	if (_simJitter) {
+		_simRng = _simRng * 1664525u + 1013904223u;
+		int delta = (int)plain + (int)((_simRng >> 16) % (2 * _simJitter + 1)) - (int)_simJitter;
+		_simClock += delta < 1 ? 1 : delta;
+	}
+	unsigned simTime = simClockMs();
+	// the sound and iMuse move on by the same simulated time
+	static_cast<Audio::MixerImpl *>(_mixer)->simulateStep(simTime);
+	Video::g_videoSimMillis = simTime;
+	if (g_movie)
+		g_movie->simulate();
+	if (g_imuse)
+		g_imuse->simulate(simTime);
+	return before;
+}
+
+// In the original the clock runs on while a script loops without yielding: a loop that waits for a sound to start (Tumbler.make_noise of
+// the safe in vd.lua starts sounds until one gets a track) ends when the sounds that hold the tracks are over. A simulated run gives such a
+// script a frame of time for the sound every g_luaBusyLimit calls of C functions; the frame itself does not get longer.
+void GrimEngine::simBusyFrame() {
+	g_grim->simAdvanceFrame();
+	Debug::warning(Debug::Scripts, "A script runs on without yielding: the sound is moved on by a frame (simulated clock %u ms)", g_grim->simClockMs());
+}
+
 // The simulated clock in ms: the frames of the fixed length, or with sim_jitter the sum of the shorter and longer ones
 unsigned GrimEngine::simClockMs() const {
 	if (_simJitter)
