@@ -993,7 +993,7 @@ void Actor::moveTo(const Math::Vector3d &pos) {
 	// collide, miss the target point and will walk away, leaving Manny waiting for him at
 	// the window forever.
 	CollisionMode mode = _collisionMode;
-	if (_collisionMode == CollisionOff) {
+	if (_collisionMode == CollisionOff && g_grim->getGameType() != GType_MONKEY4) {
 		mode = CollisionSphere;
 	}
 
@@ -3846,6 +3846,15 @@ bool Actor::handleBoxCollision(Actor *actor, const Math::Vector3d &p1, float siz
 bool Actor::handleCollisionWith(Actor *actor, CollisionMode mode, Math::Vector3d *vec) const {
 	if (actor->_collisionMode == CollisionOff || actor == this) {
 		return false;
+	}
+
+	// EMI (Monkey4.exe 0x42ce50): an actor whose own collision mode is off does not collide at all, and one that is on (box or sphere, a
+	// sphere either way) is pushed only by actors whose mode is sphere (2). The port made a walking actor with collisions off a sphere
+	// (a rule of Grim's sets) and let NPCs that walk into Guybrush push him: Timmy blocked him in the gold mine's tunnel for good.
+	if (g_grim->getGameType() == GType_MONKEY4) {
+		if (mode == CollisionOff || actor->_collisionMode != CollisionSphere)
+			return false;
+		mode = CollisionSphere;
 	}
 
 	if (!actor->getCurrentCostume()) {
