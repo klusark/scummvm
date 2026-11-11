@@ -14,11 +14,14 @@ const float offsetY = 0.0;
 OUTPUT
 
 void checkZBuffer() {
-	vec2 zCoord = vec2((gl_FragCoord.x - 0.5) / screenSize.x, 1.0 - (gl_FragCoord.y - offsetY - 0.5) / screenSize.y);
-	vec2 sampled = texture(texZBuf, zCoord * texcropZBuf).ra;
-	float sceneZ = sampled.y + sampled.x / 256.0;
+	// gl_FragCoord is the center of the pixel, which is the center of its texel of the z buffer.
+	vec2 zCoord = vec2(gl_FragCoord.x / screenSize.x, 1.0 - (gl_FragCoord.y - offsetY) / screenSize.y);
+	// The 16 bit depth is split in its low (luminance) and high (alpha) bytes.
+	vec2 sampled = floor(texture(texZBuf, zCoord * texcropZBuf).ra * 255.0 + 0.5);
+	float sceneZ = sampled.y * 256.0 + sampled.x;
 
-	if (gl_FragCoord.z * 1.0039 > sceneZ)
+	// As the GL_LESS depth test of the fixed pipeline against the depth bitmap.
+	if (gl_FragCoord.z * 65535.0 >= sceneZ)
 		discard;
 }
 
