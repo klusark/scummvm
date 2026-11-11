@@ -598,6 +598,8 @@ public:
 	/** GetSectorOppositeEdge of the original (FUN_004931f0, FUN_004a7390): the actor is put on the opposite edge of a four sided sector, the place where a line
 	 * from it 10 m backward leaves the sector is, mirrored (the edge two further) */
 	void grimOppositeEdge(Sector *sector);
+	// GetSectorOppositeEdge of EMI (the cheat boxes): Monkey4.exe's own, on the x-z floor
+	void emiOppositeEdge(Sector *sector);
 	float moveSine() const;
 	float moveCosine() const;
 	bool hasFollowedBoxes() const { return _hasFollowedBoxes; }
