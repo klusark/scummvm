@@ -159,6 +159,17 @@ void Skeleton::animate() {
 			if (remainingRotWeight <= 0.0f && remainingTransWeight <= 0.0f)
 				break;
 		}
+
+		// The original does not blend the translation tracks of a joint into its bind position:
+		// once an animation has a track for the joint, its position comes from the translation
+		// tracks alone, starting from the origin. A joint animated by rotation tracks only loses
+		// its bind translation, e.g. the stove lever in the kitchen of the Lua Bar, whose rotate
+		// bone sits 0.354 in front of the stove in the bind pose.
+		bool animated = remainingRotWeight < 1.0f || remainingTransWeight < 1.0f;
+		if (animated && remainingTransWeight > 0.0f) {
+			Math::Vector3d pos = _joints[i]._animMatrix.getPosition();
+			_joints[i]._animMatrix.setPosition(pos - _joints[i]._relMatrix.getPosition() * remainingTransWeight);
+		}
 	}
 
 	commitAnim();
