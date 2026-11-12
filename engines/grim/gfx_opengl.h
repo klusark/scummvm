@@ -57,9 +57,9 @@ public:
 	bool isHardwareAccelerated() override;
 	bool supportsShaders() override;
 
-	void getScreenBoundingBox(const Mesh *model, int *x1, int *y1, int *x2, int *y2) override;
-	void getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, int *x2, int *y2) override;
-	void getActorScreenBBox(const Actor *actor, Common::Point &p1, Common::Point &p2) override;
+	bool getScreenBoundingBox(const Mesh *model, Common::Rect &rect) override;
+	bool getScreenBoundingBox(const EMIModel *model, Common::Rect &rect) override;
+	bool getActorScreenBBox(const Actor *actor, Common::Rect &rect) override;
 
 	void startActorDraw(const Actor *actor) override;
 	void finishActorDraw() override;

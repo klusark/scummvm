@@ -85,7 +85,7 @@ void EMIMeshComponent::draw() {
 	//translateObject(true);
 }
 
-void EMIMeshComponent::getBoundingBox(int *x1, int *y1, int *x2, int *y2) const {
+void EMIMeshComponent::getBoundingBox(bool &onScreen, Common::Rect &rect) const {
 	// If the object was drawn by being a component
 	// of it's parent then don't draw it
 
@@ -93,7 +93,7 @@ void EMIMeshComponent::getBoundingBox(int *x1, int *y1, int *x2, int *y2) const 
 		return;
 
 	if (_obj)
-		_obj->getBoundingBox(x1, y1, x2, y2);
+		_obj->getBoundingBox(onScreen, rect);
 }
 
 } // end of namespace Grim

@@ -568,14 +568,16 @@ void Mesh::draw() const {
 		g_driver->enableLights();
 }
 
-void Mesh::getBoundingBox(int *x1, int *y1, int *x2, int *y2) const {
-	int winX1, winY1, winX2, winY2;
-	g_driver->getScreenBoundingBox(this, &winX1, &winY1, &winX2, &winY2);
-	if (winX1 != -1 && winY1 != -1 && winX2 != -1 && winY2 != -1) {
-		*x1 = MIN(*x1, winX1);
-		*y1 = MIN(*y1, winY1);
-		*x2 = MAX(*x2, winX2);
-		*y2 = MAX(*y2, winY2);
+void Mesh::getBoundingBox(bool &onScreen, Common::Rect &rect) const {
+	Common::Rect meshRect;
+	if (!g_driver->getScreenBoundingBox(this, meshRect))
+		return;
+
+	if (onScreen) {
+		rect.extend(meshRect);
+	} else {
+		rect = meshRect;
+		onScreen = true;
 	}
 }
 
@@ -681,7 +683,7 @@ void ModelNode::draw() const {
 	}
 }
 
-void ModelNode::getBoundingBox(int *x1, int *y1, int *x2, int *y2) const {
+void ModelNode::getBoundingBox(bool &onScreen, Common::Rect &rect) const {
 	if (_sibling || _child) {
 		translateViewpointStart();
 	}
@@ -693,12 +695,12 @@ void ModelNode::getBoundingBox(int *x1, int *y1, int *x2, int *y2) const {
 		g_driver->translateViewpoint(_pivot);
 
 		if (_mesh && _meshVisible) {
-			_mesh->getBoundingBox(x1, y1, x2, y2);
+			_mesh->getBoundingBox(onScreen, rect);
 		}
 
 		if (_child) {
 			translateViewpointFinish();
-			_child->getBoundingBox(x1, y1, x2, y2);
+			_child->getBoundingBox(onScreen, rect);
 		}
 	}
 
@@ -706,7 +708,7 @@ void ModelNode::getBoundingBox(int *x1, int *y1, int *x2, int *y2) const {
 		translateViewpointFinish();
 	}
 	if (_sibling) {
-		_sibling->getBoundingBox(x1, y1, x2, y2);
+		_sibling->getBoundingBox(onScreen, rect);
 	}
 }
 

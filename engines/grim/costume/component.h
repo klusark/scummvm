@@ -22,6 +22,8 @@
 #ifndef GRIM_COMPONENT_H
 #define GRIM_COMPONENT_H
 
+#include "common/rect.h"
+
 #include "math/matrix4.h"
 
 #include "engines/grim/object.h"

@@ -302,19 +302,12 @@ static void shadowProjection(const Math::Vector3d &light, const Math::Vector3d &
 	glMultMatrixf((GLfloat *)mat);
 }
 
-void GfxOpenGL::getScreenBoundingBox(const Mesh *model, int *x1, int *y1, int *x2, int *y2) {
-	if (_currentShadowArray) {
-		*x1 = -1;
-		*y1 = -1;
-		*x2 = -1;
-		*y2 = -1;
-		return;
-	}
+bool GfxOpenGL::getScreenBoundingBox(const Mesh *model, Common::Rect &rect) {
+	if (_currentShadowArray)
+		return false;
 
-	GLdouble top = 1000;
-	GLdouble right = -1000;
-	GLdouble left = 1000;
-	GLdouble bottom = -1000;
+	GLdouble top = 0, right = 0, left = 0, bottom = 0;
+	bool hasVertex = false;
 
 	for (int i = 0; i < model->_numFaces; i++) {
 		Math::Vector3d obj;
@@ -335,6 +328,11 @@ void GfxOpenGL::getScreenBoundingBox(const Mesh *model, int *x1, int *y1, int *x
 			Math::Vector3d win;
 			Math::gluMathProject<GLdouble, GLint>(obj, modelView, projection, viewPort, win);
 
+			if (!hasVertex) {
+				left = right = win.x();
+				top = bottom = win.y();
+				hasVertex = true;
+			}
 			if (win.x() > right)
 				right = win.x();
 			if (win.x() < left)
@@ -345,6 +343,9 @@ void GfxOpenGL::getScreenBoundingBox(const Mesh *model, int *x1, int *y1, int *x
 				bottom = win.y();
 		}
 	}
+
+	if (!hasVertex)
+		return false;
 
 	double t = bottom;
 	bottom = _gameHeight - top;
@@ -359,33 +360,22 @@ void GfxOpenGL::getScreenBoundingBox(const Mesh *model, int *x1, int *y1, int *x
 	if (bottom >= _gameHeight)
 		bottom = _gameHeight - 1;
 
-	if (top >= _gameHeight || left >= _gameWidth || bottom < 0 || right < 0) {
-		*x1 = -1;
-		*y1 = -1;
-		*x2 = -1;
-		*y2 = -1;
-		return;
-	}
+	if (top >= _gameHeight || left >= _gameWidth || bottom < 0 || right < 0)
+		return false;
 
-	*x1 = (int)left;
-	*y1 = (int)top;
-	*x2 = (int)right;
-	*y2 = (int)bottom;
+	rect.left = (int)left;
+	rect.top = (int)top;
+	rect.right = (int)right;
+	rect.bottom = (int)bottom;
+	return true;
 }
 
-void GfxOpenGL::getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, int *x2, int *y2) {
-	if (_currentShadowArray) {
-		*x1 = -1;
-		*y1 = -1;
-		*x2 = -1;
-		*y2 = -1;
-		return;
-	}
+bool GfxOpenGL::getScreenBoundingBox(const EMIModel *model, Common::Rect &rect) {
+	if (_currentShadowArray)
+		return false;
 
-	GLdouble top = 1000;
-	GLdouble right = -1000;
-	GLdouble left = 1000;
-	GLdouble bottom = -1000;
+	GLdouble top = 0, right = 0, left = 0, bottom = 0;
+	bool hasVertex = false;
 
 	GLdouble modelView[16], projection[16];
 	GLint viewPort[4];
@@ -403,6 +393,11 @@ void GfxOpenGL::getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, in
 			Math::Vector3d win;
 			Math::gluMathProject<GLdouble, GLint>(obj, modelView, projection, viewPort, win);
 
+			if (!hasVertex) {
+				left = right = win.x();
+				top = bottom = win.y();
+				hasVertex = true;
+			}
 			if (win.x() > right)
 				right = win.x();
 			if (win.x() < left)
@@ -413,6 +408,9 @@ void GfxOpenGL::getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, in
 				bottom = win.y();
 		}
 	}
+
+	if (!hasVertex)
+		return false;
 
 	double t = bottom;
 	bottom = _gameHeight - top;
@@ -427,21 +425,17 @@ void GfxOpenGL::getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, in
 	if (bottom >= _gameHeight)
 		bottom = _gameHeight - 1;
 
-	if (top >= _gameHeight || left >= _gameWidth || bottom < 0 || right < 0) {
-		*x1 = -1;
-		*y1 = -1;
-		*x2 = -1;
-		*y2 = -1;
-		return;
-	}
+	if (top >= _gameHeight || left >= _gameWidth || bottom < 0 || right < 0)
+		return false;
 
-	*x1 = (int)left;
-	*y1 = (int)top;
-	*x2 = (int)right;
-	*y2 = (int)bottom;
+	rect.left = (int)left;
+	rect.top = (int)top;
+	rect.right = (int)right;
+	rect.bottom = (int)bottom;
+	return true;
 }
 
-void GfxOpenGL::getActorScreenBBox(const Actor *actor, Common::Point &p1, Common::Point &p2) {
+bool GfxOpenGL::getActorScreenBBox(const Actor *actor, Common::Rect &rect) {
 	// Get the actor's bounding box information (describes a 3D box)
 	Math::Vector3d bboxPos, bboxSize;
 	actor->getBBoxInfo(bboxPos, bboxSize);
@@ -466,11 +460,7 @@ void GfxOpenGL::getActorScreenBBox(const Actor *actor, Common::Point &p1, Common
 	glGetDoublev(GL_PROJECTION_MATRIX, projection);
 	glGetIntegerv(GL_VIEWPORT, viewPort);
 
-	// Set values outside of the screen range
-	p1.x = 1000;
-	p1.y = 1000;
-	p2.x = -1000;
-	p2.y = -1000;
+	bool hasPoint = false;
 
 	// Project all of the points in the 3D bounding box
 	Math::Vector3d p, projected;
@@ -482,26 +472,26 @@ void GfxOpenGL::getActorScreenBBox(const Actor *actor, Common::Point &p1, Common
 				p = bboxPos + added;
 				Math::gluMathProject<GLdouble, GLint>(p, modelView, projection, viewPort, projected);
 
-				// Find the points
-				if (projected.x() < p1.x)
-					p1.x = projected.x();
-				if (projected.y() < p1.y)
-					p1.y = projected.y();
-				if (projected.x() > p2.x)
-					p2.x = projected.x();
-				if (projected.y() > p2.y)
-					p2.y = projected.y();
+				Common::Point point(projected.x(), projected.y());
+				if (!hasPoint) {
+					rect = Common::Rect(point.x, point.y, point.x, point.y);
+					hasPoint = true;
+				} else {
+					rect.extend(point);
+				}
 			}
 		}
 	}
 
-	// Swap the p1/p2 y coorindates
-	int16 tmp = p1.y;
-	p1.y = 480 - p2.y;
-	p2.y = 480 - tmp;
+	// Flip the y coordinates
+	int16 tmp = rect.top;
+	rect.top = 480 - rect.bottom;
+	rect.bottom = 480 - tmp;
 
 	// Restore the state
 	glPopMatrix();
+
+	return true;
 }
 
 void GfxOpenGL::startActorDraw(const Actor *actor) {

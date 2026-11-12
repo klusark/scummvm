@@ -191,7 +191,7 @@ void ModelComponent::draw() {
 	translateObject(true);
 }
 
-void ModelComponent::getBoundingBox(int *x1, int *y1, int *x2, int *y2) {
+void ModelComponent::getBoundingBox(bool &onScreen, Common::Rect &rect) {
 	// If the object was drawn by being a component
 	// of it's parent then don't draw it
 
@@ -201,7 +201,7 @@ void ModelComponent::getBoundingBox(int *x1, int *y1, int *x2, int *y2) {
 	// with the setup of the parent
 	translateObject(false);
 
-	_hier->getBoundingBox(x1, y1, x2, y2);
+	_hier->getBoundingBox(onScreen, rect);
 
 	// Need to un-translate when done
 	translateObject(true);

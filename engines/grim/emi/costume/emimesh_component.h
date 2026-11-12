@@ -37,7 +37,7 @@ public:
 	int update(uint time) override;
 	void reset() override;
 	void draw() override;
-	void getBoundingBox(int *x1, int *y1, int *x2, int *y2) const;
+	void getBoundingBox(bool &onScreen, Common::Rect &rect) const;
 
 public:
 	EMICostume *_costume;

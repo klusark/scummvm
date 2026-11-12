@@ -25,6 +25,8 @@
 #include "engines/grim/object.h"
 #include "engines/grim/actor.h"
 
+#include "common/rect.h"
+
 #include "math/matrix4.h"
 #include "math/vector2d.h"
 #include "math/vector3d.h"
@@ -139,7 +141,7 @@ public:
 	void prepareTextures();
 	void draw();
 	void updateLighting(const Math::Matrix4 &modelToWorld);
-	void getBoundingBox(int *x1, int *y1, int *x2, int *y2) const;
+	void getBoundingBox(bool &onScreen, Common::Rect &rect) const;
 	Math::AABB calculateWorldBounds(const Math::Matrix4 &matrix) const;
 };
 

@@ -1796,31 +1796,27 @@ void Actor::draw() {
 	}
 
 	if (_mustPlaceText) {
-		Common::Point p1, p2;
+		bool onScreen = false;
+		Common::Rect bbox;
 		if (g_grim->getGameType() == GType_GRIM) {
 			if (!_costumeStack.empty()) {
-				int x1 = 1000, y1 = 1000, x2 = -1000, y2 = -1000;
 				g_driver->startActorDraw(this);
-				_costumeStack.back()->getBoundingBox(&x1, &y1, &x2, &y2);
+				_costumeStack.back()->getBoundingBox(onScreen, bbox);
 				g_driver->finishActorDraw();
-				p1.x = x1;
-				p1.y = y1;
-				p2.x = x2;
-				p2.y = y2;
 			}
 		} else {
-			g_driver->getActorScreenBBox(this, p1, p2);
+			onScreen = g_driver->getActorScreenBBox(this, bbox);
 		}
 
 		TextObject *textObject = TextObject::getPool().getObject(_sayLineText);
 		if (textObject) {
-			if (p1.x == 1000 || p2.x == -1000 || p2.x == -1000) {
+			if (!onScreen) {
 				const Common::Point &pos = g_grim->getOffscreenTextPos();
 				textObject->setX(pos.x);
 				textObject->setY(pos.y);
 			} else {
-				textObject->setX((p1.x + p2.x) / 2);
-				textObject->setY(p1.y);
+				textObject->setX((bbox.left + bbox.right) / 2);
+				textObject->setY(bbox.top);
 			}
 			// Deletes the original text and rebuilds it with the newly placed text
 			textObject->reset();
