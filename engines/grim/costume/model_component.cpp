@@ -191,20 +191,22 @@ void ModelComponent::draw() {
 	translateObject(true);
 }
 
-void ModelComponent::getBoundingBox(bool &onScreen, Common::Rect &rect) {
+Common::Pair<bool, Common::Rect> ModelComponent::getBoundingBox() {
 	// If the object was drawn by being a component
 	// of it's parent then don't draw it
 
 	if (_parent && _parent->isVisible())
-		return;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 	// Need to translate object to be in accordance
 	// with the setup of the parent
 	translateObject(false);
 
-	_hier->getBoundingBox(onScreen, rect);
+	Common::Pair<bool, Common::Rect> bbox = _hier->getBoundingBox();
 
 	// Need to un-translate when done
 	translateObject(true);
+
+	return bbox;
 }
 
 } // end of namespace Grim

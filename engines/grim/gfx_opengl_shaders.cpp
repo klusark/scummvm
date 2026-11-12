@@ -527,9 +527,9 @@ void GfxOpenGLS::flipBuffer(bool opportunistic) {
 	g_system->updateScreen();
 }
 
-bool GfxOpenGLS::getScreenBoundingBox(const Mesh *model, Common::Rect &rect) {
+Common::Pair<bool, Common::Rect> GfxOpenGLS::getScreenBoundingBox(const Mesh *model) {
 	if (_currentShadowArray)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
 	Math::Matrix4 modelMatrix = _currentActor->getFinalMatrix();
 	Math::Matrix4 mvpMatrix = _mvpMatrix * modelMatrix;
@@ -570,7 +570,7 @@ bool GfxOpenGLS::getScreenBoundingBox(const Mesh *model, Common::Rect &rect) {
 	}
 
 	if (!hasVertex)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
 	double t = bottom;
 	bottom = _gameHeight - top;
@@ -586,18 +586,19 @@ bool GfxOpenGLS::getScreenBoundingBox(const Mesh *model, Common::Rect &rect) {
 		bottom = _gameHeight - 1;
 
 	if (top >= _gameHeight || left >= _gameWidth || bottom < 0 || right < 0)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
+	Common::Rect rect;
 	rect.left = (int)left;
 	rect.top = (int)(_gameHeight - bottom);
 	rect.right = (int)right;
 	rect.bottom = (int)(_gameHeight - top);
-	return true;
+	return Common::Pair<bool, Common::Rect>(true, rect);
 }
 
-bool GfxOpenGLS::getScreenBoundingBox(const EMIModel *model, Common::Rect &rect) {
+Common::Pair<bool, Common::Rect> GfxOpenGLS::getScreenBoundingBox(const EMIModel *model) {
 	if (_currentShadowArray)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
 	Math::Matrix4 modelMatrix = _currentActor->getFinalMatrix();
 	Math::Matrix4 mvpMatrix = _mvpMatrix * modelMatrix;
@@ -636,7 +637,7 @@ bool GfxOpenGLS::getScreenBoundingBox(const EMIModel *model, Common::Rect &rect)
 	}
 
 	if (!hasVertex)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
 	double t = bottom;
 	bottom = _gameHeight - top;
@@ -652,16 +653,17 @@ bool GfxOpenGLS::getScreenBoundingBox(const EMIModel *model, Common::Rect &rect)
 		bottom = _gameHeight - 1;
 
 	if (top >= _gameHeight || left >= _gameWidth || bottom < 0 || right < 0)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
+	Common::Rect rect;
 	rect.left = (int)left;
 	rect.top = (int)(_gameHeight - bottom);
 	rect.right = (int)right;
 	rect.bottom = (int)(_gameHeight - top);
-	return true;
+	return Common::Pair<bool, Common::Rect>(true, rect);
 }
 
-bool GfxOpenGLS::getActorScreenBBox(const Actor *actor, Common::Rect &rect) {
+Common::Pair<bool, Common::Rect> GfxOpenGLS::getActorScreenBBox(const Actor *actor) {
 	// Get the actor's bounding box information (describes a 3D box)
 	Math::Vector3d bboxPos, bboxSize;
 	actor->getBBoxInfo(bboxPos, bboxSize);
@@ -679,6 +681,7 @@ bool GfxOpenGLS::getActorScreenBBox(const Actor *actor, Common::Rect &rect) {
 	modelView.translate(-_currentPos);
 	modelView.transpose();
 
+	Common::Rect rect;
 	bool hasPoint = false;
 
 	// Project all of the points in the 3D bounding box
@@ -693,7 +696,7 @@ bool GfxOpenGLS::getActorScreenBBox(const Actor *actor, Common::Rect &rect) {
 				Math::Vector4d v = Math::Vector4d(p.x(), p.y(), p.z(), 1.0f);
 				v = _projMatrix.transform(modelView.transform(v));
 				if (v.w() == 0.0)
-					return hasPoint;
+					return Common::Pair<bool, Common::Rect>(hasPoint, rect);
 				v /= v.w();
 
 				double winX = (1 + v.x()) / 2.0f * _gameWidth;
@@ -715,7 +718,7 @@ bool GfxOpenGLS::getActorScreenBBox(const Actor *actor, Common::Rect &rect) {
 	rect.top = 480 - rect.bottom;
 	rect.bottom = 480 - tmp;
 
-	return true;
+	return Common::Pair<bool, Common::Rect>(true, rect);
 }
 
 void GfxOpenGLS::startActorDraw(const Actor *actor) {

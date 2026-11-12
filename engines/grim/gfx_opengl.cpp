@@ -302,9 +302,9 @@ static void shadowProjection(const Math::Vector3d &light, const Math::Vector3d &
 	glMultMatrixf((GLfloat *)mat);
 }
 
-bool GfxOpenGL::getScreenBoundingBox(const Mesh *model, Common::Rect &rect) {
+Common::Pair<bool, Common::Rect> GfxOpenGL::getScreenBoundingBox(const Mesh *model) {
 	if (_currentShadowArray)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
 	GLdouble top = 0, right = 0, left = 0, bottom = 0;
 	bool hasVertex = false;
@@ -345,7 +345,7 @@ bool GfxOpenGL::getScreenBoundingBox(const Mesh *model, Common::Rect &rect) {
 	}
 
 	if (!hasVertex)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
 	double t = bottom;
 	bottom = _gameHeight - top;
@@ -361,18 +361,19 @@ bool GfxOpenGL::getScreenBoundingBox(const Mesh *model, Common::Rect &rect) {
 		bottom = _gameHeight - 1;
 
 	if (top >= _gameHeight || left >= _gameWidth || bottom < 0 || right < 0)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
+	Common::Rect rect;
 	rect.left = (int)left;
 	rect.top = (int)top;
 	rect.right = (int)right;
 	rect.bottom = (int)bottom;
-	return true;
+	return Common::Pair<bool, Common::Rect>(true, rect);
 }
 
-bool GfxOpenGL::getScreenBoundingBox(const EMIModel *model, Common::Rect &rect) {
+Common::Pair<bool, Common::Rect> GfxOpenGL::getScreenBoundingBox(const EMIModel *model) {
 	if (_currentShadowArray)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
 	GLdouble top = 0, right = 0, left = 0, bottom = 0;
 	bool hasVertex = false;
@@ -410,7 +411,7 @@ bool GfxOpenGL::getScreenBoundingBox(const EMIModel *model, Common::Rect &rect) 
 	}
 
 	if (!hasVertex)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
 	double t = bottom;
 	bottom = _gameHeight - top;
@@ -426,16 +427,17 @@ bool GfxOpenGL::getScreenBoundingBox(const EMIModel *model, Common::Rect &rect) 
 		bottom = _gameHeight - 1;
 
 	if (top >= _gameHeight || left >= _gameWidth || bottom < 0 || right < 0)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
+	Common::Rect rect;
 	rect.left = (int)left;
 	rect.top = (int)top;
 	rect.right = (int)right;
 	rect.bottom = (int)bottom;
-	return true;
+	return Common::Pair<bool, Common::Rect>(true, rect);
 }
 
-bool GfxOpenGL::getActorScreenBBox(const Actor *actor, Common::Rect &rect) {
+Common::Pair<bool, Common::Rect> GfxOpenGL::getActorScreenBBox(const Actor *actor) {
 	// Get the actor's bounding box information (describes a 3D box)
 	Math::Vector3d bboxPos, bboxSize;
 	actor->getBBoxInfo(bboxPos, bboxSize);
@@ -460,6 +462,7 @@ bool GfxOpenGL::getActorScreenBBox(const Actor *actor, Common::Rect &rect) {
 	glGetDoublev(GL_PROJECTION_MATRIX, projection);
 	glGetIntegerv(GL_VIEWPORT, viewPort);
 
+	Common::Rect rect;
 	bool hasPoint = false;
 
 	// Project all of the points in the 3D bounding box
@@ -491,7 +494,7 @@ bool GfxOpenGL::getActorScreenBBox(const Actor *actor, Common::Rect &rect) {
 	// Restore the state
 	glPopMatrix();
 
-	return true;
+	return Common::Pair<bool, Common::Rect>(true, rect);
 }
 
 void GfxOpenGL::startActorDraw(const Actor *actor) {

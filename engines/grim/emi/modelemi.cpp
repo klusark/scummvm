@@ -403,17 +403,8 @@ void EMIModel::updateLighting(const Math::Matrix4 &modelToWorld) {
 	}
 }
 
-void EMIModel::getBoundingBox(bool &onScreen, Common::Rect &rect) const {
-	Common::Rect meshRect;
-	if (!g_driver->getScreenBoundingBox(this, meshRect))
-		return;
-
-	if (onScreen) {
-		rect.extend(meshRect);
-	} else {
-		rect = meshRect;
-		onScreen = true;
-	}
+Common::Pair<bool, Common::Rect> EMIModel::getBoundingBox() const {
+	return g_driver->getScreenBoundingBox(this);
 }
 
 Math::AABB EMIModel::calculateWorldBounds(const Math::Matrix4 &matrix) const {

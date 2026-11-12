@@ -67,9 +67,9 @@ public:
 	 */
 	void flipBuffer(bool opportunistic = false) override;
 
-	bool getScreenBoundingBox(const Mesh *mesh, Common::Rect &rect) override;
-	bool getScreenBoundingBox(const EMIModel *model, Common::Rect &rect) override;
-	bool getActorScreenBBox(const Actor *actor, Common::Rect &rect) override;
+	Common::Pair<bool, Common::Rect> getScreenBoundingBox(const Mesh *mesh) override;
+	Common::Pair<bool, Common::Rect> getScreenBoundingBox(const EMIModel *model) override;
+	Common::Pair<bool, Common::Rect> getActorScreenBBox(const Actor *actor) override;
 	void startActorDraw(const Actor *actor) override;
 
 	void finishActorDraw() override;

@@ -23,6 +23,7 @@
 #define GRIM_COSTUME_H
 
 #include "common/rect.h"
+#include "common/util.h"
 #include "common/str.h"
 
 #include "math/matrix4.h"
@@ -84,7 +85,7 @@ public:
 	virtual int update(uint frameTime);
 	void animate();
 	virtual void draw();
-	void getBoundingBox(bool &onScreen, Common::Rect &rect);
+	Common::Pair<bool, Common::Rect> getBoundingBox();
 	void setPosRotate(const Math::Vector3d &pos, const Math::Angle &pitch,
 	                  const Math::Angle &yaw, const Math::Angle &roll);
 	Math::Matrix4 getMatrix() const;

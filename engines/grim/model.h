@@ -25,6 +25,7 @@
 #include "engines/grim/object.h"
 
 #include "common/rect.h"
+#include "common/util.h"
 
 #include "math/matrix4.h"
 #include "math/quat.h"
@@ -130,7 +131,7 @@ public:
 	void loadText(TextSplitter *ts, Material *materials[]);
 	void changeMaterials(Material *materials[]);
 	void draw() const;
-	void getBoundingBox(bool &onScreen, Common::Rect &rect) const;
+	Common::Pair<bool, Common::Rect> getBoundingBox() const;
 	void update();
 	Mesh();
 	~Mesh();
@@ -164,7 +165,7 @@ public:
 	~ModelNode();
 	void loadBinary(Common::SeekableReadStream *data, ModelNode *hierNodes, const Model::Geoset *g);
 	void draw() const;
-	void getBoundingBox(bool &onScreen, Common::Rect &rect) const;
+	Common::Pair<bool, Common::Rect> getBoundingBox() const;
 	void addChild(ModelNode *child);
 	void removeChild(ModelNode *child);
 	void setMatrix(const Math::Matrix4 &matrix);
@@ -206,6 +207,20 @@ public:
 	Math::Matrix4 _pivotMatrix;
 	Sprite *_sprite;
 };
+
+/**
+ * Combine two screen bounding boxes, ignoring any that are off screen.
+ */
+inline Common::Pair<bool, Common::Rect> mergeBoundingBoxes(const Common::Pair<bool, Common::Rect> &a, const Common::Pair<bool, Common::Rect> &b) {
+	if (!a.first)
+		return b;
+	if (!b.first)
+		return a;
+
+	Common::Rect rect = a.second;
+	rect.extend(b.second);
+	return Common::Pair<bool, Common::Rect>(true, rect);
+}
 
 } // end of namespace Grim
 

@@ -422,19 +422,23 @@ void Costume::draw() {
 			_components[i]->draw();
 }
 
-void Costume::getBoundingBox(bool &onScreen, Common::Rect &rect) {
+Common::Pair<bool, Common::Rect> Costume::getBoundingBox() {
+	Common::Pair<bool, Common::Rect> bbox(false, Common::Rect());
+
 	for (int i = 0; i < _numComponents; i++) {
 		if (_components[i] &&(_components[i]->isComponentType('M','M','D','L') ||
 							  _components[i]->isComponentType('M','O','D','L'))) {
 			ModelComponent *c = static_cast<ModelComponent *>(_components[i]);
-			c->getBoundingBox(onScreen, rect);
+			bbox = mergeBoundingBoxes(bbox, c->getBoundingBox());
 		}
 
 		if (_components[i] &&(_components[i]->isComponentType('m','e','s','h'))) {
 			EMIMeshComponent *c = static_cast<EMIMeshComponent *>(_components[i]);
-			c->getBoundingBox(onScreen, rect);
+			bbox = mergeBoundingBoxes(bbox, c->getBoundingBox());
 		}
 	}
+
+	return bbox;
 }
 
 int Costume::update(uint time) {

@@ -27,6 +27,7 @@
 
 #include "common/str.h"
 #include "common/rect.h"
+#include "common/util.h"
 
 #include "graphics/pixelformat.h"
 #include "graphics/renderer.h"
@@ -109,9 +110,9 @@ public:
 	 * FIXME: The implementations of these functions (for Grim and EMI, respectively)
 	 * are very similar. Needs refactoring. See issue #789.
 	 */
-	virtual bool getScreenBoundingBox(const Mesh *mesh, Common::Rect &rect) = 0;
-	virtual bool getScreenBoundingBox(const EMIModel *mesh, Common::Rect &rect) = 0;
-	virtual bool getActorScreenBBox(const Actor *actor, Common::Rect &rect) = 0;
+	virtual Common::Pair<bool, Common::Rect> getScreenBoundingBox(const Mesh *mesh) = 0;
+	virtual Common::Pair<bool, Common::Rect> getScreenBoundingBox(const EMIModel *mesh) = 0;
+	virtual Common::Pair<bool, Common::Rect> getActorScreenBBox(const Actor *actor) = 0;
 	virtual void startActorDraw(const Actor *act) = 0;
 	virtual void finishActorDraw() = 0;
 	virtual void setShadow(Shadow *shadow) = 0;

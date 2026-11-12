@@ -49,7 +49,7 @@ public:
 	int getNumNodes();
 	Model *getModel() { return _obj; }
 	void draw() override;
-	void getBoundingBox(bool &onScreen, Common::Rect &rect);
+	Common::Pair<bool, Common::Rect> getBoundingBox();
 
 protected:
 	Model *_obj;

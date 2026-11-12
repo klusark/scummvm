@@ -568,17 +568,8 @@ void Mesh::draw() const {
 		g_driver->enableLights();
 }
 
-void Mesh::getBoundingBox(bool &onScreen, Common::Rect &rect) const {
-	Common::Rect meshRect;
-	if (!g_driver->getScreenBoundingBox(this, meshRect))
-		return;
-
-	if (onScreen) {
-		rect.extend(meshRect);
-	} else {
-		rect = meshRect;
-		onScreen = true;
-	}
+Common::Pair<bool, Common::Rect> Mesh::getBoundingBox() const {
+	return g_driver->getScreenBoundingBox(this);
 }
 
 /**
@@ -683,7 +674,9 @@ void ModelNode::draw() const {
 	}
 }
 
-void ModelNode::getBoundingBox(bool &onScreen, Common::Rect &rect) const {
+Common::Pair<bool, Common::Rect> ModelNode::getBoundingBox() const {
+	Common::Pair<bool, Common::Rect> bbox(false, Common::Rect());
+
 	if (_sibling || _child) {
 		translateViewpointStart();
 	}
@@ -695,12 +688,12 @@ void ModelNode::getBoundingBox(bool &onScreen, Common::Rect &rect) const {
 		g_driver->translateViewpoint(_pivot);
 
 		if (_mesh && _meshVisible) {
-			_mesh->getBoundingBox(onScreen, rect);
+			bbox = mergeBoundingBoxes(bbox, _mesh->getBoundingBox());
 		}
 
 		if (_child) {
 			translateViewpointFinish();
-			_child->getBoundingBox(onScreen, rect);
+			bbox = mergeBoundingBoxes(bbox, _child->getBoundingBox());
 		}
 	}
 
@@ -708,8 +701,10 @@ void ModelNode::getBoundingBox(bool &onScreen, Common::Rect &rect) const {
 		translateViewpointFinish();
 	}
 	if (_sibling) {
-		_sibling->getBoundingBox(onScreen, rect);
+		bbox = mergeBoundingBoxes(bbox, _sibling->getBoundingBox());
 	}
+
+	return bbox;
 }
 
 void ModelNode::addChild(ModelNode *child) {

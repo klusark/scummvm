@@ -23,6 +23,7 @@
 #define GRIM_COMPONENT_H
 
 #include "common/rect.h"
+#include "common/util.h"
 
 #include "math/matrix4.h"
 

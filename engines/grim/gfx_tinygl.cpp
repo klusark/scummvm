@@ -262,9 +262,9 @@ static void shadowProjection(const Math::Vector3d &light, const Math::Vector3d &
 	tglMultMatrixf(mat);
 }
 
-bool GfxTinyGL::getScreenBoundingBox(const Mesh *model, Common::Rect &rect) {
+Common::Pair<bool, Common::Rect> GfxTinyGL::getScreenBoundingBox(const Mesh *model) {
 	if (_currentShadowArray)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
 	TGLfloat top = 0, right = 0, left = 0, bottom = 0;
 	bool hasVertex = false;
@@ -305,7 +305,7 @@ bool GfxTinyGL::getScreenBoundingBox(const Mesh *model, Common::Rect &rect) {
 	}
 
 	if (!hasVertex)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
 	float t = bottom;
 	bottom = _gameHeight - top;
@@ -321,18 +321,19 @@ bool GfxTinyGL::getScreenBoundingBox(const Mesh *model, Common::Rect &rect) {
 		bottom = _gameHeight - 1;
 
 	if (top >= _gameHeight || left >= _gameWidth || bottom < 0 || right < 0)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
+	Common::Rect rect;
 	rect.left = (int)left;
 	rect.top = (int)top;
 	rect.right = (int)right;
 	rect.bottom = (int)bottom;
-	return true;
+	return Common::Pair<bool, Common::Rect>(true, rect);
 }
 
-bool GfxTinyGL::getScreenBoundingBox(const EMIModel *model, Common::Rect &rect) {
+Common::Pair<bool, Common::Rect> GfxTinyGL::getScreenBoundingBox(const EMIModel *model) {
 	if (_currentShadowArray)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
 	TGLfloat top = 0, right = 0, left = 0, bottom = 0;
 	bool hasVertex = false;
@@ -370,7 +371,7 @@ bool GfxTinyGL::getScreenBoundingBox(const EMIModel *model, Common::Rect &rect) 
 	}
 
 	if (!hasVertex)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
 	float t = bottom;
 	bottom = _gameHeight - top;
@@ -386,16 +387,17 @@ bool GfxTinyGL::getScreenBoundingBox(const EMIModel *model, Common::Rect &rect) 
 		bottom = _gameHeight - 1;
 
 	if (top >= _gameHeight || left >= _gameWidth || bottom < 0 || right < 0)
-		return false;
+		return Common::Pair<bool, Common::Rect>(false, Common::Rect());
 
+	Common::Rect rect;
 	rect.left = (int)left;
 	rect.top = (int)(_gameHeight - bottom);
 	rect.right = (int)right;
 	rect.bottom = (int)(_gameHeight - top);
-	return true;
+	return Common::Pair<bool, Common::Rect>(true, rect);
 }
 
-bool GfxTinyGL::getActorScreenBBox(const Actor *actor, Common::Rect &rect) {
+Common::Pair<bool, Common::Rect> GfxTinyGL::getActorScreenBBox(const Actor *actor) {
 	// Get the actor's bounding box information (describes a 3D box)
 	Math::Vector3d bboxPos, bboxSize;
 	actor->getBBoxInfo(bboxPos, bboxSize);
@@ -420,6 +422,7 @@ bool GfxTinyGL::getActorScreenBBox(const Actor *actor, Common::Rect &rect) {
 	tglGetFloatv(TGL_PROJECTION_MATRIX, projection);
 	tglGetIntegerv(TGL_VIEWPORT, viewPort);
 
+	Common::Rect rect;
 	bool hasPoint = false;
 
 	// Project all of the points in the 3D bounding box
@@ -451,7 +454,7 @@ bool GfxTinyGL::getActorScreenBBox(const Actor *actor, Common::Rect &rect) {
 	// Restore the state
 	tglPopMatrix();
 
-	return true;
+	return Common::Pair<bool, Common::Rect>(true, rect);
 }
 
 void GfxTinyGL::startActorDraw(const Actor *actor) {
