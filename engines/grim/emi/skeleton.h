@@ -52,6 +52,12 @@ struct Joint {
 	Math::Quaternion _animQuat;
 	Math::Matrix4 _finalMatrix;
 	Math::Quaternion _finalQuat;
+	// Whether an active animation has a track for this joint, whatever its weight
+	bool _animated;
+	// The last pose an animation gave the joint (the bind pose until one does), which it keeps
+	// while no animation has a track for it
+	Math::Matrix4 _heldMatrix;
+	Math::Quaternion _heldQuat;
 };
 
 struct JointAnimation {
@@ -93,6 +99,17 @@ public:
 	Joint *getParentJoint(const Joint *j) const;
 	int getJointIndex(const Joint *j) const;
 	AnimationLayer* getLayer(int priority) const;
+
+	// Quaternions as plain 4-vectors, for blending them the way the original does
+	static Math::Quaternion scaleQuat(const Math::Quaternion &q, float s) {
+		return Math::Quaternion(q.x() * s, q.y() * s, q.z() * s, q.w() * s);
+	}
+	static Math::Quaternion addQuat(const Math::Quaternion &a, const Math::Quaternion &b) {
+		return Math::Quaternion(a.x() + b.x(), a.y() + b.y(), a.z() + b.z(), a.w() + b.w());
+	}
+	static float dotQuat(const Math::Quaternion &a, const Math::Quaternion &b) {
+		return a.x() * b.x() + a.y() * b.y() + a.z() * b.z() + a.w() * b.w();
+	}
 private:
 	AnimationLayer *_animLayers;
 	Common::List<AnimationStateEmi*> _activeAnims;

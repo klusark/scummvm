@@ -172,6 +172,14 @@ void AnimationStateEmi::update(uint time) {
 }
 
 void AnimationStateEmi::computeWeights() {
+	// The joints this animation has tracks for no longer rest on their bind pose, even while it is
+	// faded out (see Skeleton::animate())
+	for (int bone = 0; bone < _anim->_numBones; ++bone) {
+		int jointIndex = _boneJoints[bone];
+		if (jointIndex != -1)
+			_skel->_joints[jointIndex]._animated = true;
+	}
+
 	if (_fade <= 0.0f)
 		return;
 
@@ -197,9 +205,8 @@ void AnimationStateEmi::animate() {
 	if (_fade <= 0.0f)
 		return;
 
-	if (_time < 0)
-		return;
-
+	// (an animation that has not had its first update yet, _time < 0, is at its first keys: its weight
+	// is already in the sums of computeWeights(), so it must add its rotation and translation too)
 	for (int bone = 0; bone < _anim->_numBones; ++bone) {
 		Bone &curBone = _anim->_bones[bone];
 		int jointIndex = _boneJoints[bone];
@@ -214,12 +221,11 @@ void AnimationStateEmi::animate() {
 			int keyfIdx = -1;
 			Math::Quaternion quat;
 
-			// Normalize the weight so that the sum of applied weights will equal 1.
-			float normalizedRotWeight = _fade;
-			if (jointAnim._rotWeight > 1.0f) {
-				// Note: Division by unnormalized sum of weights.
+			// The original averages the rotations of a priority level: each one weighted by its share of
+			// the level's sum of weights (Skeleton::animate() weighs the level itself by that sum)
+			float normalizedRotWeight = 0.0f;
+			if (jointAnim._rotWeight > 0.0f)
 				normalizedRotWeight = _fade / jointAnim._rotWeight;
-			}
 
 			for (int curKeyFrame = 0; curKeyFrame < curBone._count; curKeyFrame++) {
 				if (curBone._rotations[curKeyFrame]._time >= _time) {
@@ -241,10 +247,13 @@ void AnimationStateEmi::animate() {
 				quat = curBone._rotations[curBone._count - 1]._quat;
 			}
 
+			// A weighted sum of the quaternions, each turned to the side of the sum so far, not normalized
+			// (as the original does)
 			Math::Quaternion &quatFinal = jointAnim._quat;
-			quat = target->_quat.inverse() * quat;
-			quat = quatFinal * quat;
-			quatFinal = quatFinal.slerpQuat(quat, normalizedRotWeight);
+			Math::Quaternion weighted = Skeleton::scaleQuat(quat, normalizedRotWeight);
+			if (Skeleton::dotQuat(quatFinal, weighted) < 0.0f)
+				weighted = Skeleton::scaleQuat(weighted, -1.0f);
+			quatFinal = Skeleton::addQuat(quatFinal, weighted);
 		}
 
 		if (curBone._translations) {

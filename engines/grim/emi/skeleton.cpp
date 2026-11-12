@@ -83,6 +83,9 @@ void Skeleton::initBone(int index) {
 		// Might be the other way around.
 		_joints[index]._absMatrix =  _joints[index]._absMatrix * _joints[index]._relMatrix;
 	}
+	// (a joint that was never animated rests on its bind pose)
+	_joints[index]._heldMatrix = _joints[index]._relMatrix;
+	_joints[index]._heldQuat = _joints[index]._quat;
 }
 
 void Skeleton::initBones() {
@@ -102,7 +105,7 @@ void Skeleton::resetAnim() {
 		for (int j = 0; j < _numJoints; ++j) {
 			JointAnimation &jointAnim = layer._jointAnims[j];
 			jointAnim._pos.set(0.f, 0.f, 0.f);
-			jointAnim._quat.set(0.f, 0.f, 0.f, 1.f);
+			jointAnim._quat.set(0.f, 0.f, 0.f, 0.f);
 			jointAnim._transWeight = 0.0f;
 			jointAnim._rotWeight = 0.0f;
 		}
@@ -110,6 +113,7 @@ void Skeleton::resetAnim() {
 	for (int i = 0; i < _numJoints; ++i) {
 		_joints[i]._animMatrix = _joints[i]._relMatrix;
 		_joints[i]._animQuat = _joints[i]._quat;
+		_joints[i]._animated = false;
 	}
 }
 
@@ -131,22 +135,18 @@ void Skeleton::animate() {
 	// Blend the layers together in priority order to produce the final result. Highest priority
 	// layer will get as much weight as it wants, while the next highest priority will get the
 	// amount that remains and so on.
+	//
+	// The original does not blend the tracks of a joint into its bind pose: once an animation has a
+	// track for the joint, the position comes from the translation tracks alone, starting from the
+	// origin, and the rotation from the rotation tracks alone, starting from a zero quaternion. A
+	// joint animated by rotation tracks only loses its bind translation, e.g. the stove lever in the
+	// kitchen of the Lua Bar, whose rotate bone sits 0.354 in front of the stove in the bind pose.
 	for (int i = 0; i < _numJoints; ++i) {
 		float remainingTransWeight = 1.0f;
-		float remainingRotWeight = 1.0f;
 
 		for (int j = MAX_ANIMATION_LAYERS - 1; j >= 0; --j) {
 			AnimationLayer &layer = _animLayers[j];
 			JointAnimation &jointAnim = layer._jointAnims[i];
-
-			if (remainingRotWeight > 0.0f && jointAnim._rotWeight != 0.0f) {
-				Math::Vector3d pos = _joints[i]._animMatrix.getPosition();
-				_joints[i]._animQuat = _joints[i]._animQuat.slerpQuat(_joints[i]._animQuat * jointAnim._quat, remainingRotWeight);
-				_joints[i]._animQuat.toMatrix(_joints[i]._animMatrix);
-				_joints[i]._animMatrix.setPosition(pos);
-
-				remainingRotWeight *= 1.0f - jointAnim._rotWeight;
-			}
 
 			if (remainingTransWeight > 0.0f && jointAnim._transWeight != 0.0f) {
 				Math::Vector3d pos = _joints[i]._animMatrix.getPosition();
@@ -156,19 +156,63 @@ void Skeleton::animate() {
 				remainingTransWeight *= 1.0f - jointAnim._transWeight;
 			}
 
-			if (remainingRotWeight <= 0.0f && remainingTransWeight <= 0.0f)
+			if (remainingTransWeight <= 0.0f)
 				break;
 		}
 
-		// The original does not blend the translation tracks of a joint into its bind position:
-		// once an animation has a track for the joint, its position comes from the translation
-		// tracks alone, starting from the origin. A joint animated by rotation tracks only loses
-		// its bind translation, e.g. the stove lever in the kitchen of the Lua Bar, whose rotate
-		// bone sits 0.354 in front of the stove in the bind pose.
-		bool animated = remainingRotWeight < 1.0f || remainingTransWeight < 1.0f;
-		if (animated && remainingTransWeight > 0.0f) {
+		if (_joints[i]._animated) {
+			// The rotation as the original blends it: the levels down to the first one whose
+			// weights add up to 1 or more, then from the lowest of them up, each one weighted
+			// by its sum of weights against what is below it: q = s * level + (1 - s) * q, the
+			// level turned to the side of q. The sum starts at the zero quaternion and is not
+			// normalized: a joint whose rotations weigh less than 1 in all (an animation fading in
+			// or out with nothing under it) is drawn with the matrix of a shorter quaternion,
+			// (1 - s^2) * I + s^2 * R for a single rotation R, and with no rotation weight at all
+			// it has no rotation.
+			int lowest = -1;
+			for (int j = MAX_ANIMATION_LAYERS - 1; j >= 0; --j) {
+				float weight = _animLayers[j]._jointAnims[i]._rotWeight;
+				if (weight > 0.0f) {
+					lowest = j;
+					if (weight >= 1.0f)
+						break;
+				}
+			}
+			Math::Quaternion rot(0.f, 0.f, 0.f, 0.f);
+			if (lowest != -1) {
+				for (int j = lowest; j < MAX_ANIMATION_LAYERS; ++j) {
+					const JointAnimation &jointAnim = _animLayers[j]._jointAnims[i];
+					float weight = jointAnim._rotWeight;
+					if (weight <= 0.0f)
+						continue;
+					if (weight >= 1.0f) {
+						rot = jointAnim._quat;
+					} else {
+						Math::Quaternion level = scaleQuat(jointAnim._quat, weight);
+						rot = scaleQuat(rot, 1.0f - weight);
+						if (dotQuat(rot, level) < 0.0f)
+							level = scaleQuat(level, -1.0f);
+						rot = addQuat(rot, level);
+					}
+				}
+			}
 			Math::Vector3d pos = _joints[i]._animMatrix.getPosition();
-			_joints[i]._animMatrix.setPosition(pos - _joints[i]._relMatrix.getPosition() * remainingTransWeight);
+			_joints[i]._animQuat = rot;
+			rot.toMatrix(_joints[i]._animMatrix);
+			_joints[i]._animMatrix.setPosition(pos);
+
+			if (remainingTransWeight > 0.0f) {
+				Math::Vector3d pos = _joints[i]._animMatrix.getPosition();
+				_joints[i]._animMatrix.setPosition(pos - _joints[i]._relMatrix.getPosition() * remainingTransWeight);
+			}
+
+			_joints[i]._heldMatrix = _joints[i]._animMatrix;
+			_joints[i]._heldQuat = _joints[i]._animQuat;
+		} else {
+			// The original does not touch a joint that no animation has a track for: it keeps the
+			// last pose it was given, e.g. a lever whose chore was stopped stays where it was
+			_joints[i]._animMatrix = _joints[i]._heldMatrix;
+			_joints[i]._animQuat = _joints[i]._heldQuat;
 		}
 	}
 
