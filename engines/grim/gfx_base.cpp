@@ -36,11 +36,13 @@
  */
 
 #include "engines/grim/gfx_base.h"
+#include "engines/grim/actor.h"
 #include "engines/grim/savegame.h"
 #include "engines/grim/bitmap.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/model.h"
 #include "engines/grim/set.h"
+#include "engines/grim/emi/modelemi.h"
 
 #include "graphics/surface.h"
 
@@ -268,6 +270,133 @@ void GfxBase::prepareMovieFrame(Graphics::Surface *frame, const byte *palette) {
 		converted->free();
 		delete converted;
 	}
+}
+
+void GfxBase::addToScreenBoundingBox(const Math::Matrix4 &mvpMatrix, const Math::Vector3d &obj, double &left, double &top, double &right, double &bottom) const {
+	Math::Vector4d v = Math::Vector4d(obj.x(), obj.y(), obj.z(), 1.0f);
+	v = mvpMatrix * v;
+	if (v.w() == 0.0f)
+		return;
+	v /= v.w();
+
+	double winX = (1 + v.x()) / 2.0f * _gameWidth;
+	double winY = (1 - v.y()) / 2.0f * _gameHeight;
+
+	left = MIN(left, winX);
+	right = MAX(right, winX);
+	top = MIN(top, winY);
+	bottom = MAX(bottom, winY);
+}
+
+void GfxBase::finishScreenBoundingBox(double left, double top, double right, double bottom, int *x1, int *y1, int *x2, int *y2) const {
+	if (left < 0)
+		left = 0;
+	if (right >= _gameWidth)
+		right = _gameWidth - 1;
+	if (top < 0)
+		top = 0;
+	if (bottom >= _gameHeight)
+		bottom = _gameHeight - 1;
+
+	if (top >= _gameHeight || left >= _gameWidth || bottom < 0 || right < 0) {
+		*x1 = -1;
+		*y1 = -1;
+		*x2 = -1;
+		*y2 = -1;
+		return;
+	}
+
+	*x1 = (int)left;
+	*y1 = (int)top;
+	*x2 = (int)right;
+	*y2 = (int)bottom;
+}
+
+void GfxBase::getScreenBoundingBox(const Mesh *model, int *x1, int *y1, int *x2, int *y2) {
+	if (_currentShadowArray) {
+		*x1 = -1;
+		*y1 = -1;
+		*x2 = -1;
+		*y2 = -1;
+		return;
+	}
+
+	Math::Matrix4 mvpMatrix = getActorMVPMatrix();
+
+	double top = 1000;
+	double right = -1000;
+	double left = 1000;
+	double bottom = -1000;
+
+	for (int i = 0; i < model->_numFaces; i++) {
+		for (int j = 0; j < model->_faces[i].getNumVertices(); j++) {
+			const float *pVertices = model->_vertices + 3 * model->_faces[i].getVertex(j);
+			Math::Vector3d obj(pVertices[0], pVertices[1], pVertices[2]);
+			addToScreenBoundingBox(mvpMatrix, obj, left, top, right, bottom);
+		}
+	}
+
+	finishScreenBoundingBox(left, top, right, bottom, x1, y1, x2, y2);
+}
+
+void GfxBase::getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, int *x2, int *y2) {
+	if (_currentShadowArray) {
+		*x1 = -1;
+		*y1 = -1;
+		*x2 = -1;
+		*y2 = -1;
+		return;
+	}
+
+	Math::Matrix4 mvpMatrix = getActorMVPMatrix();
+
+	double top = 1000;
+	double right = -1000;
+	double left = 1000;
+	double bottom = -1000;
+
+	for (uint i = 0; i < model->_numFaces; i++) {
+		uint16 *indices = (uint16 *)model->_faces[i]._indexes;
+
+		for (uint j = 0; j < model->_faces[i]._faceLength * 3; j++)
+			addToScreenBoundingBox(mvpMatrix, model->_drawVertices[indices[j]], left, top, right, bottom);
+	}
+
+	finishScreenBoundingBox(left, top, right, bottom, x1, y1, x2, y2);
+}
+
+void GfxBase::getActorScreenBBox(const Actor *actor, Common::Point &p1, Common::Point &p2) {
+	// Get the actor's bounding box information (describes a 3D box)
+	Math::Vector3d bboxPos, bboxSize;
+	actor->getBBoxInfo(bboxPos, bboxSize);
+
+	// Translate the bounding box to the actor's position
+	Math::Matrix4 m = actor->getFinalMatrix();
+	bboxPos = bboxPos + actor->getWorldPos();
+
+	Math::Matrix4 mvpMatrix = getProjection() * getModelView();
+
+	// Values outside of the screen range are kept when nothing projects
+	double top = 1000;
+	double right = -1000;
+	double left = 1000;
+	double bottom = -1000;
+
+	// Project all of the points in the 3D bounding box
+	for (int x = 0; x < 2; x++) {
+		for (int y = 0; y < 2; y++) {
+			for (int z = 0; z < 2; z++) {
+				Math::Vector3d added(bboxSize.x() * 0.5f * (x * 2 - 1), bboxSize.y() * 0.5f * (y * 2 - 1), bboxSize.z() * 0.5f * (z * 2 - 1));
+				m.transform(&added, false);
+				addToScreenBoundingBox(mvpMatrix, bboxPos + added, left, top, right, bottom);
+			}
+		}
+	}
+
+	p1.x = left;
+	p1.y = top;
+	p2.x = right;
+	p2.y = bottom;
 }
 
 }
