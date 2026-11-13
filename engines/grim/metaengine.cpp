@@ -192,9 +192,6 @@ Common::Error GrimMetaEngine::createInstance(OSystem *syst, Engine **engine, con
 #endif
 	}
 
-	if (gd->desc.flags & ADGF_REMASTERED)
-		return Common::Error(Common::kUnsupportedGameidError, _s("Grim Fandango Remastered is not supported by this version of the Grim engine"));
-
 	*engine = new GrimEngine(syst, gd->desc.flags, gd->gameType, gd->desc.platform, gd->desc.language);
 
 	return Common::kNoError;
@@ -224,8 +221,17 @@ static Common::String getEmiSavePrefix(const char *target) {
 
 Common::String GrimMetaEngine::getSavegameFile(int saveGameIdx, const char *target) const {
 	Common::String gameId = target ? ConfMan.get("gameid", target) : Common::String();
+	Common::String extra = target ? ConfMan.get("extra", target) : Common::String();
 	bool isEmi = gameId == "monkey4";
+	bool isRemastered = extra.contains("Remastered");
 	Common::String prefix = getEmiSavePrefix(target);
+
+	if (isRemastered) {
+		if (saveGameIdx == kSavegameFilePattern)
+			return Common::String("grim-remastered-savedata####/grim.gsv");
+
+		return Common::String::format("grim-remastered-savedata%04d/grim.gsv", saveGameIdx);
+	}
 
 	if (saveGameIdx == kSavegameFilePattern)
 		return isEmi ? Common::String::format("%s###.gsv", prefix.c_str()) : Common::String("grim##.gsv");
@@ -257,6 +263,7 @@ SaveStateList GrimMetaEngine::listSaves(const char *target) const {
 	Common::String gameId = ConfMan.get("gameid", target);
 	Common::String extra = ConfMan.get("extra", target);
 	const bool isDemo = extra.contains("Demo");
+	const bool isRemastered = extra.contains("Remastered");
 	Common::SaveFileManager *saveFileMan = g_system->getSavefileManager();
 	Common::StringArray filenames;
 	const Common::String prefix = getEmiSavePrefix(target);
@@ -265,6 +272,9 @@ SaveStateList GrimMetaEngine::listSaves(const char *target) const {
 
 	if (isDemo)
 		return saveList; // Demos do not support saving
+
+	if (isRemastered)
+		return saveList; // The save folders of the remastered are not listed yet
 
 	filenames = saveFileMan->listSavefiles(pattern);
 
@@ -293,8 +303,12 @@ SaveStateList GrimMetaEngine::listSaves(const char *target) const {
 
 SaveStateDescriptor GrimMetaEngine::querySaveMetaInfos(const char *target, int slot) const {
 	Common::String gameId = ConfMan.get("gameid", target);
+	Common::String extra = ConfMan.get("extra", target);
 	Common::SaveFileManager *saveFileMan = g_system->getSavefileManager();
 	Common::String fileName = getSavegameFile(slot, target);
+
+	if (extra.contains("Remastered"))
+		return SaveStateDescriptor();
 
 	Common::SeekableReadStream *file = saveFileMan->openForLoading(fileName);
 	Common::Array<Common::String> strings;

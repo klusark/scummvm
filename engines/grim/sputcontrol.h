@@ -35,6 +35,7 @@ class StdControl;
 
 enum {
 	kNumControlSymbols = 167,
+	kNumControlSymbolsRemastered = 163,
 	kMaxControlCallbacks = 8
 };
 
@@ -54,7 +55,7 @@ public:
 
 class SputControl : public SputControlCallback {
 public:
-	SputControl(RenderDroid *rd, SputRoom *sputRoom, StdControl *stdControl);
+	SputControl(RenderDroid *rd, SputRoom *sputRoom, StdControl *stdControl, bool remastered);
 
 	void setGrimEngine(GrimEngine *grim) { _grim = grim; }
 
@@ -72,7 +73,7 @@ public:
 	int shutdown();
 
 	ControlSymbol *getSymbols() { return _controlSymbols; }
-	int getNumSymbols() const { return kNumControlSymbols; }
+	int getNumSymbols() const { return _numSymbols; }
 
 private:
 	int standardHandler();
@@ -87,6 +88,7 @@ private:
 	int _started;
 	int _controlOpen;
 	int _numCallbacks;
+	int _numSymbols;
 	SputControlCallback *_callbacks[kMaxControlCallbacks];
 	ControlSymbol _controlSymbols[kNumControlSymbols];
 };

@@ -295,16 +295,26 @@ void SputActorModule::sayLine(SputActor *actor, const char *msgId, int voiceStre
 
 	if (translation[0]) {
 		static const char *const extensions[4] = { "wvc", "wav", "imc", "imu" };
+		Common::String baseNames[2];
+		int numBaseNames = 0;
 		bool found = false;
 
-		for (int i = 0; i < 4 && !found; i++) {
-			Common::String fileName = Common::String::format("%s.%s", translation, extensions[i]);
-			Common::SeekableReadStream *file = _hs->openFile(fileName.c_str());
+		// The remastered has a voice per language: the prefixed name first, then the plain one
+		if (g_grim->isRemastered())
+			baseNames[numBaseNames++] = Common::String::format("%s_%s", g_grim->getLanguageCode(), translation);
 
-			if (file) {
-				delete file;
-				Common::strlcpy(voiceFile, fileName.c_str(), sizeof(voiceFile));
-				found = true;
+		baseNames[numBaseNames++] = translation;
+
+		for (int n = 0; n < numBaseNames && !found; n++) {
+			for (int i = 0; i < 4 && !found; i++) {
+				Common::String fileName = Common::String::format("%s.%s", baseNames[n].c_str(), extensions[i]);
+				Common::SeekableReadStream *file = _hs->openFile(fileName.c_str());
+
+				if (file) {
+					delete file;
+					Common::strlcpy(voiceFile, fileName.c_str(), sizeof(voiceFile));
+					found = true;
+				}
 			}
 		}
 

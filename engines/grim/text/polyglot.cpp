@@ -49,6 +49,7 @@ void Polyglot::shutdown() {
 
 	delete[] _languageLine;
 	_languageLine = nullptr;
+	_lineCount = 0;
 }
 
 void Polyglot::configure(const char *tabFile) {

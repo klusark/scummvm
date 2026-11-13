@@ -32,6 +32,8 @@ class SeekableReadStream;
 
 namespace Grim {
 
+class HdFont;
+class HdText;
 class Text;
 
 extern const byte systemFontData[];
@@ -69,6 +71,7 @@ struct BlastTextFont {
 	uint16 *charMap;
 	BlastTextGlyph *glyphs;
 	byte *pixels;
+	const HdFont *hdFont;
 };
 
 struct TextParams {
@@ -84,13 +87,18 @@ struct TextParams {
 	uint scaleY;
 	int flags;
 	byte *colorMap;
+	int coords;
+	int highlight;
+	float alpha;
 };
 
 class BlastText {
 public:
 	BlastText(Text *text);
+	~BlastText();
 
 	BlastTextSurface *getSurface() { return &_surface; }
+	HdText *getHdText();
 
 	int load(const char *fileName, BlastTextFont *&font);
 	int initFont(BlastTextFont *&font);
@@ -110,6 +118,7 @@ public:
 
 private:
 	Text *_text;
+	HdText *_hdText;
 	BlastTextSurface _surface;
 	byte _charMap[256];
 };

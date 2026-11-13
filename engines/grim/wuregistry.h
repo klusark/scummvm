@@ -26,6 +26,8 @@
 #include "common/scummsys.h"
 #include "common/str.h"
 
+#include "engines/grim/remastered/registry_unlocks.h"
+
 namespace Grim {
 
 struct WuRegistryValue {
@@ -60,6 +62,14 @@ public:
 	int saveStr(const char *valueName, const char *data);
 	int getStr(const char *valueName, char *data, uint size, const char *defaultValue);
 	uint queryType(const char *valueName);
+	void saveRegistry();
+
+	void unlockCutscene(int index);
+	bool isCutsceneUnlocked(int index);
+	void unlockConcept(int index);
+	bool isConceptUnlocked(int index);
+	void resetUnlocks();
+	bool importRegistrySav(Common::SeekableReadStream *stream);
 
 	static int compareNames(const void *a, const void *b);
 
@@ -74,6 +84,7 @@ private:
 	Common::Array<WuRegistryValue> _values;
 	char **_valueNames;
 	uint _numValues;
+	RegistryUnlocks _unlocks;
 };
 
 } // End of namespace Grim

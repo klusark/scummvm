@@ -462,7 +462,7 @@ void MD5Check::init() {
 				MD5SUM("sound001.lab", sound001)
 			}
 			MD5SUM("grimdemo.mus", grimdemo)
-		} else {
+		} else if (!g_grim->isRemastered()) {
 			MD5SUM("gfupd101.exe", gfupd101)
 			MD5SUM("year4mus.lab", year4mus)
 			MD5SUM("year3mus.lab", year3mus)
@@ -584,7 +584,7 @@ bool MD5Check::checkFiles() {
 
 void MD5Check::startCheckFiles() {
 	init();
-	_iterator = 0;
+	_iterator = _files->empty() ? -1 : 0;
 }
 
 bool MD5Check::advanceCheck(int *pos, int *total) {

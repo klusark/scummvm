@@ -344,6 +344,55 @@ protected:
 	DECLARE_LUA_OPCODE(IrisClear);
 	DECLARE_LUA_OPCODE(LightMgrShutdown);
 
+	// Opcodes that only the remastered has, see lua_v1_remastered.cpp
+	DECLARE_LUA_OPCODE(GetPlatform);
+	DECLARE_LUA_OPCODE(UnlockAchievement);
+	DECLARE_LUA_OPCODE(ResetAchievements);
+	DECLARE_LUA_OPCODE(AreAchievementsInstalled);
+	DECLARE_LUA_OPCODE(GlobalSaveResolved);
+	DECLARE_LUA_OPCODE(StartCheckOfCrossSaveStatus);
+	DECLARE_LUA_OPCODE(GetCrossSaveStatus);
+	DECLARE_LUA_OPCODE(UnlockCutscene);
+	DECLARE_LUA_OPCODE(IsCutsceneUnlocked);
+	DECLARE_LUA_OPCODE(UnlockConcept);
+	DECLARE_LUA_OPCODE(IsConceptUnlocked);
+	DECLARE_LUA_OPCODE(SetActorBWMode);
+	DECLARE_LUA_OPCODE(SetActorHKHackMode);
+	DECLARE_LUA_OPCODE(ReadRegistryIntValue);
+	DECLARE_LUA_OPCODE(SaveRegistryToDisk);
+	DECLARE_LUA_OPCODE(EnableBackgroundRender);
+	DECLARE_LUA_OPCODE(ImGetCommentaryVol);
+	DECLARE_LUA_OPCODE(ImSetCommentaryVol);
+	DECLARE_LUA_OPCODE(SetResolutionScaling);
+	DECLARE_LUA_OPCODE(SetAdvancedLighting);
+	DECLARE_LUA_OPCODE(SetGameRenderMode);
+	DECLARE_LUA_OPCODE(GetGameRenderMode);
+	DECLARE_LUA_OPCODE(GetSystemTime);
+	DECLARE_LUA_OPCODE(SetLanguage);
+	DECLARE_LUA_OPCODE(GetLanguage);
+	DECLARE_LUA_OPCODE(GetLanguageCount);
+
+	// Mouse, hotspots, path finder and dialog log of the remastered, see lua_v1_mouse.cpp
+	DECLARE_LUA_OPCODE(WalkActorToMouseTarget);
+	DECLARE_LUA_OPCODE(PathfinderMode);
+	DECLARE_LUA_OPCODE(DialogLogGetLineCount);
+	DECLARE_LUA_OPCODE(DialogLogGetLine);
+	DECLARE_LUA_OPCODE(DialogLogAddLine);
+	DECLARE_LUA_OPCODE(QueryActiveHotspots);
+	DECLARE_LUA_OPCODE(GetFloorWalkPos);
+	DECLARE_LUA_OPCODE(GetSelectedDialog);
+	DECLARE_LUA_OPCODE(SetCursor);
+	DECLARE_LUA_OPCODE(ProjectToAxis);
+	DECLARE_LUA_OPCODE(ShowCursor);
+	DECLARE_LUA_OPCODE(AddHotspot);
+	DECLARE_LUA_OPCODE(RemoveHotspot);
+	DECLARE_LUA_OPCODE(GetCursorPosition);
+	DECLARE_LUA_OPCODE(CursorAnimation);
+	DECLARE_LUA_OPCODE(UpdateHotspot);
+	DECLARE_LUA_OPCODE(LinkHotspot);
+	DECLARE_LUA_OPCODE(PreloadCursors);
+	DECLARE_LUA_OPCODE(CursorMovieEnabled);
+
 	// Not ported yet (empty stubs in lua_v1.cpp)
 	DECLARE_LUA_OPCODE(EnginePause);
 	DECLARE_LUA_OPCODE(EngineResume);
@@ -421,6 +470,7 @@ private:
 	SputActor *getSputActor(lua_Object obj);
 	void pushSputActor(int handle);
 	bool hasActorExtra(SputActor *actor, const char *opcode);
+	lua_Object makeVectorTable(const float *vector);
 	bool findCostumeInStack(lua_Object obj, CostumeNode *stack, CostumeNode **found);
 	bool isImage(lua_Object obj);
 	int findImage(lua_Object obj);
@@ -439,6 +489,8 @@ private:
 	StdVBuffer *_images[kMaxImages];
 	int _nextImageHandle;
 	int _nextObjectStateHandle;
+	float _resolutionScaling;
+	float _advancedLighting;
 	Common::Array<ResRef *> _lockedFontRefs;
 };
 

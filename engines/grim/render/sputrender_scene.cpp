@@ -29,6 +29,7 @@
 #include "engines/grim/lua_v1_opcodes/lua_v1.h"
 #include "engines/grim/renderdroid/rd.h"
 #include "engines/grim/actor/sputactor.h"
+#include "engines/grim/remastered/hdcanvas.h"
 #include "engines/grim/sputobjectstate.h"
 #include "engines/grim/render/sputprimitive.h"
 #include "engines/grim/render/sputrender.h"
@@ -162,6 +163,25 @@ void SputRender::useSetup(Room *room, int setup) {
 
 void SputRender::update() {
 	int mode = _grim->getLibMode();
+	bool remastered = _grim->isRemastered();
+
+	if (remastered) {
+		// Nothing is drawn before the engine runs or while it exits
+		if (mode == 0 || mode == GrimEngine::kLibModeExiting)
+			return;
+
+		_grim->getHdCanvas()->beginFrame();
+
+		if (mode != 3)
+			_clearedBehindMovie = 0;
+
+		if (mode == 3) {
+			if (!updateMovieRemastered())
+				return;
+
+			mode = _grim->getLibMode();
+		}
+	}
 
 	switch (mode) {
 	case 0:
@@ -222,8 +242,12 @@ void SputRender::update() {
 
 	Room *room = _sputRoom->getCurrentRoom();
 
-	if (!room)
+	if (!room) {
+		if (remastered)
+			drawNoRoomRemastered();
+
 		return;
+	}
 
 	if (_lastRoom != room || room->curSetup != _curView || _reset) {
 		// The demo doesn't free the dirty rects and has no post camera change handler
@@ -429,6 +453,12 @@ void SputRender::update() {
 			rect.height = 480;
 			markAllPagesDirty(&rect, 0);
 		}
+	}
+
+	if (remastered) {
+		drawOverlayLayers(_grim->getLibMode());
+		_reset = 0;
+		return;
 	}
 
 	_stdDisplay->vBufferLock(_backBuffer);

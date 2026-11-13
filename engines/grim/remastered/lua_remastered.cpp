@@ -19,674 +19,676 @@
  *
  */
 
-#include "common/endian.h"
-#include "common/savefile.h"
-#include "common/config-manager.h"
+#include "common/textconsole.h"
+#include "common/util.h"
 
+#include "engines/grim/grim.h"
+#include "engines/grim/remastered/hdcanvas.h"
 #include "engines/grim/remastered/lua_remastered.h"
 #include "engines/grim/remastered/overlay.h"
-#include "engines/grim/remastered/hotspot.h"
-#include "engines/grim/grim.h"
-// LEGACY: #include "engines/grim/font.h"
-// LEGACY: #include "engines/grim/resource.h"
-// LEGACY: #include "engines/grim/registry.h"
-// LEGACY: #include "engines/grim/localize.h"
 #include "engines/grim/lua/lauxlib.h"
-#include "engines/grim/lua/luadebug.h"
 
 namespace Grim {
 
-void Lua_Remastered::WidescreenCorrectionFactor() {
-	warning("Stub function: WidescreenCorrectionFactor, returns 1");
-	lua_pushnumber(1);
+// The canvas of the overlays and the text
+enum {
+	kCanvasWidth = 1920,
+	kCanvasHeight = 1080
+};
+
+// Values of the save status that the scripts wait for
+enum {
+	kSaveStatusError = 1,
+	kFindSaveGamesDone = 1
+};
+
+// The main table has the order of the remastered. A saved Lua state stores every C function
+// as (number of lists registered after its list << 16) | index in the list, and the id model
+// in lua/lapi.cpp lists the same names in the same order.
+static struct luaL_reg remasteredMainOpcodes[] = {
+	{ "EnginePause", LUA_OPCODE(Lua_V1, EnginePause) },
+	{ "EngineResume", LUA_OPCODE(Lua_V1, EngineResume) },
+	{ "EngineDisplay", LUA_OPCODE(Lua_V1, EngineDisplay) },
+	{ "PrintStack", LUA_OPCODE(Lua_Remastered, PrintStack) },
+	{ "GetPlatform", LUA_OPCODE(Lua_V1, GetPlatform) },
+	{ "SearchForFileOrSwapCDs", LUA_OPCODE(Lua_V1, SearchForFileOrSwapCDs) },
+	{ "CheckForFile", LUA_OPCODE(Lua_V1, CheckForFile) },
+	{ "New", LUA_OPCODE(Lua_Remastered, New) },
+	{ "Load", LUA_OPCODE(Lua_Remastered, Load) },
+	{ "Save", LUA_OPCODE(Lua_Remastered, Save) },
+	{ "Erase", LUA_OPCODE(Lua_Remastered, Erase) },
+	{ "GetSaveStatus", LUA_OPCODE(Lua_Remastered, GetSaveStatus) },
+	{ "StartCheckOfCrossSaveStatus", LUA_OPCODE(Lua_V1, StartCheckOfCrossSaveStatus) },
+	{ "GetCrossSaveStatus", LUA_OPCODE(Lua_V1, GetCrossSaveStatus) },
+	{ "UnlockAchievement", LUA_OPCODE(Lua_V1, UnlockAchievement) },
+	{ "ResetAchievements", LUA_OPCODE(Lua_V1, ResetAchievements) },
+	{ "AreAchievementsInstalled", LUA_OPCODE(Lua_V1, AreAchievementsInstalled) },
+	{ "GlobalSaveResolved", LUA_OPCODE(Lua_V1, GlobalSaveResolved) },
+	{ "UnlockCutscene", LUA_OPCODE(Lua_V1, UnlockCutscene) },
+	{ "IsCutsceneUnlocked", LUA_OPCODE(Lua_V1, IsCutsceneUnlocked) },
+	{ "UnlockConcept", LUA_OPCODE(Lua_V1, UnlockConcept) },
+	{ "IsConceptUnlocked", LUA_OPCODE(Lua_V1, IsConceptUnlocked) },
+	{ "SetActorColormap", LUA_OPCODE(Lua_V1, SetActorColormap) },
+	{ "GetActorCostume", LUA_OPCODE(Lua_V1, GetActorCostume) },
+	{ "SetActorCostume", LUA_OPCODE(Lua_V1, SetActorCostume) },
+	{ "GetActorScale", LUA_OPCODE(Lua_V1, GetActorScale) },
+	{ "SetActorScale", LUA_OPCODE(Lua_V1, SetActorScale) },
+	{ "GetActorTimeScale", LUA_OPCODE(Lua_V1, GetActorTimeScale) },
+	{ "SetActorTimeScale", LUA_OPCODE(Lua_V1, SetActorTimeScale) },
+	{ "GetActorNodeLocation", LUA_OPCODE(Lua_V1, GetActorNodeLocation) },
+	{ "SetActorWalkChore", LUA_OPCODE(Lua_V1, SetActorWalkChore) },
+	{ "SetActorTurnChores", LUA_OPCODE(Lua_V1, SetActorTurnChores) },
+	{ "SetActorRestChore", LUA_OPCODE(Lua_V1, SetActorRestChore) },
+	{ "SetActorMumblechore", LUA_OPCODE(Lua_V1, SetActorMumblechore) },
+	{ "SetActorTalkChore", LUA_OPCODE(Lua_V1, SetActorTalkChore) },
+	{ "SetActorWalkRate", LUA_OPCODE(Lua_V1, SetActorWalkRate) },
+	{ "GetActorWalkRate", LUA_OPCODE(Lua_V1, GetActorWalkRate) },
+	{ "SetActorTurnRate", LUA_OPCODE(Lua_V1, SetActorTurnRate) },
+	{ "GetActorTurnRate", LUA_OPCODE(Lua_V1, GetActorTurnRate) },
+	{ "SetSelectedActor", LUA_OPCODE(Lua_V1, SetSelectedActor) },
+	{ "LoadActor", LUA_OPCODE(Lua_V1, LoadActor) },
+	{ "GetActorPos", LUA_OPCODE(Lua_V1, GetActorPos) },
+	{ "GetActorRect", LUA_OPCODE(Lua_V1, GetActorRect) },
+	{ "GetActorPuckVector", LUA_OPCODE(Lua_V1, GetActorPuckVector) },
+	{ "GetActorYawToPoint", LUA_OPCODE(Lua_V1, GetActorYawToPoint) },
+	{ "SetActorReflection", LUA_OPCODE(Lua_V1, SetActorReflection) },
+	{ "SetActorOffsetYaw", LUA_OPCODE(Lua_V1, SetActorOffsetYaw) },
+	{ "PutActorAtInterest", LUA_OPCODE(Lua_V1, PutActorAtInterest) },
+	{ "PutActorAtOrigin", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "PutActorAt", LUA_OPCODE(Lua_V1, PutActorAt) },
+	{ "PutActorInSet", LUA_OPCODE(Lua_V1, PutActorInSet) },
+	{ "GetClippedPos", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "WalkActorVector", LUA_OPCODE(Lua_V1, WalkActorVector) },
+	{ "WalkActorForward", LUA_OPCODE(Lua_V1, WalkActorForward) },
+	{ "DriveActorTo", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "WalkActorTo", LUA_OPCODE(Lua_V1, WalkActorTo) },
+	{ "WalkActorToAvoiding", LUA_OPCODE(Lua_V1, WalkActorToAvoiding) },
+	{ "WalkActorToInterest", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "WalkActorToMouseTarget", LUA_OPCODE(Lua_V1, WalkActorToMouseTarget) },
+	{ "ActorLookAt", LUA_OPCODE(Lua_V1, ActorLookAt) },
+	{ "IsActorLooking", LUA_OPCODE(Lua_V1, IsActorLooking) },
+	{ "SetActorLookRate", LUA_OPCODE(Lua_V1, SetActorLookRate) },
+	{ "GetActorLookRate", LUA_OPCODE(Lua_V1, GetActorLookRate) },
+	{ "CanActorSee", LUA_OPCODE(Lua_V1, CanActorSee) },
+	{ "GetVisibleThings", LUA_OPCODE(Lua_V1, GetVisibleThings) },
+	{ "GetCameraActor", LUA_OPCODE(Lua_V1, GetCameraActor) },
+	{ "SetActorHead", LUA_OPCODE(Lua_V1, SetActorHead) },
+	{ "SetActorVisibility", LUA_OPCODE(Lua_V1, SetActorVisibility) },
+	{ "SetActorFollowBoxes", LUA_OPCODE(Lua_V1, SetActorFollowBoxes) },
+	{ "ShutUpActor", LUA_OPCODE(Lua_V1, ShutUpActor) },
+	{ "SetActorFrustrumCull", LUA_OPCODE(Lua_V1, SetActorFrustrumCull) },
+	{ "SetActorBWMode", LUA_OPCODE(Lua_V1, SetActorBWMode) },
+	{ "SetActorHKHackMode", LUA_OPCODE(Lua_V1, SetActorHKHackMode) },
+	{ "PathfinderMode", LUA_OPCODE(Lua_V1, PathfinderMode) },
+	{ "IsActorInSector", LUA_OPCODE(Lua_V1, IsActorInSector) },
+	{ "GetActorSector", LUA_OPCODE(Lua_V1, GetActorSector) },
+	{ "IsPointInSector", LUA_OPCODE(Lua_V1, IsPointInSector) },
+	{ "GetPointSector", LUA_OPCODE(Lua_V1, GetPointSector) },
+	{ "TurnActor", LUA_OPCODE(Lua_V1, TurnActor) },
+	{ "GetActorRot", LUA_OPCODE(Lua_V1, GetActorRot) },
+	{ "SetActorRot", LUA_OPCODE(Lua_V1, SetActorRot) },
+	{ "SetActorPitch", LUA_OPCODE(Lua_V1, SetActorPitch) },
+	{ "SetActorRoll", LUA_OPCODE(Lua_V1, SetActorRoll) },
+	{ "IsActorTurning", LUA_OPCODE(Lua_V1, IsActorTurning) },
+	{ "PlayActorChore", LUA_OPCODE(Lua_V1, PlayActorChore) },
+	{ "PlayActorChoreLooping", LUA_OPCODE(Lua_V1, PlayActorChoreLooping) },
+	{ "StopActorChore", LUA_OPCODE(Lua_V1, StopActorChore) },
+	{ "CompleteActorChore", LUA_OPCODE(Lua_V1, CompleteActorChore) },
+	{ "IsActorMoving", LUA_OPCODE(Lua_V1, IsActorMoving) },
+	{ "IsActorChoring", LUA_OPCODE(Lua_V1, IsActorChoring) },
+	{ "IsActorResting", LUA_OPCODE(Lua_V1, IsActorResting) },
+	{ "SetActorChoreLooping", LUA_OPCODE(Lua_V1, SetActorChoreLooping) },
+	{ "GetActorChores", LUA_OPCODE(Lua_V1, GetActorChores) },
+	{ "GetActorLoopingChores", LUA_OPCODE(Lua_V1, GetActorLoopingChores) },
+	{ "GetActorCostumeDepth", LUA_OPCODE(Lua_V1, GetActorCostumeDepth) },
+	{ "WorldToScreen", LUA_OPCODE(Lua_V1, WorldToScreen) },
+	{ "ScreenToWorld", LUA_OPCODE(Lua_V1, ScreenToWorld) },
+	{ "exit", LUA_OPCODE(Lua_V1, Exit) },
+	{ "FunctionName", LUA_OPCODE(Lua_V1, FunctionName) },
+	{ "EnableDebugKeys", LUA_OPCODE(Lua_V1, EnableDebugKeys) },
+	{ "LockFont", LUA_OPCODE(Lua_V1, LockFont) },
+	{ "UnLockFont", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "LockSound", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "UnlockSound", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "LockCostume", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "UnlockCostume", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "EnableControl", LUA_OPCODE(Lua_V1, EnableControl) },
+	{ "DisableControl", LUA_OPCODE(Lua_V1, DisableControl) },
+	{ "GetControlState", LUA_OPCODE(Lua_V1, GetControlState) },
+	{ "PrintMessage", LUA_OPCODE(Lua_V1, PrintMessage) },
+	{ "PrintError", LUA_OPCODE(Lua_V1, PrintError) },
+	{ "PrintWarning", LUA_OPCODE(Lua_V1, PrintWarning) },
+	{ "PrintDebug", LUA_OPCODE(Lua_V1, PrintDebug) },
+	{ "MakeCurrentSet", LUA_OPCODE(Lua_V1, MakeCurrentSet) },
+	{ "LockSet", LUA_OPCODE(Lua_V1, LockSet) },
+	{ "UnLockSet", LUA_OPCODE(Lua_V1, UnLockSet) },
+	{ "MakeCurrentSetup", LUA_OPCODE(Lua_V1, MakeCurrentSetup) },
+	{ "GetCurrentSetup", LUA_OPCODE(Lua_V1, GetCurrentSetup) },
+	{ "NextSetup", LUA_OPCODE(Lua_V1, NextSetup) },
+	{ "PreviousSetup", LUA_OPCODE(Lua_V1, PreviousSetup) },
+	{ "StartFullscreenMovie", LUA_OPCODE(Lua_V1, StartFullscreenMovie) },
+	{ "IsFullscreenMoviePlaying", LUA_OPCODE(Lua_V1, IsFullscreenMoviePlaying) },
+	{ "StartMovie", LUA_OPCODE(Lua_V1, StartMovie) },
+	{ "StopMovie", LUA_OPCODE(Lua_V1, StopMovie) },
+	{ "PauseMovie", LUA_OPCODE(Lua_V1, PauseMovie) },
+	{ "IsMoviePlaying", LUA_OPCODE(Lua_V1, IsMoviePlaying) },
+	{ "PlaySound", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "PlaySoundAt", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "PlaySoundAttached", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "IsSoundPlaying", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "SetSoundPosition", LUA_OPCODE(Lua_V1, SetSoundPosition) },
+	{ "FindSaveGames", LUA_OPCODE(Lua_Remastered, FindSaveGames) },
+	{ "InitiateFindSaveGames", LUA_OPCODE(Lua_Remastered, InitiateFindSaveGames) },
+	{ "GetFindSaveGameStatus", LUA_OPCODE(Lua_Remastered, GetFindSaveGameStatus) },
+	{ "FileFindFirst", LUA_OPCODE(Lua_V1, FileFindFirst) },
+	{ "FileFindNext", LUA_OPCODE(Lua_V1, FileFindNext) },
+	{ "FileFindDispose", LUA_OPCODE(Lua_V1, FileFindDispose) },
+	{ "InputDialog", LUA_OPCODE(Lua_V1, InputDialog) },
+	{ "QueryDialog", LUA_OPCODE(Lua_V1, QueryDialog) },
+	{ "WriteRegistryValue", LUA_OPCODE(Lua_V1, WriteRegistryValue) },
+	{ "ReadRegistryValue", LUA_OPCODE(Lua_V1, ReadRegistryValue) },
+	{ "ReadRegistryIntValue", LUA_OPCODE(Lua_V1, ReadRegistryIntValue) },
+	{ "SaveRegistryToDisk", LUA_OPCODE(Lua_V1, SaveRegistryToDisk) },
+	{ "GetSectorVertices", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "GetSectorOppositeEdge", LUA_OPCODE(Lua_V1, GetSectorOppositeEdge) },
+	{ "IsSectorActive", LUA_OPCODE(Lua_V1, IsSectorActive) },
+	{ "MakeSectorActive", LUA_OPCODE(Lua_V1, MakeSectorActive) },
+	{ "PreRender", LUA_OPCODE(Lua_V1, PreRender) },
+	{ "SpewStartup", LUA_OPCODE(Lua_V1, SpewStartup) },
+	{ "SpewShutdown", LUA_OPCODE(Lua_V1, SpewShutdown) },
+	{ "GetCurrentScript", LUA_OPCODE(Lua_V1, GetCurrentScript) },
+	{ "PrintActorCostumes", LUA_OPCODE(Lua_V1, PrintActorCostumes) },
+	{ "PushActorCostume", LUA_OPCODE(Lua_V1, PushActorCostume) },
+	{ "PopActorCostume", LUA_OPCODE(Lua_V1, PopActorCostume) },
+	{ "LoadCostume", LUA_OPCODE(Lua_V1, LoadCostume) },
+	{ "GetPhysicalBytes", LUA_OPCODE(Lua_V1, GetPhysicalBytes) },
+	{ "SetMemoryUsage", LUA_OPCODE(Lua_V1, SetMemoryUsage) },
+	{ "RotateVector", LUA_OPCODE(Lua_V1, RotateVector) },
+	{ "GetCameraPosition", LUA_OPCODE(Lua_V1, GetCameraPosition) },
+	{ "SetCameraPosition", LUA_OPCODE(Lua_V1, SetCameraPosition) },
+	{ "GetCameraInterest", LUA_OPCODE(Lua_V1, GetCameraInterest) },
+	{ "SetCameraInterest", LUA_OPCODE(Lua_V1, SetCameraInterest) },
+	{ "GetCameraFOV", LUA_OPCODE(Lua_V1, GetCameraFOV) },
+	{ "SetCameraFOV", LUA_OPCODE(Lua_V1, SetCameraFOV) },
+	{ "GetCameraRoll", LUA_OPCODE(Lua_V1, GetCameraRoll) },
+	{ "SetCameraRoll", LUA_OPCODE(Lua_V1, SetCameraRoll) },
+	{ "GetCameraLookVector", LUA_OPCODE(Lua_V1, GetCameraLookVector) },
+	{ "EnableBackgroundRender", LUA_OPCODE(Lua_V1, EnableBackgroundRender) },
+	{ "PointActorAt", LUA_OPCODE(Lua_V1, PointActorAt) },
+	{ "TurnActorTo", LUA_OPCODE(Lua_V1, TurnActorTo) },
+	{ "PerSecond", LUA_OPCODE(Lua_V1, PerSecond) },
+	{ "SnapToPlane", LUA_OPCODE(Lua_V1, SnapToPlane) },
+	{ "GetAngleBetweenVectors", LUA_OPCODE(Lua_V1, GetAngleBetweenVectors) },
+	{ "GetAngleBetweenActors", LUA_OPCODE(Lua_V1, GetAngleBetweenActors) },
+	{ "SetAmbientLight", LUA_OPCODE(Lua_V1, SetAmbientLight) },
+	{ "FindLight", LUA_OPCODE(Lua_V1, FindLight) },
+	{ "TurnLightOn", LUA_OPCODE(Lua_V1, TurnLightOn) },
+	{ "IsLightOn", LUA_OPCODE(Lua_V1, IsLightOn) },
+	{ "SetLightType", LUA_OPCODE(Lua_V1, SetLightType) },
+	{ "GetLightType", LUA_OPCODE(Lua_V1, GetLightType) },
+	{ "SetLightPosition", LUA_OPCODE(Lua_V1, SetLightPosition) },
+	{ "GetLightPosition", LUA_OPCODE(Lua_V1, GetLightPosition) },
+	{ "SetLightRotation", LUA_OPCODE(Lua_V1, SetLightRotation) },
+	{ "GetLightRotation", LUA_OPCODE(Lua_V1, GetLightRotation) },
+	{ "SetLightAngles", LUA_OPCODE(Lua_V1, SetLightAngles) },
+	{ "GetLightAngles", LUA_OPCODE(Lua_V1, GetLightAngles) },
+	{ "SetLightIntensity", LUA_OPCODE(Lua_V1, SetLightIntensity) },
+	{ "GetLightIntensity", LUA_OPCODE(Lua_V1, GetLightIntensity) },
+	{ "PointLightAt", LUA_OPCODE(Lua_V1, PointLightAt) },
+	{ "LightMgrStartup", LUA_OPCODE(Lua_V1, LightMgrStartup) },
+	{ "LightMgrShutdown", LUA_OPCODE(Lua_V1, LightMgrShutdown) },
+	{ "LightMgrSetChange", LUA_OPCODE(Lua_V1, LightMgrSetChange) },
+	{ "ImStartRecording", LUA_OPCODE(Lua_V1, ImStartRecording) },
+	{ "ImStopRecording", LUA_OPCODE(Lua_V1, ImStopRecording) },
+	{ "ImStartSound", LUA_OPCODE(Lua_V1, ImStartSound) }, // same function as play
+	{ "play", LUA_OPCODE(Lua_V1, ImStartSound) }, // same function as ImStartSound
+	{ "ImStopSound", LUA_OPCODE(Lua_V1, ImStopSound) },
+	{ "ImStopAllSounds", LUA_OPCODE(Lua_V1, ImStopAllSounds) }, // same function as quiet
+	{ "quiet", LUA_OPCODE(Lua_V1, ImStopAllSounds) }, // same function as ImStopAllSounds
+	{ "ImGetParam", LUA_OPCODE(Lua_V1, ImGetParam) },
+	{ "ImSetParam", LUA_OPCODE(Lua_V1, ImSetParam) },
+	{ "ImFadeParam", LUA_OPCODE(Lua_V1, ImFadeParam) },
+	{ "ImGetMasterVol", LUA_OPCODE(Lua_V1, ImGetMasterVol) },
+	{ "ImSetMasterVol", LUA_OPCODE(Lua_V1, ImSetMasterVol) },
+	{ "ImGetSfxVol", LUA_OPCODE(Lua_V1, ImGetSfxVol) },
+	{ "ImSetSfxVol", LUA_OPCODE(Lua_V1, ImSetSfxVol) },
+	{ "ImGetVoiceVol", LUA_OPCODE(Lua_V1, ImGetVoiceVol) },
+	{ "ImSetVoiceVol", LUA_OPCODE(Lua_V1, ImSetVoiceVol) },
+	{ "ImGetMusicVol", LUA_OPCODE(Lua_V1, ImGetMusicVol) },
+	{ "ImSetMusicVol", LUA_OPCODE(Lua_V1, ImSetMusicVol) },
+	{ "ImGetCommentaryVol", LUA_OPCODE(Lua_V1, ImGetCommentaryVol) },
+	{ "ImSetCommentaryVol", LUA_OPCODE(Lua_V1, ImSetCommentaryVol) },
+	{ "ImStartVoice", LUA_OPCODE(Lua_V1, ImStartVoice) },
+	{ "ImStopVoice", LUA_OPCODE(Lua_V1, ImStopVoice) },
+	{ "ImSetState", LUA_OPCODE(Lua_V1, ImSetState) },
+	{ "ImSetSequence", LUA_OPCODE(Lua_V1, ImSetSequence) },
+	{ "ImSetAttribute", LUA_OPCODE(Lua_V1, ImSetAttribute) },
+	{ "ImSetCuePoint", LUA_OPCODE(Lua_V1, ImSetCuePoint) },
+	{ "ImPause", LUA_OPCODE(Lua_V1, ImPause) },
+	{ "ImResume", LUA_OPCODE(Lua_V1, ImResume) },
+	{ "vfx", LUA_OPCODE(Lua_V1, ImSetVoiceEffect) }, // same function as ImSetVoiceEffect
+	{ "ImSetVoiceEffect", LUA_OPCODE(Lua_V1, ImSetVoiceEffect) }, // same function as vfx
+	{ "ImGetMemoryFootprint", LUA_OPCODE(Lua_V1, ImGetMemoryFootprint) },
+	{ "ImGetSoundCacheSize", LUA_OPCODE(Lua_V1, ImGetSoundCacheSize) },
+	{ "LoadBundle", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "UnloadBundle", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "SetGamma", LUA_OPCODE(Lua_V1, SetGamma) },
+	{ "SetResolutionScaling", LUA_OPCODE(Lua_V1, SetResolutionScaling) },
+	{ "SetAdvancedLighting", LUA_OPCODE(Lua_V1, SetAdvancedLighting) },
+	{ "SetActorWalkDominate", LUA_OPCODE(Lua_V1, SetActorWalkDominate) },
+	{ "SetActorConstrain", LUA_OPCODE(Lua_V1, SetActorConstrain) },
+	{ "RenderModeUser", LUA_OPCODE(Lua_V1, RenderModeUser) },
+	{ "SetGameRenderMode", LUA_OPCODE(Lua_V1, SetGameRenderMode) },
+	{ "GetGameRenderMode", LUA_OPCODE(Lua_V1, GetGameRenderMode) },
+	{ "ForceRefresh", LUA_OPCODE(Lua_V1, ForceRefresh) },
+	{ "DimScreen", LUA_OPCODE(Lua_V1, DimScreen) },
+	{ "DimRegion", LUA_OPCODE(Lua_V1, DimRegion) },
+	{ "CleanBuffer", LUA_OPCODE(Lua_V1, CleanBuffer) },
+	{ "Display", LUA_OPCODE(Lua_V1, Display) },
+	{ "SetSpeechMode", LUA_OPCODE(Lua_V1, SetSpeechMode) },
+	{ "GetSpeechMode", LUA_OPCODE(Lua_V1, GetSpeechMode) },
+	{ "SetShadowColor", LUA_OPCODE(Lua_V1, SetShadowColor) },
+	{ "ActivateActorShadow", LUA_OPCODE(Lua_V1, ActivateActorShadow) },
+	{ "ActorShadow", LUA_OPCODE(Lua_V1, ActorShadow) },
+	{ "SetActorShadowPlane", LUA_OPCODE(Lua_V1, SetActorShadowPlane) },
+	{ "SetActorShadowPoint", LUA_OPCODE(Lua_V1, SetActorShadowPoint) },
+	{ "SetActiveShadow", LUA_OPCODE(Lua_V1, SetActiveShadow) },
+	{ "ActorDistToShadowPlane", LUA_OPCODE(Lua_V1, ActorDistToShadowPlane) },
+	{ "KillActorShadows", LUA_OPCODE(Lua_V1, KillActorShadows) },
+	{ "AddShadowPlane", LUA_OPCODE(Lua_V1, AddShadowPlane) },
+	{ "SetActorShadowValid", LUA_OPCODE(Lua_V1, SetActorShadowValid) },
+	{ "NewObjectState", LUA_OPCODE(Lua_V1, NewObjectState) },
+	{ "FreeObjectState", LUA_OPCODE(Lua_V1, FreeObjectState) },
+	{ "SetObjectType", LUA_OPCODE(Lua_V1, SetObjectType) },
+	{ "SendObjectToBack", LUA_OPCODE(Lua_V1, SendObjectToBack) },
+	{ "SendObjectToFront", LUA_OPCODE(Lua_V1, SendObjectToFront) },
+	{ "ActorToClean", LUA_OPCODE(Lua_V1, ActorToClean) },
+	{ "FlushControls", LUA_OPCODE(Lua_V1, FlushControls) },
+	{ "SetActorCollisionMode", LUA_OPCODE(Lua_V1, SetActorCollisionMode) },
+	{ "SetActorCollisionScale", LUA_OPCODE(Lua_V1, SetActorCollisionScale) },
+	{ "MarkDirtyRect", LUA_OPCODE(Lua_V1, MarkDirtyRect) },
+	{ "CacheRect", LUA_OPCODE(Lua_V1, CacheRect) },
+	{ "RestoreCacheRect", LUA_OPCODE(Lua_V1, RestoreCacheRect) },
+	{ "ResReport", LUA_OPCODE(Lua_V1, ResReport) },
+	{ "HardwareAccelerated", LUA_OPCODE(Lua_V1, HardwareAccelerated) },
+	{ "SetActorClipActive", LUA_OPCODE(Lua_V1, SetActorClipActive) },
+	{ "SetActorClipPlane", LUA_OPCODE(Lua_V1, SetActorClipPlane) },
+	{ "FadeOutChore", LUA_OPCODE(Lua_V1, FadeOutChore) },
+	{ "FadeInChore", LUA_OPCODE(Lua_V1, FadeInChore) },
+	{ "IrisDown", LUA_OPCODE(Lua_V1, IrisDown) },
+	{ "IrisUp", LUA_OPCODE(Lua_V1, IrisUp) },
+	{ "IrisComplete", LUA_OPCODE(Lua_V1, IrisComplete) },
+	{ "IrisClear", LUA_OPCODE(Lua_V1, IrisClear) },
+	{ "DialogLogGetLineCount", LUA_OPCODE(Lua_V1, DialogLogGetLineCount) },
+	{ "DialogLogGetLine", LUA_OPCODE(Lua_V1, DialogLogGetLine) },
+	{ "DialogLogAddLine", LUA_OPCODE(Lua_V1, DialogLogAddLine) },
+	{ "ScreenShot", LUA_OPCODE(Lua_V1, ScreenShot) },
+	{ "SaveScreen", LUA_OPCODE(Lua_V1, SaveScreen) },
+	{ "GetSaveGameImage", LUA_OPCODE(Lua_V1, GetSaveGameImage) },
+	{ "GetImage", LUA_OPCODE(Lua_V1, GetImage) },
+	{ "FreeImage", LUA_OPCODE(Lua_V1, FreeImage) },
+	{ "BlastImage", LUA_OPCODE(Lua_V1, BlastImage) },
+	{ "BlastRect", LUA_OPCODE(Lua_V1, BlastRect) },
+	{ "SubmitSaveGameData", LUA_OPCODE(Lua_V1, SubmitSaveGameData) },
+	{ "GetSaveGameData", LUA_OPCODE(Lua_V1, GetSaveGameData) },
+	{ "SetTextSpeed", LUA_OPCODE(Lua_V1, SetTextSpeed) },
+	{ "GetTextSpeed", LUA_OPCODE(Lua_V1, GetTextSpeed) },
+	{ "FindFileOnAnyCD", LUA_OPCODE(Lua_V1, FindFileOnAnyCD) },
+	{ "DetachFromResources", LUA_OPCODE(Lua_V1, DetachFromResources) },
+	{ "AttachToResources", LUA_OPCODE(Lua_V1, AttachToResources) },
+	{ "SetSoundParameters", LUA_OPCODE(Lua_V1, SetSoundParameters) },
+	{ "GetSoundParameters", LUA_OPCODE(Lua_V1, GetSoundParameters) },
+	{ "TEST", LUA_OPCODE(Lua_V1, TEST) },
+	{ "ActorPuckOrient", LUA_OPCODE(Lua_V1, ActorPuckOrient) },
+	{ "GetSystemTime", LUA_OPCODE(Lua_V1, GetSystemTime) },
+	{ "GetTickCount", LUA_OPCODE(Lua_V1, GetTickCount) },
+	{ "ActorVoiceIs3D", LUA_OPCODE(Lua_V1, ActorVoiceIs3D) },
+	{ "JustLoaded", LUA_OPCODE(Lua_V1, JustLoaded) },
+	{ "DumpMemoryLog", LUA_OPCODE(Lua_V1, DumpMemoryLog) },
+	{ "ResetTextures", LUA_OPCODE(Lua_V1, ResetTextures) },
+	{ "BuildCache", LUA_OPCODE(Lua_V1, BuildCache) },
+	{ "RestoreCache", LUA_OPCODE(Lua_V1, RestoreCache) },
+	{ "ShrinkBoxes", LUA_OPCODE(Lua_V1, ShrinkBoxes) },
+	{ "UnShrinkBoxes", LUA_OPCODE(Lua_V1, UnShrinkBoxes) },
+	{ "GetShrinkPos", LUA_OPCODE(Lua_V1, GetShrinkPos) },
+	{ "NukeResources", LUA_OPCODE(Lua_V1, NukeResources) },
+	{ "SetActorInvClipNode", LUA_OPCODE(Lua_V1, SetActorInvClipNode) },
+	{ "GetDiskFreeSpace", LUA_OPCODE(Lua_V1, GetDiskFreeSpace) },
+	{ "SetWalkSystemFadeTime", LUA_OPCODE(Lua_V1, SetWalkSystemFadeTime) },
+	{ "SaveIMuse", LUA_OPCODE(Lua_V1, SaveIMuse) },
+	{ "RestoreIMuse", LUA_OPCODE(Lua_V1, RestoreIMuse) },
+	{ "GetMemoryUsage", LUA_OPCODE(Lua_V1, GetMemoryUsage) },
+	{ "SetLanguage", LUA_OPCODE(Lua_V1, SetLanguage) },
+	{ "GetLanguage", LUA_OPCODE(Lua_V1, GetLanguage) },
+	{ "GetLanguageCount", LUA_OPCODE(Lua_V1, GetLanguageCount) },
+	{ "Is3DHardwareEnabled", LUA_OPCODE(Lua_V1, Is3DHardwareEnabled) },
+	{ "SetMouseSpeedScale", LUA_OPCODE(Lua_Remastered, SetMouseSpeedScale) },
+	{ "SetKeyMappingMode", LUA_OPCODE(Lua_Remastered, SetKeyMappingMode) },
+	{ "ResetKeyMappingToDefault", LUA_OPCODE(Lua_Remastered, ResetKeyMappingToDefault) },
+	{ "GetRemappedKeyName", LUA_OPCODE(Lua_Remastered, GetRemappedKeyName) },
+	{ "GetRemappedKeyHint", LUA_OPCODE(Lua_Remastered, GetRemappedKeyHint) },
+	{ "LoadRemappedKeys", LUA_OPCODE(Lua_Remastered, LoadRemappedKeys) },
+	{ "SaveRemappedKeys", LUA_OPCODE(Lua_Remastered, SaveRemappedKeys) }
+};
+
+static struct luaL_reg remasteredCommentaryOpcodes[] = {
+	{ "SetCommentary", LUA_OPCODE(Lua_Remastered, SetCommentary) },
+	{ "ClearCommentary", LUA_OPCODE(Lua_Remastered, ClearCommentary) },
+	{ "PlayCurrentCommentary", LUA_OPCODE(Lua_Remastered, PlayCurrentCommentary) },
+	{ "EnableCommentary", LUA_OPCODE(Lua_Remastered, EnableCommentary) },
+	{ "StopCommentaryImmediately", LUA_OPCODE(Lua_Remastered, StopCommentaryImmediately) },
+	{ "HasHeardCommentary", LUA_OPCODE(Lua_Remastered, HasHeardCommentary) },
+	{ "IsPlayingCommentary", LUA_OPCODE(Lua_Remastered, IsPlayingCommentary) }
+};
+
+static struct luaL_reg remasteredOverlayOpcodes[] = {
+	{ "OverlayCreate", LUA_OPCODE(Lua_Remastered, OverlayCreate) },
+	{ "OverlayMove", LUA_OPCODE(Lua_Remastered, OverlayMove) },
+	{ "OverlaySetLayer", LUA_OPCODE(Lua_Remastered, OverlaySetLayer) },
+	{ "OverlayDestroy", LUA_OPCODE(Lua_Remastered, OverlayDestroy) },
+	{ "OverlayDimensions", LUA_OPCODE(Lua_Remastered, OverlayDimensions) },
+	{ "OverlayClearCache", LUA_OPCODE(Lua_Remastered, OverlayClearCache) },
+	{ "OverlayFade", LUA_OPCODE(Lua_Remastered, OverlayFade) },
+	{ "OverlayGetScreenSize", LUA_OPCODE(Lua_Remastered, OverlayGetScreenSize) },
+	{ "OverlayScreenBoxingMode", LUA_OPCODE(Lua_Remastered, OverlayScreenBoxingMode) },
+	{ "OverlayShowLoadSpinner", LUA_OPCODE(Lua_Remastered, OverlayShowLoadSpinner) },
+	{ "WidescreenCorrectionFactor", LUA_OPCODE(Lua_Remastered, WidescreenCorrectionFactor) }
+};
+
+static struct luaL_reg remasteredMouseOpcodes[] = {
+	{ "QueryActiveHotspots", LUA_OPCODE(Lua_V1, QueryActiveHotspots) },
+	{ "GetFloorWalkPos", LUA_OPCODE(Lua_V1, GetFloorWalkPos) },
+	{ "GetSelectedDialog", LUA_OPCODE(Lua_V1, GetSelectedDialog) },
+	{ "SetCursor", LUA_OPCODE(Lua_V1, SetCursor) },
+	{ "ProjectToAxis", LUA_OPCODE(Lua_V1, ProjectToAxis) },
+	{ "ShowCursor", LUA_OPCODE(Lua_V1, ShowCursor) },
+	{ "AddHotspot", LUA_OPCODE(Lua_V1, AddHotspot) },
+	{ "RemoveHotspot", LUA_OPCODE(Lua_V1, RemoveHotspot) },
+	{ "GetCursorPosition", LUA_OPCODE(Lua_V1, GetCursorPosition) },
+	{ "CursorAnimation", LUA_OPCODE(Lua_V1, CursorAnimation) },
+	{ "UpdateHotspot", LUA_OPCODE(Lua_V1, UpdateHotspot) },
+	{ "LinkHotspot", LUA_OPCODE(Lua_V1, LinkHotspot) },
+	{ "PreloadCursors", LUA_OPCODE(Lua_V1, PreloadCursors) },
+	{ "CursorMovieEnabled", LUA_OPCODE(Lua_V1, CursorMovieEnabled) }
+};
+
+Lua_Remastered::Lua_Remastered() : Lua_V1(false) {
+	lua_FuncIDsSetRemastered(true);
 }
 
-void Lua_Remastered::GetFontDimensions() {
-	// LEGACY: // Taken from Lua_v2 and modified
-	// LEGACY: lua_Object fontObj = lua_getparam(1);
-	// LEGACY: if (!lua_isuserdata(fontObj))
-	// LEGACY: 	return;
-	// LEGACY:
-	// LEGACY: Font *font = getfont(fontObj);
-	// LEGACY:
-	// LEGACY: if (font) {
-	// LEGACY: 	int32 h = font->getKernedHeight();
-	// LEGACY: 	int32 w = font->getFontWidth();
-	// LEGACY: 	lua_pushnumber(w);
-	// LEGACY: 	lua_pushnumber(h);
-	// LEGACY: } else {
-	// LEGACY: 	warning("Lua_Remastered::GetFontDimensions for invalid font: returns 0,0");
-	// LEGACY: 	lua_pushnumber(0.f);
-	// LEGACY: 	lua_pushnumber(0.f);
-	// LEGACY: }
-	Lua_V1::GetFontDimensions();
+void Lua_Remastered::registerMainOpcodes() {
+	luaL_openlib(remasteredMainOpcodes, ARRAYSIZE(remasteredMainOpcodes));
 }
 
-void Lua_Remastered::GetTextObjectDimensions() {
-	// LEGACY: lua_Object textObj = lua_getparam(1);
-	// LEGACY: lua_Object coordsObj = lua_getparam(2);
-	// LEGACY: if (lua_isnumber(coordsObj)) {
-	// LEGACY: 	int val = lua_getnumber(coordsObj);
-	// LEGACY: 	warning("Stub function: GetTextObjectDimensions(%d)", val);
-	// LEGACY: }
-	// LEGACY:
-	// LEGACY: if (lua_isuserdata(textObj) && lua_tag(textObj) == MKTAG('T', 'X', 'E', 'T')) {
-	// LEGACY: 	TextObject *textObject = gettextobject(textObj);
-	// LEGACY: 	lua_pushnumber(textObject->getWidth()); // REMASTERED HACK
-	// LEGACY: 	lua_pushnumber(textObject->getBitmapHeight()); // REMASTERED HACK
-	// LEGACY: 	// If the line is rjustified getX does us no good
-	// LEGACY: 	lua_pushnumber(textObject->getLineX(0));
-	// LEGACY: 	lua_pushnumber(textObject->getY());
-	// LEGACY: }
-	Lua_V1::GetTextObjectDimensions();
+void Lua_Remastered::registerCostumeOpcodes() {
+	Lua_V1::registerCostumeOpcodes();
+	luaL_openlib(remasteredCommentaryOpcodes, ARRAYSIZE(remasteredCommentaryOpcodes));
 }
 
-void Lua_Remastered::OverlayDimensions() {
-	// LEGACY: lua_Object overlayObj = lua_getparam(1);
-	// LEGACY: if (!lua_isuserdata(overlayObj) || lua_tag(overlayObj) != Overlay::getStaticTag())
-	// LEGACY: 	return;
-	// LEGACY:
-	// LEGACY: Overlay *overlay = Overlay::getPool().getObject(lua_getuserdata(overlayObj));
-	// LEGACY: lua_pushnumber(overlay->getWidth());
-	// LEGACY: lua_pushnumber(overlay->getHeight());
+void Lua_Remastered::registerPrimitiveOpcodes() {
+	Lua_V1::registerPrimitiveOpcodes();
+	luaL_openlib(remasteredOverlayOpcodes, ARRAYSIZE(remasteredOverlayOpcodes));
+	luaL_openlib(remasteredMouseOpcodes, ARRAYSIZE(remasteredMouseOpcodes));
 }
 
-void Lua_Remastered::OverlayGetScreenSize() {
-	warning("Stub function: OverlayGetScreenSize, returns 1920, 1080");
-	lua_pushnumber(1920);
-	lua_pushnumber(1080);
+// Is3DHardwareEnabled moved to the main table and the device opcodes do not exist
+void Lua_Remastered::registerHardwareOpcodes() {
 }
 
-void Lua_Remastered::OverlayCreate() {
-	warning("Stub function: OverlayCreate not done");
-	// LEGACY: lua_Object param1 = lua_getparam(1);
-	// LEGACY: lua_Object param2 = lua_getparam(2);
-	// LEGACY: lua_Object param3 = lua_getparam(3);
-	// LEGACY: lua_Object param4 = lua_getparam(4);
-	// LEGACY: if (!lua_isstring(param1) || !lua_isnumber(param2) || !lua_isnumber(param3) || !lua_istable(param4)) {
-	// LEGACY: 	return;
-	// LEGACY: }
-	// LEGACY: const char *overlayName = lua_getstring(param1);
-	// LEGACY: float x = lua_getnumber(param2);
-	// LEGACY: float y = lua_getnumber(param3);
-	// LEGACY:
-	// LEGACY: lua_pushobject(param4);
-	// LEGACY: lua_pushstring("layer");
-	// LEGACY: lua_Object table = lua_gettable();
-	// LEGACY: float layer = lua_getnumber(table);
-	// LEGACY:
-	// LEGACY: Overlay *overlay = g_resourceloader->loadOverlay(overlayName);
-	// LEGACY:
-	// LEGACY: if (overlay) {
-	// LEGACY: 	overlay->setPos(x, y);
-	// LEGACY: 	overlay->setLayer(layer);
-	// LEGACY: 	lua_pushusertag(overlay->getId(), overlay->getTag());
-	// LEGACY: } else {
-	// LEGACY: 	lua_pushnil();
-	// LEGACY: }
-}
-
-void Lua_Remastered::OverlayDestroy() {
-	// LEGACY: lua_Object actorObj = lua_getparam(1);
-	// LEGACY: if (!lua_isuserdata(actorObj) || lua_tag(actorObj) != Overlay::getStaticTag())
-	// LEGACY: 	return;
-	// LEGACY:
-	// LEGACY: Overlay *overlay = Overlay::getPool().getObject(lua_getuserdata(actorObj));
-	// LEGACY: delete overlay;
-}
-
-void Lua_Remastered::OverlayFade() {
-	// LEGACY: lua_Object overlayObj = lua_getparam(1);
-	// LEGACY: lua_Object fadeObj = lua_getparam(2);
-	// LEGACY: if (!lua_isuserdata(overlayObj) || lua_tag(overlayObj) != Overlay::getStaticTag())
-	// LEGACY: 	return;
-	// LEGACY: assert(lua_isnumber(fadeObj));
-	// LEGACY:
-	// LEGACY: int fadeType = lua_getnumber(fadeObj);
-	// LEGACY: warning("Stub function: OverlayFade(%d)", fadeType);
-	// LEGACY: Overlay *overlay = Overlay::getPool().getObject(lua_getuserdata(overlayObj));
-	// LEGACY:
-	// LEGACY: if (fadeType == 3) {
-	// LEGACY: 	delete overlay;
-	// LEGACY: }
-}
-
-void Lua_Remastered::OverlayMove() {
-	// LEGACY: lua_Object overlayObj = lua_getparam(1);
-	// LEGACY: lua_Object param2 = lua_getparam(2);
-	// LEGACY: lua_Object param3 = lua_getparam(3);
-	// LEGACY:
-	// LEGACY: if (!lua_isuserdata(overlayObj) || lua_tag(overlayObj) != Overlay::getStaticTag())
-	// LEGACY: 	return;
-	// LEGACY:
-	// LEGACY: Overlay *overlay = Overlay::getPool().getObject(lua_getuserdata(overlayObj));
-	// LEGACY: float x = lua_getnumber(param2);
-	// LEGACY: float y = lua_getnumber(param3);
-	// LEGACY: overlay->setPos(x, y);
-}
-
-void Lua_Remastered::QueryActiveHotspots() {
-	lua_Object param = lua_getparam(1);
-
-	assert(lua_isnumber(param));
-
-	warning("Stub function: QueryActiveHotspots(%f)", lua_getnumber(param));
-
-	// LEGACY: // TODO: Handle coord scaling better
-	// LEGACY: float scaleX = 1920.0f/1600;
-	// LEGACY: float scaleY = 1080.0f/900;
-	// LEGACY: Math::Vector2d pos(g_grim->_cursorX*scaleX, g_grim->_cursorY*scaleY);
-	// LEGACY: lua_Object result = lua_createtable();
-	// LEGACY: int count = 0;
-	// LEGACY: for (Hotspot *h : Hotspot::getPool()) {
-	// LEGACY: 	if (!h->_rect.containsPoint(pos)) {
-	// LEGACY: 		continue;
-	// LEGACY: 	}
-	// LEGACY: 	lua_Object inner = lua_createtable();
-	// LEGACY:
-	// LEGACY: 	lua_pushobject(inner);
-	// LEGACY: 	lua_pushstring("type");
-	// LEGACY: 	lua_pushstring("normal");
-	// LEGACY: 	lua_settable();
-	// LEGACY:
-	// LEGACY: 	lua_pushobject(inner);
-	// LEGACY: 	lua_pushstring("cursor");
-	// LEGACY: 	lua_pushnumber(0);
-	// LEGACY: 	lua_settable();
-	// LEGACY:
-	// LEGACY: 	lua_pushobject(inner);
-	// LEGACY: 	lua_pushstring("id");
-	// LEGACY: 	lua_pushstring(h->_name.c_str());
-	// LEGACY: 	lua_settable();
-	// LEGACY:
-	// LEGACY: 	lua_pushobject(inner);
-	// LEGACY: 	lua_pushstring("obj");
-	// LEGACY: 	lua_pushusertag(h->getId(), h->getTag());
-	// LEGACY: 	lua_settable();
-	// LEGACY:
-	// LEGACY: 	lua_pushobject(result);
-	// LEGACY: 	lua_pushnumber(count++);
-	// LEGACY: 	lua_pushobject(inner);
-	// LEGACY: 	lua_settable();
-	// LEGACY: }
-	// LEGACY:
-	// LEGACY: lua_pushobject(result);
-}
-
-void Lua_Remastered::GetLanguage() {
-	warning("Stub function: GetLanguage, just guesswork");
-	// LEGACY: lua_pushnumber(g_grim->getLanguage());
-}
-
-void Lua_Remastered::SaveRegistryToDisk() {
-	warning("Guesswork: SaveRegistryToDisk");
-	// LEGACY: g_registry->save();
-	ConfMan.flushToDisk(); // Since we can't consistently exit yet, we force a write for now
-}
-
-void Lua_Remastered::GetCursorPosition() {
-	// LEGACY: lua_pushnumber(g_grim->_cursorX);
-	// LEGACY: lua_pushnumber(g_grim->_cursorX);
-}
-
-void Lua_Remastered::SetCursor() {
-	lua_Object param1 = lua_getparam(1);
-
-	assert(lua_isnumber(param1));
-
-	warning("Stub function: SetCursor(%f)", lua_getnumber(param1));
-}
-
-void Lua_Remastered::GetPlatform() {
-	warning("Stub function: GetPlatform, returns 1 (windows)");
-	lua_pushnumber(1);
-}
-
-void Lua_Remastered::GetRemappedKeyName() {
-	lua_Object param1 = lua_getparam(1);
-
-	const char *str = "";
-	if (lua_isstring(param1)) {
-		str = lua_getstring(param1);
+void Lua_Remastered::reportStub(const char *opcode, const char *module) {
+	for (uint i = 0; i < _reportedStubs.size(); i++) {
+		if (_reportedStubs[i] == opcode)
+			return;
 	}
-	warning("Stub function: GetRemappedKeyName(%s), returns TODO", str);
 
-	lua_pushstring("TODO");
+	_reportedStubs.push_back(opcode);
+	warning("Lua_Remastered::%s(): the %s is not implemented yet, the call is ignored or answered with a neutral value", opcode, module);
 }
-
-void Lua_Remastered::GetRemappedKeyHint() {
-	lua_Object param1 = lua_getparam(1);
-	warning("Stub function: GetRemappedKeyHint(%s), returns key_empty.png", lua_getstring(param1));
-	lua_pushstring("key_empty.png");
-}
-
-void Lua_Remastered::ImSetCommentaryVol() {
-	lua_Object param1 = lua_getparam(1);
-	assert(lua_isnumber(param1));
-	warning("Stub function: ImSetCommentaryVol(%f)", lua_getnumber(param1));
-}
-
-void Lua_Remastered::ImGetCommentaryVol() {
-	warning("Stub function: ImGetCommentaryVol() returns 0");
-	lua_pushnumber(0);
-}
-
-void Lua_Remastered::SetLanguage() {
-	lua_Object param1 = lua_getparam(1);
-	assert(lua_isnumber(param1));
-	warning("Stub function: SetLanguage(%f)", lua_getnumber(param1));
-	// LEGACY: g_grim->setLanguage(lua_getnumber(param1));
-	// LEGACY: delete g_localizer;
-	// LEGACY: g_localizer = new Localizer();
-}
-
-void Lua_Remastered::SetMouseSpeedScale() {
-	lua_Object param1 = lua_getparam(1);
-	assert(lua_isnumber(param1));
-	warning("Stub function: SetMouseSpeedScale(%f)", lua_getnumber(param1));
-}
-
-// Commentary
-void Lua_Remastered::EnableCommentary() {
-	lua_Object param1 = lua_getparam(1);
-	assert(lua_isnumber(param1));
-	warning("Stub function: EnableCommentary(%f)", lua_getnumber(param1));
-}
-
-void Lua_Remastered::SetCommentary() {
-	lua_Object param1 = lua_getparam(1);
-	assert(lua_isstring(param1));
-	warning("Stub function: SetCommentary(%s)", lua_getstring(param1));
-	// LEGACY: g_grim->getCommentary()->setCurrentCommentary(lua_getstring(param1));
-}
-
-void Lua_Remastered::PlayCurrentCommentary() {
-	warning("Stub function: PlayCurrentCommentary");
-	// LEGACY: g_grim->getCommentary()->playCurrentCommentary();
-}
-
-void Lua_Remastered::HasHeardCommentary() {
-	// LEGACY: lua_Object param1 = lua_getparam(1);
-	// LEGACY: assert(lua_isstring(param1));
-	// LEGACY: bool hasHeard = g_grim->getCommentary()->hasHeardCommentary(lua_getstring(param1));
-	// LEGACY: warning("Remastered function: HasHeardCommentary(%s) returns %d", lua_getstring(param1), hasHeard);
-	// LEGACY: if (hasHeard) {
-	// LEGACY: 	lua_pushnumber(1);
-	// LEGACY: } else {
-	// LEGACY: 	lua_pushnil();
-	// LEGACY: }
-}
-
-void Lua_Remastered::SetResolutionScaling() {
-	lua_Object param1 = lua_getparam(1);
-	assert(lua_isnumber(param1));
-	warning("Stub function: SetResolutionScaling(%f)", lua_getnumber(param1));
-}
-
-void Lua_Remastered::IsConceptUnlocked() {
-	// LEGACY: lua_Object param1 = lua_getparam(1);
-	// LEGACY: assert(lua_isnumber(param1));
-	// LEGACY: warning("Remastered function: IsConceptUnlocked(%f) returns %d", lua_getnumber(param1), g_grim->isConceptEnabled(lua_getnumber(param1)));
-	// LEGACY: if (g_grim->isConceptEnabled(lua_getnumber(param1))) {
-	// LEGACY: 	lua_pushnumber(1);
-	// LEGACY: } else {
-	// LEGACY: 	lua_pushnil();
-	// LEGACY: }
-}
-
-void Lua_Remastered::UnlockConcept() {
-	lua_Object param1 = lua_getparam(1);
-	assert(lua_isnumber(param1));
-	warning("Remastered function: UnlockConcept(%f)", lua_getnumber(param1));
-	// LEGACY: g_grim->enableConcept(lua_getnumber(param1));
-}
-
-void Lua_Remastered::UnlockCutscene() {
-	lua_Object param1 = lua_getparam(1);
-	assert(lua_isnumber(param1));
-	warning("Remastered function: UnlockCutscene(%f)", lua_getnumber(param1));
-	// LEGACY: g_grim->enableCutscene(lua_getnumber(param1));
-}
-
-void Lua_Remastered::IsCutsceneUnlocked() {
-	// LEGACY: lua_Object param1 = lua_getparam(1);
-	// LEGACY: assert(lua_isnumber(param1));
-	// LEGACY: warning("Remastered function: IsCutsceneUnlocked(%f) returns %d", lua_getnumber(param1), g_grim->isCutsceneEnabled(lua_getnumber(param1)));
-	// LEGACY: if (g_grim->isCutsceneEnabled(lua_getnumber(param1))) {
-	// LEGACY: 	lua_pushnumber(1);
-	// LEGACY: } else {
-	// LEGACY: 	lua_pushnil();
-	// LEGACY: }
-}
-
-void Lua_Remastered::GetGameRenderMode() {
-	warning("Stub function: GetGameRenderMode() - not all modes possible yet");
-	// LEGACY: lua_pushnumber(g_grim->getMode());
-}
-
-void Lua_Remastered::SetGameRenderMode() {
-	lua_Object param1 = lua_getparam(1);
-	if (lua_isnil(param1)) {
-		warning("SetGameRenderMode(nil) - Should it be possible to call this with nil?");
-		return;
-	}
-	assert(lua_isnumber(param1));
-	warning("Stub function: SetGameRenderMode(%f)", lua_getnumber(param1));
-	// LEGACY: g_grim->setMode((GrimEngine::EngineMode)(int)lua_getnumber(param1));
-}
-
-void Lua_Remastered::AddHotspot() {
-	lua_Object param1 = lua_getparam(1);
-	lua_Object param2 = lua_getparam(2);
-	lua_Object param3 = lua_getparam(3);
-	lua_Object param4 = lua_getparam(4);
-	lua_Object param5 = lua_getparam(5);
-	lua_Object param6 = lua_getparam(6);
-	lua_Object param7 = lua_getparam(7);
-	lua_Object param8 = lua_getparam(8);
-	lua_Object param9 = lua_getparam(9);
-	lua_Object param10 = lua_getparam(10);
-	lua_Object param11 = lua_getparam(11);
-
-	assert(lua_isstring(param1));
-	assert(lua_isnumber(param2));
-	assert(lua_isnumber(param3));
-	assert(lua_isnumber(param4));
-	assert(lua_isnumber(param5));
-	assert(lua_isnumber(param6));
-	assert(lua_isnumber(param7));
-	//assert(lua_isnumber(param8));
-	assert(lua_isnumber(param11));
-
-	const char *p9str = "nil";
-	const char *p10str = "nil";
-	if (lua_isstring(param9)) {
-		p9str = lua_getstring(param9);
-	} else if (!lua_isnil(param9)) {
-		assert(lua_isnil(param9));
-	}
-
-	if (lua_isstring(param10)) {
-		p10str = lua_getstring(param10);
-	} else if (!lua_isnil(param10)) {
-		assert(lua_isnil(param10));
-	}
-	warning("Stub function: AddHotspot(%s, %f, %f, %f, %f, %f, %f, %f, %s, %s, %f)", lua_getstring(param1), lua_getnumber(param2), lua_getnumber(param3), lua_getnumber(param4), lua_getnumber(param5), lua_getnumber(param6), lua_getnumber(param7), lua_getnumber(param8), p9str, p10str, lua_getnumber(param11));
-
-	// LEGACY: Hotspot *hotspot = new Hotspot(lua_getstring(param1), lua_getnumber(param2), lua_getnumber(param3), lua_getnumber(param4), lua_getnumber(param5));
-	// LEGACY:
-	// LEGACY: lua_pushusertag(hotspot->getId(), hotspot->getTag());
-	// LEGACY:
-}
-
-void Lua_Remastered::RemoveHotspot() {
-	// LEGACY: lua_Object hotspotObj = lua_getparam(1);
-	// LEGACY: Hotspot *hotspot = Hotspot::getPool().getObject(lua_getuserdata(hotspotObj));
-	// LEGACY: delete hotspot;
-}
-
-void Lua_Remastered::GlobalSaveResolved() {
-	warning("Stub function: GlobalSaveResolved() returns 1");
-	lua_pushnumber(1);
-}
-
-void Lua_Remastered::FindSaveGames() {
-	warning("Stub function: FindSaveGames()");
-
-	// LEGACY: Common::SaveFileManager *saveMan = g_grim->getSaveFileManager();
-	// LEGACY: Common::StringArray saveFiles = saveMan->listSavefiles("grim_r???.sav");
-	// LEGACY:
-	// LEGACY: if (saveFiles.empty()) {
-	// LEGACY: 	lua_pushnil();
-	// LEGACY: 	return;
-	// LEGACY: }
-	// LEGACY:
-	// LEGACY: lua_Object result = lua_createtable();
-	// LEGACY:
-	// LEGACY: Common::StringArray::iterator it = saveFiles.begin();
-	// LEGACY: for (int i = 0; it != saveFiles.end(); ++it) {
-	// LEGACY: 	const char *filename  = it->c_str();
-	// LEGACY: 	warning("Savefile: %s", filename);
-	// LEGACY: 	SaveGame *savedState = SaveGame::openForLoading(filename);
-	// LEGACY:
-	// LEGACY: 	if (!savedState || !savedState->isCompatible()) {
-	// LEGACY: 		if (!savedState) {
-	// LEGACY: 			error("Savegame %s is invalid", filename);
-	// LEGACY: 		} else {
-	// LEGACY: 			error("Savegame %s is incompatible with this ScummVM build. Save version: %d.%d; current version: %d.%d",
-	// LEGACY: 				filename, savedState->saveMajorVersion(), savedState->saveMinorVersion(),
-	// LEGACY: 				SaveGame::SAVEGAME_MAJOR_VERSION, SaveGame::SAVEGAME_MINOR_VERSION);
-	// LEGACY: 		}
-	// LEGACY: 		return;
-	// LEGACY: 	}
-	// LEGACY: 	int slot = atoi(it->c_str() + 6);
-	// LEGACY: 	Common::String str1;
-	// LEGACY: 	Common::String str2;
-	// LEGACY: 	int x;
-	// LEGACY: 	/*int32 dataSize = */savedState->beginSection('META');
-	// LEGACY: 	char str[200] = {};
-	// LEGACY: 	int32 strSize = 0;
-	// LEGACY:
-	// LEGACY: 	strSize = savedState->readLESint32();
-	// LEGACY: 	savedState->read(str, strSize);
-	// LEGACY: 	str1 = str;
-	// LEGACY: 	x = savedState->readLESint32();
-	// LEGACY: 	strSize = savedState->readLESint32();
-	// LEGACY: 	savedState->read(str, strSize);
-	// LEGACY: 	str2 = str;
-	// LEGACY: 	savedState->endSection();
-	// LEGACY: 	delete savedState;
-	// LEGACY:
-	// LEGACY: 	lua_pushobject(result);
-	// LEGACY: 	lua_pushnumber(i++);
-	// LEGACY:
-	// LEGACY: 	str2 = g_localizer->localize(str2.c_str());
-	// LEGACY:
-	// LEGACY: 	lua_Object keyVal = lua_createtable();
-	// LEGACY: 	// The key-value-mapping:
-	// LEGACY: 	{
-	// LEGACY:
-	// LEGACY: 		lua_pushobject(keyVal);
-	// LEGACY: 		lua_pushstring("slot");
-	// LEGACY: 		lua_pushnumber(slot);
-	// LEGACY: 		lua_settable();
-	// LEGACY:
-	// LEGACY: 		lua_pushobject(keyVal);
-	// LEGACY: 		lua_pushstring("title");
-	// LEGACY: 		lua_pushstring(str2.c_str());
-	// LEGACY: 		lua_settable();
-	// LEGACY:
-	// LEGACY: 		lua_pushobject(keyVal);
-	// LEGACY: 		lua_pushstring("timeDateString");
-	// LEGACY: 		lua_pushstring("Unknown");
-	// LEGACY: 		lua_settable();
-	// LEGACY:
-	// LEGACY: 		lua_pushobject(keyVal);
-	// LEGACY: 		lua_pushstring("mural_info");
-	// LEGACY: 		lua_pushstring(str1.c_str());
-	// LEGACY: 		lua_settable();
-	// LEGACY:
-	// LEGACY: 		lua_pushobject(keyVal);
-	// LEGACY: 		lua_pushstring("setIndex");
-	// LEGACY: 		lua_pushnumber(x);
-	// LEGACY: 		lua_settable();
-	// LEGACY: 	}
-	// LEGACY: 	lua_pushobject(keyVal);
-	// LEGACY:
-	// LEGACY: 	lua_settable();
-	// LEGACY: }
-	// LEGACY:
-	// LEGACY: lua_pushobject(result);
-}
-
 
 void Lua_Remastered::Load() {
-	// LEGACY: lua_Object fileName = lua_getparam(1);
-	// LEGACY: //lua_Object param2 = lua_getparam(2);
-	// LEGACY:
-	// LEGACY: if (lua_isnil(fileName)) {
-	// LEGACY: 	g_grim->loadGame("");
-	// LEGACY: } else if (lua_isnumber(fileName)) {
-	// LEGACY: 	int slot = lua_getnumber(fileName);
-	// LEGACY: 	Common::String saveGameFilename = Common::String::format("grim_r%03d.sav", slot);
-	// LEGACY: 	g_grim->loadGame(saveGameFilename.c_str());
-	// LEGACY: } else if (lua_isstring(fileName)) { // Check for number before this
-	// LEGACY: 	g_grim->loadGame(lua_getstring(fileName));
-	// LEGACY: } else {
-	// LEGACY: 	warning("Load() fileName is wrong");
-	// LEGACY: 	return;
-	// LEGACY: }
+	reportStub("Load", "save module");
 }
 
 void Lua_Remastered::Save() {
-	lua_Object param1 = lua_getparam(1);
-	lua_Object param2 = lua_getparam(2);
-	lua_Object param3 = lua_getparam(3);
-	lua_Object param4 = lua_getparam(4);
-	assert(lua_isnumber(param1));
-	assert(lua_isstring(param2));
-	assert(lua_isnumber(param3));
-	assert(lua_isstring(param4));
-
-	int slot = lua_getnumber(param1);
-	const char *p2Str = lua_getstring(param2);
-	int p3Num = lua_getnumber(param3);
-	const char *p4Str = lua_getstring(param4);
-
-	warning("REMASTERED save: %d, %s, %d, %s", slot, p2Str, p3Num, p4Str);
-	// LEGACY: Common::String saveGameFilename = Common::String::format("grim_r%03d.sav", slot);
-	// LEGACY: g_grim->setSaveMetaData(p2Str, p3Num, p4Str);
-	// LEGACY: g_grim->saveGame(saveGameFilename.c_str());
+	reportStub("Save", "save module");
 }
 
-void Lua_Remastered::ShowCursor() {
-	lua_Object param1 = lua_getparam(1);
-	assert(lua_isnumber(param1));
-	warning("Stub function: ShowCursor(%f)", lua_getnumber(param1));
+void Lua_Remastered::PrintStack() {
+	reportStub("PrintStack", "stack printout");
 }
 
-void Lua_Remastered::ReadRegistryIntValue() {
-	lua_Object param1 = lua_getparam(1);
-	assert(lua_isstring(param1));
-	warning("Stub function: ReadRegistryIntValue(%s) returns nil", lua_getstring(param1));
+void Lua_Remastered::New() {
+	reportStub("New", "save module");
+}
+
+void Lua_Remastered::Erase() {
+	reportStub("Erase", "save module");
+}
+
+// Nothing was saved, so the status is an error
+void Lua_Remastered::GetSaveStatus() {
+	reportStub("GetSaveStatus", "save module");
+	lua_pushnumber((float)kSaveStatusError);
+}
+
+void Lua_Remastered::FindSaveGames() {
+	reportStub("FindSaveGames", "save module");
 	lua_pushnil();
 }
 
-// Stub function for builtin functions not yet implemented
-static void stubWarning(const char *funcName) {
-	warning("Stub function: %s", funcName);
+void Lua_Remastered::InitiateFindSaveGames() {
+	reportStub("InitiateFindSaveGames", "save module");
 }
-/*
-static void stubError(const char *funcName) {
-	error("Stub function: %s", funcName);
-}*/
 
-#define STUB_FUNC(name) void name() { stubWarning(#name); }
-#define STUB_FUNC2(name) void name() { stubError(#name); }
+void Lua_Remastered::GetFindSaveGameStatus() {
+	reportStub("GetFindSaveGameStatus", "save module");
+	lua_pushnumber((float)kFindSaveGamesDone);
+}
 
-STUB_FUNC(Lua_Remastered::PreloadCursors)
-STUB_FUNC(Lua_Remastered::GetFindSaveGameStatus)
-STUB_FUNC(Lua_Remastered::InitiateFindSaveGames)
-STUB_FUNC(Lua_Remastered::AreAchievementsInstalled)
-STUB_FUNC(Lua_Remastered::UnlockAchievement)
-STUB_FUNC(Lua_Remastered::SetAdvancedLighting)
-STUB_FUNC(Lua_Remastered::IsPlayingCommentary)
-STUB_FUNC(Lua_Remastered::ClearCommentary)
-STUB_FUNC(Lua_Remastered::LoadRemappedKeys)
-STUB_FUNC(Lua_Remastered::StopCommentaryImmediately)
-STUB_FUNC(Lua_Remastered::DestroyAllUIButtonsImmediately)
-STUB_FUNC(Lua_Remastered::UpdateUIButtons)
-STUB_FUNC(Lua_Remastered::OverlayClearCache)
-STUB_FUNC(Lua_Remastered::LinkHotspot)
-STUB_FUNC(Lua_Remastered::UpdateHotspot)
-STUB_FUNC(Lua_Remastered::HideMouseCursor)
-STUB_FUNC(Lua_Remastered::UpdateMouseCursor)
-STUB_FUNC(Lua_Remastered::SetActorHKHackMode)
-STUB_FUNC(Lua_Remastered::CacheCurrentWalkVector)
-STUB_FUNC(Lua_Remastered::SetKeyMappingMode)
-STUB_FUNC(Lua_Remastered::ResetKeyMappingToDefault)
-STUB_FUNC(Lua_Remastered::SaveRemappedKeys)
-STUB_FUNC(Lua_Remastered::New)
-STUB_FUNC(Lua_Remastered::RemoveBorders)
-STUB_FUNC(Lua_Remastered::GetSaveStatus)
-STUB_FUNC(Lua_Remastered::StartCheckOfCrossSaveStatus)
-STUB_FUNC(Lua_Remastered::GetCrossSaveStatus)
-STUB_FUNC(Lua_Remastered::GetFloorWalkPos)
-STUB_FUNC(Lua_Remastered::CursorMovieEnabled)
+void Lua_Remastered::SetMouseSpeedScale() {
+	reportStub("SetMouseSpeedScale", "input module");
+}
 
-struct luaL_reg remasteredMainOpcodes[] = {
-	{ "GetPlatform", LUA_OPCODE(Lua_Remastered, GetPlatform) },
-	{ "GetLanguage", LUA_OPCODE(Lua_Remastered, GetLanguage) },
-	{ "PreloadCursors", LUA_OPCODE(Lua_Remastered, PreloadCursors) },
-	{ "AreAchievementsInstalled", LUA_OPCODE(Lua_Remastered, AreAchievementsInstalled) },
-	{ "UnlockAchievement", LUA_OPCODE(Lua_Remastered, UnlockAchievement) },
-	{ "ImGetCommentaryVol", LUA_OPCODE(Lua_Remastered, ImGetCommentaryVol) },
-	{ "ImSetCommentaryVol", LUA_OPCODE(Lua_Remastered, ImSetCommentaryVol) },
-	{ "SetMouseSpeedScale", LUA_OPCODE(Lua_Remastered, SetMouseSpeedScale) },
-	{ "SetResolutionScaling", LUA_OPCODE(Lua_Remastered, SetResolutionScaling) },
-	{ "SetAdvancedLighting", LUA_OPCODE(Lua_Remastered, SetAdvancedLighting) },
-	{ "SetLanguage", LUA_OPCODE(Lua_Remastered, SetLanguage) },
-	{ "PlayCurrentCommentary", LUA_OPCODE(Lua_Remastered, PlayCurrentCommentary) },
-	{ "IsPlayingCommentary", LUA_OPCODE(Lua_Remastered, IsPlayingCommentary) },
-	{ "EnableCommentary", LUA_OPCODE(Lua_Remastered, EnableCommentary) },
-	{ "ClearCommentary", LUA_OPCODE(Lua_Remastered, ClearCommentary) },
-	{ "HasHeardCommentary", LUA_OPCODE(Lua_Remastered, HasHeardCommentary) },
-	{ "SetCommentary", LUA_OPCODE(Lua_Remastered, SetCommentary) },
-	{ "LoadRemappedKeys", LUA_OPCODE(Lua_Remastered, LoadRemappedKeys) },
-	{ "GlobalSaveResolved", LUA_OPCODE(Lua_Remastered, GlobalSaveResolved) },
-	{ "StopCommentaryImmediately", LUA_OPCODE(Lua_Remastered, StopCommentaryImmediately) },
-	{ "ReadRegistryIntValue", LUA_OPCODE(Lua_Remastered, ReadRegistryIntValue) },
-	{ "DestroyAllUIButtonsImmediately", LUA_OPCODE(Lua_Remastered, DestroyAllUIButtonsImmediately) },
-	{ "UpdateUIButtons", LUA_OPCODE(Lua_Remastered, UpdateUIButtons) },
-	{ "GetGameRenderMode", LUA_OPCODE(Lua_Remastered, GetGameRenderMode) },
-	{ "SetGameRenderMode", LUA_OPCODE(Lua_Remastered, SetGameRenderMode) },
-	{ "WidescreenCorrectionFactor", LUA_OPCODE(Lua_Remastered, WidescreenCorrectionFactor) },
-	{ "OverlayCreate", LUA_OPCODE(Lua_Remastered, OverlayCreate) },
-	{ "OverlayClearCache", LUA_OPCODE(Lua_Remastered, OverlayClearCache) },
-	{ "OverlayDimensions", LUA_OPCODE(Lua_Remastered, OverlayDimensions) },
-	{ "OverlayDestroy", LUA_OPCODE(Lua_Remastered, OverlayDestroy) },
-	{ "OverlayFade", LUA_OPCODE(Lua_Remastered, OverlayFade) },
-	{ "OverlayGetScreenSize", LUA_OPCODE(Lua_Remastered, OverlayGetScreenSize) },
-	{ "OverlayMove", LUA_OPCODE(Lua_Remastered, OverlayMove) },
-	{ "AddHotspot", LUA_OPCODE(Lua_Remastered, AddHotspot) },
-	{ "LinkHotspot", LUA_OPCODE(Lua_Remastered, LinkHotspot) },
-	{ "RemoveHotspot", LUA_OPCODE(Lua_Remastered, RemoveHotspot) },
-	{ "UpdateHotspot", LUA_OPCODE(Lua_Remastered, UpdateHotspot) },
-	{ "QueryActiveHotspots", LUA_OPCODE(Lua_Remastered, QueryActiveHotspots) },
-	{ "HideMouseCursor", LUA_OPCODE(Lua_Remastered, HideMouseCursor) },
-	{ "ShowCursor", LUA_OPCODE(Lua_Remastered, ShowCursor) },
-	{ "UpdateMouseCursor", LUA_OPCODE(Lua_Remastered, UpdateMouseCursor) },
-	{ "GetCursorPosition", LUA_OPCODE(Lua_Remastered, GetCursorPosition) },
-	{ "SetCursor", LUA_OPCODE(Lua_Remastered, SetCursor) },
-	{ "UnlockCutscene", LUA_OPCODE(Lua_Remastered, UnlockCutscene) },
-	{ "IsCutsceneUnlocked", LUA_OPCODE(Lua_Remastered, IsCutsceneUnlocked) },
-	{ "SetActorHKHackMode", LUA_OPCODE(Lua_Remastered, SetActorHKHackMode) },
-	{ "CacheCurrentWalkVector", LUA_OPCODE(Lua_Remastered, CacheCurrentWalkVector) },
-	{ "UnlockConcept", LUA_OPCODE(Lua_Remastered, UnlockConcept) },
-	{ "IsConceptUnlocked", LUA_OPCODE(Lua_Remastered, IsConceptUnlocked) },
-	{ "GetRemappedKeyHint", LUA_OPCODE(Lua_Remastered, GetRemappedKeyHint) },
-	{ "SetKeyMappingMode", LUA_OPCODE(Lua_Remastered, SetKeyMappingMode) },
-	{ "ResetKeyMappingToDefault", LUA_OPCODE(Lua_Remastered, ResetKeyMappingToDefault) },
-	{ "SaveRemappedKeys", LUA_OPCODE(Lua_Remastered, SaveRemappedKeys) },
-	{ "SaveRegistryToDisk", LUA_OPCODE(Lua_Remastered, SaveRegistryToDisk) },
-	{ "InitiateFindSaveGames", LUA_OPCODE(Lua_Remastered, InitiateFindSaveGames) },
-	{ "GetFindSaveGameStatus", LUA_OPCODE(Lua_Remastered, GetFindSaveGameStatus) },
-	{ "FindSaveGames", LUA_OPCODE(Lua_Remastered, FindSaveGames) },
-	{ "GetRemappedKeyName", LUA_OPCODE(Lua_Remastered, GetRemappedKeyName) },
-	{ "New", LUA_OPCODE(Lua_Remastered, New) },
-	{ "RemoveBorders", LUA_OPCODE(Lua_Remastered, RemoveBorders) },
-	{ "GetSaveStatus", LUA_OPCODE(Lua_Remastered, GetSaveStatus) },
-	{ "StartCheckOfCrossSaveStatus", LUA_OPCODE(Lua_Remastered, StartCheckOfCrossSaveStatus) },
-	{ "GetCrossSaveStatus", LUA_OPCODE(Lua_Remastered, GetCrossSaveStatus) },
-	{ "GetFloorWalkPos", LUA_OPCODE(Lua_Remastered, GetFloorWalkPos) },
-	{ "CursorMovieEnabled", LUA_OPCODE(Lua_Remastered, CursorMovieEnabled) },
-};
+void Lua_Remastered::SetKeyMappingMode() {
+	reportStub("SetKeyMappingMode", "key remapping");
+}
 
-void Lua_Remastered::registerOpcodes() {
-	// LEGACY: Lua_V1::registerOpcodes();
+void Lua_Remastered::ResetKeyMappingToDefault() {
+	reportStub("ResetKeyMappingToDefault", "key remapping");
+}
 
-	// Register main opcodes functions
-	luaL_openlib(remasteredMainOpcodes, ARRAYSIZE(remasteredMainOpcodes));
+void Lua_Remastered::GetRemappedKeyName() {
+	reportStub("GetRemappedKeyName", "key remapping");
+	lua_pushstring("?");
+}
+
+void Lua_Remastered::GetRemappedKeyHint() {
+	reportStub("GetRemappedKeyHint", "key remapping");
+	lua_pushstring("key_empty.png");
+}
+
+void Lua_Remastered::LoadRemappedKeys() {
+	reportStub("LoadRemappedKeys", "key remapping");
+}
+
+void Lua_Remastered::SaveRemappedKeys() {
+	reportStub("SaveRemappedKeys", "key remapping");
+}
+
+// Answers the handle of the overlay, or -1 when the name is not a string or there is no room for it
+void Lua_Remastered::OverlayCreate() {
+	lua_Object nameObj = lua_getparam(1);
+	lua_Object xObj = lua_getparam(2);
+	lua_Object yObj = lua_getparam(3);
+	lua_Object propsObj = lua_getparam(4);
+
+	if (!lua_isstring(nameObj)) {
+		lua_pushnumber(-1.0f);
+		return;
+	}
+
+	OverlayProps props;
+	int x = lua_isnumber(xObj) ? luaFtol(lua_getnumber(xObj)) : 0;
+	int y = lua_isnumber(yObj) ? luaFtol(lua_getnumber(yObj)) : 0;
+
+	if (lua_istable(propsObj)) {
+		lua_Object cacheObj = lua_getfield(propsObj, "cache");
+
+		if (lua_isnumber(cacheObj))
+			props.cache = luaFtol(lua_getnumber(cacheObj));
+
+		lua_Object layerObj = lua_getfield(propsObj, "layer");
+
+		if (lua_isnumber(layerObj))
+			props.layer = luaFtol(lua_getnumber(layerObj));
+
+		lua_Object coordsObj = lua_getfield(propsObj, "coords");
+
+		if (lua_isnumber(coordsObj))
+			props.coords = luaFtol(lua_getnumber(coordsObj));
+
+		lua_Object clearObj = lua_getfield(propsObj, "clear_buffer");
+
+		if (lua_isnumber(clearObj) && luaFtol(lua_getnumber(clearObj)) != 0)
+			props.clearBuffer = true;
+
+		lua_Object mirrorObj = lua_getfield(propsObj, "mirrormode");
+
+		if (lua_isnumber(mirrorObj))
+			props.mirror = luaFtol(lua_getnumber(mirrorObj));
+
+		lua_Object widthObj = lua_getfield(propsObj, "width");
+
+		if (lua_isnumber(widthObj))
+			props.width = luaFtol(lua_getnumber(widthObj));
+
+		lua_Object heightObj = lua_getfield(propsObj, "height");
+
+		if (lua_isnumber(heightObj))
+			props.height = luaFtol(lua_getnumber(heightObj));
+	}
+
+	int handle = g_grim->getHdCanvas()->getOverlays()->create(lua_getstring(nameObj), x, y, props);
+
+	lua_pushnumber((float)handle);
+}
+
+void Lua_Remastered::OverlayMove() {
+	lua_Object handleObj = lua_getparam(1);
+	lua_Object xObj = lua_getparam(2);
+	lua_Object yObj = lua_getparam(3);
+
+	if (!lua_isnumber(handleObj) || !lua_isnumber(xObj) || !lua_isnumber(yObj))
+		return;
+
+	g_grim->getHdCanvas()->getOverlays()->move(luaFtol(lua_getnumber(handleObj)), luaFtol(lua_getnumber(xObj)),
+			luaFtol(lua_getnumber(yObj)));
+}
+
+void Lua_Remastered::OverlaySetLayer() {
+	lua_Object handleObj = lua_getparam(1);
+	lua_Object layerObj = lua_getparam(2);
+
+	if (!lua_isnumber(handleObj) || !lua_isnumber(layerObj))
+		return;
+
+	g_grim->getHdCanvas()->getOverlays()->setLayer(luaFtol(lua_getnumber(handleObj)), luaFtol(lua_getnumber(layerObj)));
+}
+
+void Lua_Remastered::OverlayDestroy() {
+	lua_Object handleObj = lua_getparam(1);
+
+	if (!lua_isnumber(handleObj))
+		return;
+
+	g_grim->getHdCanvas()->getOverlays()->destroy(luaFtol(lua_getnumber(handleObj)));
+}
+
+// Answers the width and the height, both 0 for a handle that does not exist
+void Lua_Remastered::OverlayDimensions() {
+	lua_Object handleObj = lua_getparam(1);
+	int width = 0;
+	int height = 0;
+
+	if (lua_isnumber(handleObj))
+		g_grim->getHdCanvas()->getOverlays()->getDimensions(luaFtol(lua_getnumber(handleObj)), &width, &height);
+
+	lua_pushnumber((float)width);
+	lua_pushnumber((float)height);
+}
+
+void Lua_Remastered::OverlayClearCache() {
+	g_grim->getHdCanvas()->getOverlays()->clearCache();
+}
+
+void Lua_Remastered::OverlayFade() {
+	lua_Object handleObj = lua_getparam(1);
+	lua_Object typeObj = lua_getparam(2);
+	lua_Object valueObj = lua_getparam(3);
+
+	if (!lua_isnumber(handleObj) || !lua_isnumber(typeObj))
+		return;
+
+	bool hasValue = lua_isnumber(valueObj) != 0;
+	float value = hasValue ? lua_getnumber(valueObj) : 0.0f;
+
+	g_grim->getHdCanvas()->getOverlays()->fade(luaFtol(lua_getnumber(handleObj)), luaFtol(lua_getnumber(typeObj)), hasValue, value);
+}
+
+// The overlays and the text use the canvas of the remastered whatever the output is
+void Lua_Remastered::OverlayGetScreenSize() {
+	lua_pushnumber((float)kCanvasWidth);
+	lua_pushnumber((float)kCanvasHeight);
+}
+
+// The boxing of the overlays only has an effect when the output is not 1920x1080
+void Lua_Remastered::OverlayScreenBoxingMode() {
+}
+
+// Shows or hides the icon of the saves, at the center of the position
+void Lua_Remastered::OverlayShowLoadSpinner() {
+	lua_Object showObj = lua_getparam(1);
+	lua_Object xObj = lua_getparam(2);
+	lua_Object yObj = lua_getparam(3);
+	int x = lua_isnumber(xObj) ? luaFtol(lua_getnumber(xObj)) : 0;
+	int y = lua_isnumber(yObj) ? luaFtol(lua_getnumber(yObj)) : 0;
+
+	g_grim->getHdCanvas()->getOverlays()->showLoadSpinner(!lua_isnil(showObj), x, y);
+}
+
+// The widescreen is never stretched, so there is nothing to correct
+void Lua_Remastered::WidescreenCorrectionFactor() {
+	lua_pushnumber(1.0f);
+}
+
+void Lua_Remastered::SetCommentary() {
+	reportStub("SetCommentary", "commentary module");
+}
+
+void Lua_Remastered::ClearCommentary() {
+	reportStub("ClearCommentary", "commentary module");
+}
+
+void Lua_Remastered::PlayCurrentCommentary() {
+	reportStub("PlayCurrentCommentary", "commentary module");
+}
+
+void Lua_Remastered::EnableCommentary() {
+	reportStub("EnableCommentary", "commentary module");
+}
+
+void Lua_Remastered::StopCommentaryImmediately() {
+	reportStub("StopCommentaryImmediately", "commentary module");
+}
+
+void Lua_Remastered::HasHeardCommentary() {
+	reportStub("HasHeardCommentary", "commentary module");
+	lua_pushnil();
+}
+
+void Lua_Remastered::IsPlayingCommentary() {
+	reportStub("IsPlayingCommentary", "commentary module");
+	lua_pushnil();
 }
 
 } // end of namespace Grim

@@ -39,6 +39,7 @@ class Cos;
 class GrimEngine;
 class LegacyImporter;
 class Lua_V1;
+class PathFinder;
 class Puck;
 class SputCostume;
 class SputRender;
@@ -156,6 +157,7 @@ class SputActorModule {
 public:
 	SputActorModule(Res *res, RenderDroid *rd, StdMath *stdMath, StdDisplay *stdDisplay, WalkSystem *walkSystem, SputResource *sputResource,
 			SputRoom *sputRoom, SputRender *sputRender, SputCostume *sputCostume, SputText *sputText, SputTime *sputTime);
+	~SputActorModule();
 
 	void setGrimEngine(GrimEngine *grim) { _grim = grim; }
 	void setLua(Lua_V1 *lua) { _lua = lua; }
@@ -213,6 +215,9 @@ public:
 	void updateCostumes4(SputActor *actor);
 	void actorWalkTo(SputActor *actor, float *pos, float *goal, SputActor *target);
 	int actorWalkToImpl(SputActor *actor, SputActor *target, float *path, int numPoints, float *outPath);
+	// The remastered: walk to the point under the pointer, given as mouse axes from -1 to 1
+	void walkActorToMouseTarget(SputActor *actor, float axisX, float axisY);
+	void setPathfinderMode(int mode) { _pathfinderMode = mode != 0; }
 	void getOuttaTheBox(float *point, const RdBound3 &box, RdMatrix34 matrix, float *origin);
 	int checkCollisions(float *from, float *to, float *center, const RdBound3 &box, RdMatrix34 matrix, float *offset);
 	void findObjectCorners(RdModel3 *model, float margin, RdMatrix34 mat, float z, ObjectCorners *out);
@@ -262,7 +267,12 @@ public:
 	void enumCostumeComponents(int inst);
 
 private:
+	enum {
+		kPathFinderMaxPoints = 128
+	};
+
 	void publishActors();
+	int buildPathFinderPath(float *from, float *to, float **path);
 
 	Res *_res;
 	RenderDroid *_rd;
@@ -303,6 +313,11 @@ private:
 	RdMaterial *_shadowMaterial;
 	RdMaterial _demoShadowMaterial;
 	RdMatCel _demoShadowCel;
+
+	// The remastered finds the paths with the path finder first
+	PathFinder *_pathFinder = nullptr;
+	bool _pathfinderMode = false;
+	float _pathFinderPoints[kPathFinderMaxPoints][3];
 };
 
 } // End of namespace Grim

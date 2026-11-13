@@ -963,6 +963,11 @@ void Lua_V1::GetMemoryUsage() {
 }
 
 void Lua_V1::GetFontDimensions() {
+	if (g_grim->isRemastered()) {
+		g_grim->_sputText->luaGetFontDimensions();
+		return;
+	}
+
 	warning("GetFontDimensions(): the original dereferences a Lua object as a font pointer and crashes");
 }
 
@@ -1749,11 +1754,14 @@ struct luaL_reg grimDemoCostumeOpcodes[] = {
 	{ "GetKeyLength", LUA_OPCODE(Lua_V1, GetKeyLength) }
 };
 
-Lua_V1::Lua_V1(bool isEmi) : LuaBase(isEmi), _hs(nullptr), _initialized(0), _debugToggleFunc(nullptr), _totSaveBytes(0), _nextImageHandle(1), _nextObjectStateHandle(1) {
+Lua_V1::Lua_V1(bool isEmi) : LuaBase(isEmi), _hs(nullptr), _initialized(0), _debugToggleFunc(nullptr), _totSaveBytes(0), _nextImageHandle(1), _nextObjectStateHandle(1),
+		_resolutionScaling(0.0f), _advancedLighting(0.0f) {
 	for (int i = 0; i < kMaxImages; i++) {
 		_imageHandles[i] = 0;
 		_images[i] = nullptr;
 	}
+
+	lua_FuncIDsSetRemastered(false);
 }
 
 void Lua_V1::registerMainOpcodes() {

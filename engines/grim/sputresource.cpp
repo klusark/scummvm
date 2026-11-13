@@ -27,6 +27,7 @@
 #include "common/util.h"
 
 #include "engines/grim/text/blasttext.h"
+#include "engines/grim/text/hdtext.h"
 #include "engines/grim/chore/cos.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/imuse/imuse_engine.h"
@@ -529,6 +530,10 @@ int SputResource::loadResFont(ResHandlerMsg *msg) {
 			// The demo can purge the fonts
 			if (!_rd->isDemo())
 				_res->setPurgeOnFree(font, 0);
+
+			// The remastered draws the font from the TrueType file named in FontsHD
+			if (g_grim->isRemastered())
+				_blastText->getHdText()->attachFont(font, msg->name);
 
 			return result;
 		}

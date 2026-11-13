@@ -37,6 +37,7 @@ class WriteStream;
 namespace Grim {
 
 class GrimEngine;
+class HdTextCache;
 class LegacyImporter;
 class Lua_V1;
 class NormalText;
@@ -47,12 +48,19 @@ class SputRender;
 class SputRoom;
 class SputTime;
 class Text;
+struct HdTextInfo;
 struct SputActor;
+
+enum {
+	// The remastered texts can be up to 8191 characters long, the others keep 511
+	kTextEventCapacity = 8192,
+	kTextEventClassicCapacity = 512
+};
 
 struct SputTextEvent {
 	SputTextEvent *next;
 	SputTextEvent *prev;
-	char text[512];
+	char text[kTextEventCapacity];
 	TextParams params;
 	int x;
 	int y;
@@ -61,6 +69,10 @@ struct SputTextEvent {
 	SputActor *actor;
 	int flags;
 	int serial;
+	// Remastered only: the lines to show and the layout of the HD text
+	int firstLine;
+	int lineCount;
+	HdTextCache *hdCache;
 };
 
 class SputText {
@@ -74,6 +86,7 @@ public:
 
 	void killEvent(SputTextEvent *event);
 	void update(int force);
+	void update(int force, int page);
 	int initialize(SysStruct *hs);
 	void pause();
 	void resume();
@@ -88,6 +101,15 @@ public:
 	void drawTextEvent(SputTextEvent *event, int markDirty);
 	SputTextEvent *findSerialNumber(int serial);
 	int getTextObjectParams(TextParams *params, lua_Object tableObj, SputTextEvent *event);
+	int getCoordsFromTable(lua_Object tableObj);
+	void getHdClip(StdRect *clip, int coords);
+	void queueBlastEvent(SputTextEvent *event);
+	int getTextCapacity() const;
+	bool queryTextObject(SputTextEvent *event, int *x, int *y, int *width, int *height);
+	int getHdLineCount(SputTextEvent *event);
+	int getHdLineCharacterCount(SputTextEvent *event, int line);
+	void invalidateHdText(SputTextEvent *event);
+	void luaGetFontDimensions();
 	void parseSayLineTable(lua_Object tableObj, int *background, int *volume, int *pan, int *x, int *y);
 	TextParams *getDefaultTextParams() { return &_defaultTextParams; }
 	int save(Common::WriteStream *stream);
@@ -108,6 +130,13 @@ private:
 	SputRoom *_sputRoom;
 	GrimEngine *_grim;
 	Lua_V1 *_lua = nullptr;
+
+	void initHdEvent(SputTextEvent *event);
+	void dropHdBitmap(HdTextCache *cache);
+	void updateHd(int force, int page);
+	void drawHdEvent(SputTextEvent *event, int page);
+	HdTextCache *getHdLayout(SputTextEvent *event);
+	bool makeHdInfo(SputTextEvent *event, HdTextInfo *info);
 
 	SysStruct *_hs;
 	int _initialized;
@@ -145,6 +174,12 @@ private:
 	int _luaTextObjVolumeRef;
 	int _luaTextObjBufferRef;
 	int _luaTextObjBackgroundRef;
+	int _luaTextObjCoordsRef;
+	int _luaTextObjLeftClipRef;
+	int _luaTextObjAlphaRef;
+	int _luaTextObjLayerRef;
+	int _luaTextObjFadeRef;
+	int _luaTextObjHighlightRef;
 };
 
 } // End of namespace Grim

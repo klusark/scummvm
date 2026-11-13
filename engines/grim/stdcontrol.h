@@ -94,14 +94,26 @@ class StdControl {
 public:
 	enum {
 		kNumAxes = 15,
-		kNumKeys = 288
+		kNumKeys = 290,
+		kKeyMouseLong = 288
 	};
 
-	StdControl();
+	// Size of the canvas the remastered scripts use for the cursor position
+	enum {
+		kCanvasWidth = 1920,
+		kCanvasHeight = 1080,
+		kCanvasPlayWidth = 1440,
+		kCanvasPlayOffset = 240
+	};
+
+	StdControl(bool remastered);
 
 	StdControlInput *getInput() { return &_input; }
 	int isStarted() const { return _startup; }
 	int isOpen() const { return _open; }
+
+	// Cursor position on the 1920x1080 canvas, menuMode is true while the library mode is 5
+	void getMouseCanvasPosition(bool menuMode, int *x, int *y) const;
 
 	int startup();
 	void shutdown();
@@ -127,6 +139,7 @@ private:
 	void enableAxis(int axis, int minVal, int maxVal, float deadZone);
 	void updateKey(StdControlKey *key, int down, int time);
 
+	bool _remastered;
 	int _startup;
 	int _open;
 	int _controlsActive;

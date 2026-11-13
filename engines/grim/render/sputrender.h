@@ -154,6 +154,7 @@ public:
 	void buildGammaTable(const StdColorFormat *format, float gamma);
 	void colorCorrect(uint16 *colors, int count);
 	void setGamma(float gamma);
+	float getGamma() const { return _gammaCorrection; }
 	void dim(int force, char shift);
 	void dimRegion(int x, int y, int width, int height, float scale);
 
@@ -192,6 +193,9 @@ public:
 	void drawBoundingBox();
 	void drawWalkPlanes();
 
+	// Remastered only
+	bool disable3DRendering();
+
 	StdVBuffer *getCleanBuffer() const { return _cleanBuffer; }
 	int getRenderFlags() const { return _renderFlags; }
 	uint16 *getColors() { return _colors; }
@@ -201,7 +205,23 @@ public:
 	const uint16 *getColorLookup() const { return _colorLookup; }
 
 private:
+	// Layers of the primitives drawn on the canvas of the remastered
+	enum {
+		kPrimitiveLayerOverlay = 2,
+		kPrimitiveLayerMenu = 4,
+		kPrimitiveLayerDialog = 8
+	};
+
 	void markDirtyRectInternal(StdRect *rect, int page, uint pageIndex);
+
+	// Remastered only (sputrender_remastered.cpp)
+	void clearSceneBuffer();
+	void updateTextPage(int force, int page);
+	bool updateMovieRemastered();
+	void drawOverlayLayers(int mode);
+	void drawLastLayers();
+	void drawNoRoomRemastered();
+	void drawPrimitivesCanvas(int layerMask);
 
 	RenderDroid *_rd;
 	StdDisplay *_stdDisplay;
@@ -265,6 +285,7 @@ private:
 	SputRenderPageFlipFunc _pageFlipFunc;
 	int _pageFlipEnable;
 	int _movieJustFinished;
+	int _clearedBehindMovie;
 	int _camActorIndex;
 
 	int _debugFlags;

@@ -21,6 +21,7 @@
 
 #include "engines/grim/grim.h"
 #include "engines/grim/lua_v1_opcodes/lua_v1.h"
+#include "engines/grim/remastered/sputmouse.h"
 #include "engines/grim/render/sputprimitive.h"
 #include "engines/grim/render/sputrender.h"
 #include "engines/grim/movie/sputsmush.h"
@@ -157,6 +158,9 @@ void Lua_V1::CleanBuffer() {
 void Lua_V1::StartFullscreenMovie() {
 	lua_Object nameObj = lua_getparam(1);
 	lua_Object loopObj = lua_getparam(2);
+
+	if (g_grim->isRemastered() && g_grim->getSputMouse())
+		g_grim->getSputMouse()->setVisibleInMovie(false);
 
 	if (lua_isstring(nameObj) && g_grim->playMovie(lua_getstring(nameObj), 1, !lua_isnil(loopObj), -1, -1) == 1)
 		pushbool(true);

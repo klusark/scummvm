@@ -49,14 +49,17 @@ void SputRender::buildGammaTable(const StdColorFormat *format, float gamma) {
 		return;
 	}
 
+	// The remastered applies the gamma when the frame is presented
+	double exponent = _grim->isRemastered() ? 1.0 : (double)gamma;
+
 	for (int i = 0; i < 0x10000; i++) {
 		float red = (float)((double)((i >> 11) & 0x1F) / 31.0);
 		float green = (float)((double)((i >> 5) & 0x3F) / 63.0);
 		float blue = (float)((double)(i & 0x1F) / 31.0);
 
-		red = (float)pow((double)red, (double)gamma);
-		green = (float)pow((double)green, (double)gamma);
-		blue = (float)pow((double)blue, (double)gamma);
+		red = (float)pow((double)red, exponent);
+		green = (float)pow((double)green, exponent);
+		blue = (float)pow((double)blue, exponent);
 
 		red = (float)((double)((1 << format->redBits) - 1) * (double)red);
 		green = (float)((double)((1 << format->greenBits) - 1) * (double)green);

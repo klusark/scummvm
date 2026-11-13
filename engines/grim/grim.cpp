@@ -23,6 +23,7 @@
 #include "common/debug-channels.h"
 #include "common/file.h"
 #include "common/fs.h"
+#include "common/language.h"
 #include "common/config-manager.h"
 #include "common/compression/deflate.h"
 #include "common/translation.h"
@@ -61,6 +62,12 @@
 #include "engines/grim/grim.h"
 #include "engines/grim/lua.h"
 #include "engines/grim/lua_v1_opcodes/lua_v1.h"
+#include "engines/grim/remastered/hdcanvas.h"
+#include "engines/grim/remastered/dialoglog.h"
+#include "engines/grim/remastered/hotspot.h"
+#include "engines/grim/remastered/lua_remastered.h"
+#include "engines/grim/remastered/sputmouse.h"
+#include "engines/grim/remastered/overlay.h"
 #include "engines/grim/legacy_savegames/legacy_savegames.h"
 #include "engines/grim/lab.h"
 #include "engines/grim/patchr.h"
@@ -161,17 +168,17 @@ GrimEngine::~GrimEngine() {
 }
 
 const char *GrimEngine::getUpdateFilename() {
-	if (!(getGameFlags() & ADGF_DEMO))
+	if (!(getGameFlags() & ADGF_DEMO) && !isRemastered())
 		return "gfupd101.exe";
 	else
 		return nullptr;
 }
 
 Common::Error GrimEngine::run() {
-	if (_gameType != GType_GRIM || isRemastered())
+	if (_gameType != GType_GRIM)
 		return Common::Error(Common::kUnsupportedGameidError, _s("This game is not supported by this version of the Grim engine"));
 
-	if (!checkGameData("Grim Fandango"))
+	if (!isRemastered() && !checkGameData("Grim Fandango"))
 		return Common::kUserCanceled;
 
 	return runGrime();
@@ -207,38 +214,41 @@ Common::KeymapArray GrimEngine::initKeymapsGrim(const char *target) {
 	Keymap *engineKeyMap = new Keymap(Keymap::kKeymapTypeGame, "grim", "Grim Fandango");
 	Action *act;
 
+	// The remastered scripts read the pad buttons directly, so they stay out of the keymap
+	const bool remastered = target && ConfMan.get("extra", target).contains("Remastered");
+
 	engineKeyMap->setPartialMatchAllowed(false);
 
-	addKeyAction(engineKeyMap, kStandardActionMoveUp, _("Up"), KeyState(KEYCODE_UP), "UP", "JOY_UP");
-	addKeyAction(engineKeyMap, kStandardActionMoveDown, _("Down"), KeyState(KEYCODE_DOWN), "DOWN", "JOY_DOWN");
-	addKeyAction(engineKeyMap, kStandardActionMoveLeft, _("Left"), KeyState(KEYCODE_LEFT), "LEFT", "JOY_LEFT");
-	addKeyAction(engineKeyMap, kStandardActionMoveRight, _("Right"), KeyState(KEYCODE_RIGHT), "RIGHT", "JOY_RIGHT");
+	addKeyAction(engineKeyMap, kStandardActionMoveUp, _("Up"), KeyState(KEYCODE_UP), "UP", remastered ? nullptr : "JOY_UP");
+	addKeyAction(engineKeyMap, kStandardActionMoveDown, _("Down"), KeyState(KEYCODE_DOWN), "DOWN", remastered ? nullptr : "JOY_DOWN");
+	addKeyAction(engineKeyMap, kStandardActionMoveLeft, _("Left"), KeyState(KEYCODE_LEFT), "LEFT", remastered ? nullptr : "JOY_LEFT");
+	addKeyAction(engineKeyMap, kStandardActionMoveRight, _("Right"), KeyState(KEYCODE_RIGHT), "RIGHT", remastered ? nullptr : "JOY_RIGHT");
 	addKeyAction(engineKeyMap, "MVNW", _("Up left"), KeyState(KEYCODE_KP7, '7'), "KP7", nullptr);
 	addKeyAction(engineKeyMap, "MVNE", _("Up right"), KeyState(KEYCODE_KP9, '9'), "KP9", nullptr);
 	addKeyAction(engineKeyMap, "MVSW", _("Down left"), KeyState(KEYCODE_KP1, '1'), "KP1", nullptr);
 	addKeyAction(engineKeyMap, "MVSE", _("Down right"), KeyState(KEYCODE_KP3, '3'), "KP3", nullptr);
 
-	addKeyAction(engineKeyMap, "BRUN", _("Run"), KeyState(KEYCODE_LSHIFT), "LSHIFT", "JOY_RIGHT_TRIGGER");
-	addKeyAction(engineKeyMap, "EXAM", _("Examine"), KeyState(KEYCODE_e, 'e'), "e", "JOY_B");
+	addKeyAction(engineKeyMap, "BRUN", _("Run"), KeyState(KEYCODE_LSHIFT), "LSHIFT", remastered ? nullptr : "JOY_RIGHT_TRIGGER");
+	addKeyAction(engineKeyMap, "EXAM", _("Examine"), KeyState(KEYCODE_e, 'e'), "e", remastered ? nullptr : "JOY_B");
 	addKeyAction(engineKeyMap, "EXAMALT", _("Examine (alternative)"), KeyState(KEYCODE_s, 's'), "s", nullptr);
-	addKeyAction(engineKeyMap, "BUSE", _("Use / Talk"), KeyState(KEYCODE_u, 'u'), "u", "JOY_Y");
+	addKeyAction(engineKeyMap, "BUSE", _("Use / Talk"), KeyState(KEYCODE_u, 'u'), "u", remastered ? nullptr : "JOY_Y");
 	addKeyAction(engineKeyMap, "USEALT", _("Use / Talk (alternative)"), KeyState(KEYCODE_w, 'w'), "w", nullptr);
-	addKeyAction(engineKeyMap, "PICK", _("Pick up / Put away"), KeyState(KEYCODE_p, 'p'), "p", "JOY_X");
+	addKeyAction(engineKeyMap, "PICK", _("Pick up / Put away"), KeyState(KEYCODE_p, 'p'), "p", remastered ? nullptr : "JOY_X");
 	addKeyAction(engineKeyMap, "PICKALT", _("Pick up / Put away (alternative)"), KeyState(KEYCODE_a, 'a'), "a", nullptr);
-	addKeyAction(engineKeyMap, "INVT", _("Inventory"), KeyState(KEYCODE_i, 'i'), "i", "JOY_LEFT_TRIGGER");
+	addKeyAction(engineKeyMap, "INVT", _("Inventory"), KeyState(KEYCODE_i, 'i'), "i", remastered ? nullptr : "JOY_LEFT_TRIGGER");
 	addKeyAction(engineKeyMap, "INVTALT", _("Inventory (alternative)"), KeyState(KEYCODE_d, 'd'), "d", nullptr);
-	addKeyAction(engineKeyMap, "SKLI", _("Skip dialog lines"), KeyState(KEYCODE_PERIOD, '.'), "PERIOD", "JOY_LEFT_SHOULDER");
-	addKeyAction(engineKeyMap, "GAZE", _("Change gaze"), KeyState(KEYCODE_DELETE), "DELETE", "JOY_LEFT_STICK");
-	addKeyAction(engineKeyMap, "RETURN", _("Confirm"), KeyState(KEYCODE_RETURN, ASCII_RETURN), "RETURN", "JOY_A", "JOY_RIGHT_STICK");
+	addKeyAction(engineKeyMap, "SKLI", _("Skip dialog lines"), KeyState(KEYCODE_PERIOD, '.'), "PERIOD", remastered ? nullptr : "JOY_LEFT_SHOULDER");
+	addKeyAction(engineKeyMap, "GAZE", _("Change gaze"), KeyState(KEYCODE_DELETE), "DELETE", remastered ? nullptr : "JOY_LEFT_STICK");
+	addKeyAction(engineKeyMap, "RETURN", _("Confirm"), KeyState(KEYCODE_RETURN, ASCII_RETURN), "RETURN", remastered ? nullptr : "JOY_A", remastered ? nullptr : "JOY_RIGHT_STICK");
 	addKeyAction(engineKeyMap, "RETURNKP", _("Confirm (keypad)"), KeyState(KEYCODE_KP_ENTER, ASCII_RETURN), "KP_ENTER", nullptr);
-	addKeyAction(engineKeyMap, "PGUP", _("Page up"), KeyState(KEYCODE_PAGEUP), "PAGEUP", "JOY_RIGHT_SHOULDER");
+	addKeyAction(engineKeyMap, "PGUP", _("Page up"), KeyState(KEYCODE_PAGEUP), "PAGEUP", remastered ? nullptr : "JOY_RIGHT_SHOULDER");
 	addKeyAction(engineKeyMap, "PGDN", _("Page down"), KeyState(KEYCODE_PAGEDOWN), "PAGEDOWN", nullptr);
 	addKeyAction(engineKeyMap, "PGHM", _("Page home"), KeyState(KEYCODE_HOME), "HOME", nullptr);
 	addKeyAction(engineKeyMap, "PGEN", _("Page end"), KeyState(KEYCODE_END), "END", nullptr);
 
 	// I18N: Skipping cutscene playback
-	addKeyAction(engineKeyMap, kStandardActionSkip, _("Skip"), KeyState(KEYCODE_ESCAPE, ASCII_ESCAPE), "ESCAPE", "JOY_BACK");
-	addKeyAction(engineKeyMap, kStandardActionOpenMainMenu, _("Game menu"), KeyState(KEYCODE_F1), "F1", "JOY_START");
+	addKeyAction(engineKeyMap, kStandardActionSkip, _("Skip"), KeyState(KEYCODE_ESCAPE, ASCII_ESCAPE), "ESCAPE", remastered ? nullptr : "JOY_BACK");
+	addKeyAction(engineKeyMap, kStandardActionOpenMainMenu, _("Game menu"), KeyState(KEYCODE_F1), "F1", remastered ? nullptr : "JOY_START");
 	addKeyAction(engineKeyMap, kStandardActionPause, _("Pause"), KeyState(KEYCODE_PAUSE), "PAUSE", nullptr);
 
 	act = new Action("GMM", _("Global Main Menu"));
@@ -312,7 +322,39 @@ int GrimEngine::applyStickAction(int *axes, const Common::Event &event) {
 	return axis;
 }
 
-int GrimEngine::getJoystickButtonIndex(int button) {
+int GrimEngine::getJoystickButtonIndex(int button, bool remastered) {
+	if (remastered) {
+		// Button order of the remastered scripts
+		switch (button) {
+		case Common::JOYSTICK_BUTTON_A:
+			return 0;
+		case Common::JOYSTICK_BUTTON_B:
+			return 1;
+		case Common::JOYSTICK_BUTTON_X:
+			return 2;
+		case Common::JOYSTICK_BUTTON_Y:
+			return 3;
+		case Common::JOYSTICK_BUTTON_DPAD_UP:
+			return 4;
+		case Common::JOYSTICK_BUTTON_DPAD_DOWN:
+			return 5;
+		case Common::JOYSTICK_BUTTON_DPAD_LEFT:
+			return 6;
+		case Common::JOYSTICK_BUTTON_DPAD_RIGHT:
+			return 7;
+		case Common::JOYSTICK_BUTTON_LEFT_SHOULDER:
+			return 8;
+		case Common::JOYSTICK_BUTTON_RIGHT_SHOULDER:
+			return 9;
+		case Common::JOYSTICK_BUTTON_START:
+			return 10;
+		case Common::JOYSTICK_BUTTON_LEFT_STICK:
+			return 11;
+		default:
+			return -1;
+		}
+	}
+
 	// Generic gamepad button order
 	switch (button) {
 	case Common::JOYSTICK_BUTTON_A:
@@ -405,10 +447,10 @@ void GrimEngine::mountPatchArchives() {
 	bool demo = (getGameFlags() & ADGF_DEMO) != 0;
 	const char *labName = demo ? "grimdemo.mus" : "grim-patch.lab";
 
-	if (!demo && !SearchMan.hasFile(labName))
+	if (!demo && !isRemastered() && !SearchMan.hasFile(labName))
 		error("%s", "grim-patch.lab not found");
 
-	if (!SearchMan.hasArchive(labName)) {
+	if (!isRemastered() && !SearchMan.hasArchive(labName)) {
 		Common::ArchiveMemberList files;
 
 		SearchMan.listMatchingMembers(files, labName);
@@ -531,7 +573,7 @@ void GrimEngine::createModules() {
 
 	_res = new Res(isDemo);
 	_sputResource = new SputResource(_res, _rd, _stdDisplay, _stdBitmap);
-	_stdControl = new StdControl();
+	_stdControl = new StdControl(isRemastered());
 
 	StdControlInput *controlInput = _stdControl->getInput();
 	StdControlJoyCaps *joyCaps = &controlInput->joyCaps[0];
@@ -539,7 +581,7 @@ void GrimEngine::createModules() {
 	controlInput->numJoysticks = 1;
 	joyCaps->available = 1;
 	joyCaps->flags = 0x0F;
-	joyCaps->maxButtons = 10;
+	joyCaps->maxButtons = isRemastered() ? 12 : 10;
 
 	for (int axis = 0; axis < 6; axis++) {
 		joyCaps->axisMin[axis] = -32768;
@@ -553,7 +595,7 @@ void GrimEngine::createModules() {
 	_sputTime = new SputTime(isDemo);
 	_sputPrimitive = new SputPrimitive(_rd);
 	_sputRoom = new SputRoom(_rd, _res, _sputResource, _stdDisplay, _stdBitmap, _stdLbm, _stdConffile, _walkSystem);
-	_sputControl = new SputControl(_rd, _sputRoom, _stdControl);
+	_sputControl = new SputControl(_rd, _sputRoom, _stdControl, isRemastered());
 
 	_text = new Text();
 	_blastText = new BlastText(_text);
@@ -578,7 +620,19 @@ void GrimEngine::createModules() {
 		_sputSmush = new SputSmush(_res, _stdDisplay, _sputRender, _mainGfxBuffer, _wuRegistry);
 	}
 
-	_luaV1 = new Lua_V1(false);
+	if (isRemastered())
+		_hdCanvas = new HdCanvas();
+
+	if (isRemastered())
+		_luaV1 = new Lua_Remastered();
+	else
+		_luaV1 = new Lua_V1(false);
+
+	if (isRemastered()) {
+		_sputMouse = new SputMouse(this, this, _stdControl, _sputRoom, _sputActor, _walkSystem, _rd);
+		_dialogLog = new DialogLog();
+		_sputMouse->getHotspots()->setOverlays(_hdCanvas->getOverlays());
+	}
 
 	_res->setSputRender(_sputRender);
 	_sputResource->setSputRender(_sputRender);
@@ -619,8 +673,14 @@ void GrimEngine::destroyModules() {
 
 	freeVideoDevices();
 
+	delete _sputMouse;
+	_sputMouse = nullptr;
+	delete _dialogLog;
+	_dialogLog = nullptr;
 	delete _luaV1;
 	_luaV1 = nullptr;
+	delete _hdCanvas;
+	_hdCanvas = nullptr;
 	delete _sputSmush;
 	_sputSmush = nullptr;
 	delete _sputActor;
@@ -693,6 +753,10 @@ void GrimEngine::destroyModules() {
 
 uint GrimEngine::getHardwareBackends() const {
 	uint mask = 0;
+
+	// The remastered composes its 1920x1080 output in system memory
+	if (isRemastered())
+		return mask;
 
 #if defined(GRIM_STD3D)
 	uint32 availableTypes = Graphics::Renderer::getAvailableTypes();
@@ -781,8 +845,16 @@ int GrimEngine::grimStartup() {
 	_stdDisplay->startup();
 	_polyglotV1->initialize(this);
 	_polyglotV1->startup();
-	_polyglotV1->configure("grim.tab");
+
+	if (!isRemastered())
+		_polyglotV1->configure("grim.tab");
+
 	_wuRegistry->startup("1.0");
+
+	if (isRemastered()) {
+		initLanguage();
+		_wuRegistry->saveInt("RenderingMode", _renderingMode);
+	}
 
 	_rd->startup(this);
 
@@ -826,6 +898,76 @@ int GrimEngine::grimStartup() {
 		return 0;
 
 	return 1;
+}
+
+void GrimEngine::initLanguage() {
+	int language = kLanguageEnglish;
+
+	if (ConfMan.hasKey("grim_language")) {
+		language = ConfMan.getInt("grim_language");
+	} else {
+		Common::Language launcherLanguage = _gameLanguage;
+
+		if (ConfMan.hasKey("language"))
+			launcherLanguage = Common::parseLanguage(ConfMan.get("language"));
+
+		switch (launcherLanguage) {
+		case Common::DE_DEU:
+			language = kLanguageGerman;
+			break;
+		case Common::ES_ESP:
+			language = kLanguageSpanish;
+			break;
+		case Common::FR_FRA:
+			language = kLanguageFrench;
+			break;
+		case Common::IT_ITA:
+			language = kLanguageItalian;
+			break;
+		case Common::PT_BRA:
+			language = kLanguagePortuguese;
+			break;
+		default:
+			language = kLanguageEnglish;
+			break;
+		}
+	}
+
+	if (language < 0 || language >= kNumLanguages) {
+		warning("GrimEngine::initLanguage(): invalid language %d, using English", language);
+		language = kLanguageEnglish;
+	}
+
+	_language = language;
+	_wuRegistry->saveInt("Language", _language);
+	loadTranslations();
+}
+
+void GrimEngine::loadTranslations() {
+	Common::String tabFile = Common::String::format("grim.%s.tab", getLanguageCode());
+
+	_polyglotV1->shutdown();
+	_polyglotV1->configure(tabFile.c_str());
+}
+
+const char *GrimEngine::getLanguageCode() const {
+	static const char *const codes[kNumLanguages] = { "en", "de", "es", "fr", "it", "pt" };
+
+	return codes[_language];
+}
+
+void GrimEngine::setLanguage(int language) {
+	if (language < 0 || language >= kNumLanguages) {
+		warning("GrimEngine::setLanguage(): invalid language %d, ignored", language);
+		return;
+	}
+
+	_language = language;
+	loadTranslations();
+}
+
+void GrimEngine::setRenderingMode(int mode) {
+	// The classic renderer is the only one available, so the requested mode is not applied
 }
 
 void GrimEngine::grimMain() {
@@ -1322,6 +1464,18 @@ int GrimEngine::loop(int render, int manualTicks) {
 void GrimEngine::timedPageFlip() {
 	setPerfCounter(8);
 
+	// The frame after the menus is black with only the borders, and the scene is redrawn after it
+	if (isRemastered()) {
+		if (_displayPrevMode == kLibModeMenu && _libMode != kLibModeMenu && _renderingMode != kRenderingModeHd) {
+			_sputRender->getIris(1.0f, 320, 240);
+			_hdCanvas->clearBuffer();
+			_hdCanvas->getOverlays()->render(40, 0);
+			_sputRender->forceRefresh();
+		}
+
+		_displayPrevMode = _libMode;
+	}
+
 	switch (_libMode) {
 	case 3:
 		if (!_sputRender->queryDisplayState())
@@ -1336,6 +1490,12 @@ void GrimEngine::timedPageFlip() {
 			_sputRender->pageFlip();
 			_renderPending = 0;
 		}
+
+		break;
+	case kLibModeUser:
+	case kLibModeMenu:
+		if (isRemastered())
+			_sputRender->pageFlip();
 
 		break;
 	default:
@@ -2175,10 +2335,15 @@ int GrimEngine::selectDisplayMode(int deviceIndex, int modeIndex, int threeDInde
 	} else {
 		Graphics::PixelFormat pixelFormat(2, 5, 6, 5, 0, 11, 5, 0, 0);
 
-		initGraphics(kDisplayWidth, kDisplayHeight, &pixelFormat);
+		// The remastered has the scene in the 640x480 surface and puts it on a 1920x1080 screen
+		if (_hdCanvas) {
+			_hdCanvas->open();
+		} else {
+			initGraphics(kDisplayWidth, kDisplayHeight, &pixelFormat);
 
-		if (g_system->getScreenFormat() != pixelFormat)
-			error("GrimEngine::selectDisplayMode(): the screen does not support the RGB565 pixel format");
+			if (g_system->getScreenFormat() != pixelFormat)
+				error("GrimEngine::selectDisplayMode(): the screen does not support the RGB565 pixel format");
+		}
 
 		memset(&displayTex, 0, sizeof(displayTex));
 		displayTex.width = kDisplayWidth;
@@ -2303,6 +2468,9 @@ void GrimEngine::shutdownDisplay() {
 		_backBuffer->pixels = nullptr;
 	}
 
+	if (_hdCanvas)
+		_hdCanvas->close();
+
 	_displayOpen = 0;
 	_wuRegistry->saveInt("ExperimentalDisplay", 0);
 }
@@ -2368,6 +2536,13 @@ int GrimEngine::pageFlipCallback() {
 	if (!buffer->pixels) {
 		warning("GrimEngine::pageFlipCallback(): the display is not open");
 		return 0;
+	}
+
+	if (g_grim->_hdCanvas && g_grim->_hdCanvas->isActive()) {
+		float gamma = g_grim->_sputRender ? g_grim->_sputRender->getGamma() : 1.0f;
+
+		g_grim->_hdCanvas->present(buffer, gamma);
+		return 1;
 	}
 
 	g_system->copyRectToScreen(buffer->pixels, buffer->tex.pitchInBytes, 0, 0, buffer->tex.width, buffer->tex.height);
@@ -2639,17 +2814,18 @@ void GrimEngine::pumpEvents() {
 		case Common::EVENT_LBUTTONUP:
 			addMouseButtonEvent(12, 0);
 			break;
+		// The remastered numbers the buttons left, middle, right
 		case Common::EVENT_RBUTTONDOWN:
-			addMouseButtonEvent(13, 0x80);
+			addMouseButtonEvent(isRemastered() ? 14 : 13, 0x80);
 			break;
 		case Common::EVENT_RBUTTONUP:
-			addMouseButtonEvent(13, 0);
+			addMouseButtonEvent(isRemastered() ? 14 : 13, 0);
 			break;
 		case Common::EVENT_MBUTTONDOWN:
-			addMouseButtonEvent(14, 0x80);
+			addMouseButtonEvent(isRemastered() ? 13 : 14, 0x80);
 			break;
 		case Common::EVENT_MBUTTONUP:
-			addMouseButtonEvent(14, 0);
+			addMouseButtonEvent(isRemastered() ? 13 : 14, 0);
 			break;
 		case Common::EVENT_X1BUTTONDOWN:
 			addMouseButtonEvent(15, 0x80);
@@ -2671,7 +2847,7 @@ void GrimEngine::pumpEvents() {
 			break;
 		}
 		case Common::EVENT_JOYBUTTON_DOWN: {
-			int button = getJoystickButtonIndex(event.joystick.button);
+			int button = getJoystickButtonIndex(event.joystick.button, isRemastered());
 
 			if (button >= 0)
 				input->joyState[0].buttons |= 1 << button;
@@ -2679,7 +2855,7 @@ void GrimEngine::pumpEvents() {
 			break;
 		}
 		case Common::EVENT_JOYBUTTON_UP: {
-			int button = getJoystickButtonIndex(event.joystick.button);
+			int button = getJoystickButtonIndex(event.joystick.button, isRemastered());
 
 			if (button >= 0)
 				input->joyState[0].buttons &= ~(1 << button);
@@ -2705,7 +2881,8 @@ void GrimEngine::handleFocus(int hasFocus) {
 		if (_stdControl->isOpen())
 			_stdControl->flush();
 
-		CursorMan.showMouse(true);
+		if (!isRemastered())
+			CursorMan.showMouse(true);
 	}
 }
 

@@ -26,6 +26,7 @@
 #include "engines/grim/lua_v1_opcodes/lua_v1.h"
 #include "engines/grim/inputdialog.h"
 #include "engines/grim/text/blasttext.h"
+#include "engines/grim/text/hdtext.h"
 #include "engines/grim/actor/sputactor.h"
 #include "engines/grim/render/sputrender.h"
 #include "engines/grim/text/sputtext.h"
@@ -106,13 +107,17 @@ void Lua_V1::ChangeTextObject() {
 			if (lua_isstring(paramObj)) {
 				const char *text = sputText->extractSayLineData(lua_getstring(paramObj), nullptr);
 
-				Common::strlcpy(event->text, text, sizeof(event->text));
+				Common::strlcpy(event->text, text, sputText->getTextCapacity());
 			} else {
 				if (!lua_istable(paramObj))
 					break;
 				sputText->getTextObjectParams(&event->params, paramObj, event);
 			}
 		}
+
+		// The HD layout has to be done again
+		if (g_grim->isRemastered())
+			sputText->invalidateHdText(event);
 
 		lua_pushnumber((float)g_grim->_text->getStringWidth(&event->params, event->text));
 		lua_pushnumber((float)g_grim->_text->getStringHeight(&event->params, event->text));
@@ -151,6 +156,17 @@ void Lua_V1::MakeTextObject() {
 	params.clip = &clip;
 
 	lua_Object tableObj = lua_getparam(2);
+
+	if (g_grim->isRemastered()) {
+		int coords = 0;
+
+		if (tableObj && lua_istable(tableObj))
+			coords = sputText->getCoordsFromTable(tableObj);
+
+		params.coords = coords;
+		sputText->getHdClip(&clip, coords);
+	}
+
 	if (tableObj && lua_istable(tableObj))
 		sputText->getTextObjectParams(&params, tableObj, nullptr);
 
@@ -171,6 +187,35 @@ void Lua_V1::MakeTextObject() {
 
 void Lua_V1::GetTextObjectDimensions() {
 	lua_Object textObj = lua_getparam(1);
+
+	if (g_grim->isRemastered()) {
+		// The size and the position come from the HD layout, in the units of the coordinates asked
+		lua_Object modeObj = lua_getparam(2);
+		int mode = 0;
+		int x = 0;
+		int y = 0;
+		int width = 0;
+		int height = 0;
+
+		if (lua_isnumber(modeObj))
+			mode = luaFtol(lua_getnumber(modeObj));
+
+		if (lua_isuserdata(textObj) && lua_tag(textObj) == MKTAG('T', 'X', 'E', 'T')) {
+			SputTextEvent *event = getTextEvent(textObj);
+
+			if (event && event->text[0] && g_grim->_sputText->queryTextObject(event, &x, &y, &width, &height)) {
+				HdText::convertCoordsNative(&x, &y, mode, false);
+				HdText::convertCoordsNative(&width, &height, mode, true);
+			}
+		}
+
+		lua_pushnumber((float)width);
+		lua_pushnumber((float)height);
+		lua_pushnumber((float)x);
+		lua_pushnumber((float)y);
+
+		return;
+	}
 
 	if (lua_isuserdata(textObj) && lua_tag(textObj) == MKTAG('T', 'X', 'E', 'T')) {
 		SputTextEvent *event = getTextEvent(textObj);
@@ -265,15 +310,31 @@ void Lua_V1::BlastText() {
 	}
 
 	const char *msgId = lua_getstring(textObj);
+	bool remastered = g_grim->isRemastered();
 
-	g_grim->_stdDisplay->vBufferLock(g_grim->_sputRender->drawBuffer());
+	// The remastered draws the text on the canvas, not on the buffer of the scene
+	if (!remastered)
+		g_grim->_stdDisplay->vBufferLock(g_grim->_sputRender->drawBuffer());
 
 	TextParams params = sputText->_blastTextParams;
 
-	params.surface->pixels = g_grim->_sputRender->drawBuffer()->pixels;
+	if (!remastered)
+		params.surface->pixels = g_grim->_sputRender->drawBuffer()->pixels;
+
 	params.clip = &clip;
 
 	lua_Object tableObj = lua_getparam(2);
+
+	if (remastered) {
+		int coords = 0;
+
+		if (tableObj && lua_istable(tableObj))
+			coords = sputText->getCoordsFromTable(tableObj);
+
+		params.coords = coords;
+		sputText->getHdClip(&clip, coords);
+	}
+
 	if (tableObj && lua_istable(tableObj))
 		sputText->getTextObjectParams(&params, tableObj, nullptr);
 
@@ -282,6 +343,12 @@ void Lua_V1::BlastText() {
 	SputTextEvent *event = sputText->allocEvent(&params, text);
 
 	sputText->drawTextEvent(event, 0);
+
+	if (remastered) {
+		sputText->queueBlastEvent(event);
+		return;
+	}
+
 	g_grim->_stdDisplay->vBufferUnlock(g_grim->_sputRender->drawBuffer());
 	sputText->killEvent(event);
 }

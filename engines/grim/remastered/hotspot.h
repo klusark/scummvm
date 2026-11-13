@@ -22,32 +22,160 @@
 #ifndef GRIM_HOTSPOT_H
 #define GRIM_HOTSPOT_H
 
-#include "common/endian.h"
-#include "common/str.h"
+#include "common/scummsys.h"
 
-// LEGACY: #include "engines/grim/pool.h"
-
-#include "math/rect2d.h"
+namespace Common {
+class ReadStream;
+class WriteStream;
+}
 
 namespace Grim {
 
-// LEGACY: class Hotspot : public PoolObject<Hotspot> {
-class Hotspot {
-public:
-	Hotspot(const Common::String &name, int x, int y, int width, int height);
-	~Hotspot();
+class OverlayManager;
+class RenderDroid;
+class SputActorModule;
+class SputRoom;
+class SysStruct;
 
-	static int32 getStaticTag() { return MKTAG('H','O','T','S'); }
+struct Hotspot {
+	enum {
+		kMaxPath = 6,
+		kMaxPolygon = 14,
+		kNameSize = 40,
+		kIdSize = 32
+	};
 
-//private:
-	Common::String _name;
-	int _x;
-	int _y;
-	int _width;
-	int _height;
-	Math::Rect2d _rect;
+	int added;
+	int handle;
+	int setup;
+	char name[kNameSize];
+	char id[kIdSize];
+	int type;
+	int cursor;
+	int pathLen;
+	float path[kMaxPath][3];
+	float offset[3];
+	int actorIndex;
+	int polyNum;
+	int poly[kMaxPolygon][2];
+	int coordMode;
+	int overlayHandle;
+	float wait;
 };
 
-}
+// Click areas of the scenes (the .hot file of each set) and the ones that the
+// scripts add. Polygon points are in the coordinates of the hotspot (coordMode).
+class HotspotManager {
+public:
+	enum {
+		kMaxHotspots = 128,
+		kNumHandles = 1024,
+		kSetNameSize = 40
+	};
+
+	enum Type {
+		kTypeNone,
+		kTypeObject,
+		kTypeWalk,
+		kTypeDynamic,
+		kTypeSpecial,
+		kTypeDialog,
+		kTypeOptions,
+		kTypeOverlay,
+		kTypeMenu,
+		kTypeMenuDialog
+	};
+
+	enum Cursor {
+		kCursorNone,
+		kCursorHotspot,
+		kCursorWalk,
+		kCursorArrowRight,
+		kCursorArrowLeft,
+		kCursorArrowUp,
+		kCursorArrowDown
+	};
+
+	// Modes of the query, the numbers of the HOTSPOT_* constants of the scripts
+	enum QueryMode {
+		kModeNormal = 0,
+		kModeSpecial = 1,
+		kModeMenu = 2,
+		kModeOnlyPath = 3,
+		kModeQuery = 5
+	};
+
+	enum Coords {
+		kCoordsLegacy,
+		kCoordsGameScreen,
+		kCoordsGlobal
+	};
+
+	HotspotManager(SysStruct *hs, SputRoom *sputRoom, SputActorModule *sputActor, RenderDroid *rd);
+	~HotspotManager();
+
+	// The overlays that show an image when the pointer is on a hotspot
+	void setOverlays(OverlayManager *overlays) { _overlays = overlays; }
+
+	// The 1920x1080 canvas and the coordinate spaces of the scripts
+	static void convertCoords1080(int *x, int *y, int mode, bool isSize);
+	static void convertCoordsNative(int *x, int *y, int mode, bool isSize);
+
+	// Loads the hotspots of the set unless it is the one already loaded. The
+	// hotspots added by the scripts stay.
+	void load(const char *setName);
+	void loadCurrentRoom();
+
+	// Hotspots under a point of the canvas, the ones with priority come first
+	int getActiveHotspots(int canvasX, int canvasY, const Hotspot **out, int max, int mode);
+
+	int addHotspot(const char *id, int x, int y, int width, int height, int cursor, int boost, int menuType,
+			const char *hoverImage, int hoverLayer, int coords);
+	void removeHotspot(int handle);
+	void updateHotspot(const char *id, int x, int y, int coords);
+	void linkHotspot(const char *id, int actorIndex);
+
+	// Block of the save game after the two cursor handles
+	int serialize(Common::WriteStream *stream) const;
+	int deserialize(Common::ReadStream *stream);
+
+private:
+	struct TextBuffer {
+		char *data;
+		int size;
+		int pos;
+	};
+
+	static bool isCompatible(int mode, int type, int cursor);
+	static bool isPriorityCompatible(int mode, int type);
+	static bool isInside(int (*poly)[2], int numPoints, int x, int y);
+
+	void clear();
+	void removeFileHotspots();
+	void removeAt(int index);
+	int newHandle();
+	bool isInCurrentSetup(const Hotspot *hotspot) const;
+	bool getPolygon(const Hotspot *hotspot, int (*poly)[2]) const;
+	void getCentroid(int (*poly)[2], int numPoints, int *x, int *y) const;
+	void setHoverHidden(const Hotspot *hotspot, int hidden);
+
+	bool parseSet(TextBuffer *text);
+	int parseSetup(TextBuffer *text, int setup);
+	bool parseHotspot(TextBuffer *text, int setup, Hotspot *hotspot);
+	const char *parseLine(TextBuffer *text, const char *key);
+
+	SysStruct *_hs;
+	SputRoom *_sputRoom;
+	SputActorModule *_sputActor;
+	RenderDroid *_rd;
+	OverlayManager *_overlays;
+
+	Hotspot *_hotspots[kMaxHotspots];
+	int _numHotspots;
+	int _nextHandle;
+	char _setName[kSetNameSize];
+};
+
+} // End of namespace Grim
 
 #endif

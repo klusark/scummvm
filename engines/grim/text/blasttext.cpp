@@ -23,7 +23,9 @@
 #include "common/stream.h"
 #include "common/textconsole.h"
 
+#include "engines/grim/grim.h"
 #include "engines/grim/text/blasttext.h"
+#include "engines/grim/text/hdtext.h"
 #include "engines/grim/text/text.h"
 
 namespace Grim {
@@ -40,13 +42,35 @@ static BlastTextGlyph *findGlyph(BlastTextFont *font, int c) {
 	return &font->glyphs[font->charMap[c - font->firstChar]];
 }
 
-BlastText::BlastText(Text *text) : _text(text) {
+BlastText::BlastText(Text *text) : _text(text), _hdText(nullptr) {
 	memset(&_surface, 0, sizeof(_surface));
 	memset(_charMap, 0, sizeof(_charMap));
 }
 
+BlastText::~BlastText() {
+	delete _hdText;
+	_hdText = nullptr;
+}
+
+HdText *BlastText::getHdText() {
+	if (!_hdText && g_grim->isRemastered())
+		_hdText = new HdText();
+
+	return _hdText;
+}
+
 int BlastText::load(const char *fileName, BlastTextFont *&font) {
 	int result = 1;
+
+	// The remastered never reads the font file: it makes an empty font and draws all the text from TrueType
+	if (g_grim->isRemastered()) {
+		BlastTextFont *emptyFont = new BlastTextFont();
+
+		emptyFont->lastChar = -1;
+		font = emptyFont;
+
+		return 0;
+	}
 
 	if (!_text->_hs) {
 		warning("BlastText::load(): the text system is not initialized");

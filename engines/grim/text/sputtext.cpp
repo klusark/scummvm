@@ -26,6 +26,8 @@
 #include "engines/grim/grim.h"
 #include "engines/grim/lua/lua.h"
 #include "engines/grim/lua_v1_opcodes/lua_v1.h"
+#include "engines/grim/remastered/hdcanvas.h"
+#include "engines/grim/text/hdtext.h"
 #include "engines/grim/text/normaltext.h"
 #include "engines/grim/text/polyglot.h"
 #include "engines/grim/res.h"
@@ -54,7 +56,9 @@ SputText::SputText(Res *res, RenderDroid *rd, NormalText *normalText, Text *text
 		_luaTextObjXRef(0), _luaTextObjYRef(0), _luaTextObjFontRef(0), _luaTextObjWidthRef(0), _luaTextObjHeightRef(0),
 		_luaTextObjFGColorRef(0), _luaTextObjBGColorRef(0), _luaTextObjFXColorRef(0), _luaTextObjHIColorRef(0),
 		_luaTextObjDurationRef(0), _luaTextObjCenterRef(0), _luaTextObjLJustifyRef(0), _luaTextObjRJustifyRef(0),
-		_luaTextObjVolumeRef(0), _luaTextObjBufferRef(0), _luaTextObjBackgroundRef(0) {
+		_luaTextObjVolumeRef(0), _luaTextObjBufferRef(0), _luaTextObjBackgroundRef(0),
+		_luaTextObjCoordsRef(0), _luaTextObjLeftClipRef(0), _luaTextObjAlphaRef(0), _luaTextObjLayerRef(0),
+		_luaTextObjFadeRef(0), _luaTextObjHighlightRef(0) {
 	_printLineClip.x = 0;
 	_printLineClip.y = 0;
 	_printLineClip.width = 640;
@@ -72,6 +76,9 @@ SputText::SputText(Res *res, RenderDroid *rd, NormalText *normalText, Text *text
 	_printLineParams.scaleY = 0x10000;
 	_printLineParams.flags = 4;
 	_printLineParams.colorMap = nullptr;
+	_printLineParams.coords = 0;
+	_printLineParams.highlight = -1;
+	_printLineParams.alpha = 1.0f;
 
 	_defaultTextParams.surface = _blastText->getSurface();
 	_defaultTextParams.clip = nullptr;
@@ -85,6 +92,9 @@ SputText::SputText(Res *res, RenderDroid *rd, NormalText *normalText, Text *text
 	_defaultTextParams.scaleY = 0x10000;
 	_defaultTextParams.flags = 5;
 	_defaultTextParams.colorMap = nullptr;
+	_defaultTextParams.coords = 0;
+	_defaultTextParams.highlight = -1;
+	_defaultTextParams.alpha = 1.0f;
 
 	_blastTextParams.surface = _blastText->getSurface();
 	_blastTextParams.clip = nullptr;
@@ -98,6 +108,9 @@ SputText::SputText(Res *res, RenderDroid *rd, NormalText *normalText, Text *text
 	_blastTextParams.scaleY = 0x10000;
 	_blastTextParams.flags = 4;
 	_blastTextParams.colorMap = nullptr;
+	_blastTextParams.coords = 0;
+	_blastTextParams.highlight = -1;
+	_blastTextParams.alpha = 1.0f;
 }
 
 void SputText::killEvent(SputTextEvent *event) {
@@ -111,11 +124,17 @@ void SputText::killEvent(SputTextEvent *event) {
 		if (event == _textQueue)
 			_textQueue = event->next;
 
+		invalidateHdText(event);
 		delete event;
 	}
 }
 
 void SputText::update(int force) {
+	if (_grim->isRemastered()) {
+		updateHd(force, 0);
+		return;
+	}
+
 	if (!_locked) {
 		int frameTime = _sputTime->getFrameTime();
 		SputTextEvent *event = _textQueue;
@@ -400,6 +419,21 @@ int SputText::startup() {
 	lua_pushstring("background");
 	_luaTextObjBackgroundRef = lua_ref(1);
 
+	if (_grim->isRemastered()) {
+		lua_pushstring("coords");
+		_luaTextObjCoordsRef = lua_ref(1);
+		lua_pushstring("leftclip");
+		_luaTextObjLeftClipRef = lua_ref(1);
+		lua_pushstring("alpha");
+		_luaTextObjAlphaRef = lua_ref(1);
+		lua_pushstring("layer");
+		_luaTextObjLayerRef = lua_ref(1);
+		lua_pushstring("fade");
+		_luaTextObjFadeRef = lua_ref(1);
+		lua_pushstring("highlight");
+		_luaTextObjHighlightRef = lua_ref(1);
+	}
+
 	_started = 1;
 
 	return 0;
@@ -426,6 +460,15 @@ int SputText::shutdown() {
 	lua_unref(_luaTextObjBufferRef);
 	lua_unref(_luaTextObjBackgroundRef);
 
+	if (_grim->isRemastered()) {
+		lua_unref(_luaTextObjCoordsRef);
+		lua_unref(_luaTextObjLeftClipRef);
+		lua_unref(_luaTextObjAlphaRef);
+		lua_unref(_luaTextObjLayerRef);
+		lua_unref(_luaTextObjFadeRef);
+		lua_unref(_luaTextObjHighlightRef);
+	}
+
 	while (_textQueue)
 		killEvent(_textQueue);
 
@@ -447,7 +490,7 @@ SputTextEvent *SputText::allocEvent(const TextParams *params, const char *text) 
 	if (_grim->getGameFlags() & ADGF_DEMO)
 		Common::strlcpy(event->text, text, 128);
 	else
-		Common::strlcpy(event->text, text, sizeof(event->text));
+		Common::strlcpy(event->text, text, getTextCapacity());
 
 	event->x = params->x;
 	event->y = params->y;
@@ -470,6 +513,8 @@ SputTextEvent *SputText::allocEvent(const TextParams *params, const char *text) 
 
 	event->actor = nullptr;
 	event->serial = (int)(intptr)event;
+
+	initHdEvent(event);
 
 	return event;
 }
@@ -523,6 +568,11 @@ const char *SputText::extractSayLineData(const char *msgId, char *translation) {
 void SputText::drawTextEvent(SputTextEvent *event, int markDirty) {
 	if (!event)
 		return;
+
+	if (_grim->isRemastered()) {
+		drawHdEvent(event, HdText::getTextPage(event->params.flags));
+		return;
+	}
 
 	if (!event->params.font) {
 		warning("SputText::drawTextEvent(): the event has no font");
@@ -589,6 +639,15 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 	StdRect *clip = params->clip;
 	lua_Object obj;
 
+	if (_grim->isRemastered()) {
+		lua_pushobject(tableObj);
+		lua_pushobject(lua_getref(_luaTextObjCoordsRef));
+		obj = lua_gettable();
+
+		if (obj && lua_isnumber(obj))
+			params->coords = luaFtol(lua_getnumber(obj));
+	}
+
 	lua_pushobject(tableObj);
 	lua_pushobject(lua_getref(_luaTextObjXRef));
 	obj = lua_gettable();
@@ -642,6 +701,15 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 	if (obj && lua_isnumber(obj) && clip)
 		clip->width = luaFtol(lua_getnumber(obj));
 
+	if (_grim->isRemastered()) {
+		lua_pushobject(tableObj);
+		lua_pushobject(lua_getref(_luaTextObjLeftClipRef));
+		obj = lua_gettable();
+
+		if (obj && lua_isnumber(obj) && clip)
+			clip->x = luaFtol(lua_getnumber(obj));
+	}
+
 	lua_pushobject(tableObj);
 	lua_pushobject(lua_getref(_luaTextObjHeightRef));
 	obj = lua_gettable();
@@ -670,6 +738,15 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 	if (obj && lua_isuserdata(obj) && lua_tag(obj) == MKTAG('R','L','O','C'))
 		params->fxColor = lua_getuserdata(obj);
 
+	if (_grim->isRemastered()) {
+		lua_pushobject(tableObj);
+		lua_pushobject(lua_getref(_luaTextObjAlphaRef));
+		obj = lua_gettable();
+
+		if (obj && lua_isnumber(obj))
+			params->alpha = lua_getnumber(obj);
+	}
+
 	lua_pushobject(tableObj);
 	lua_pushobject(lua_getref(_luaTextObjCenterRef));
 	obj = lua_gettable();
@@ -695,10 +772,57 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 	lua_pushobject(lua_getref(_luaTextObjDurationRef));
 	obj = lua_gettable();
 
-	if (obj && lua_isnumber(obj))
-		return luaFtol(lua_getnumber(obj));
+	int duration = -1;
 
-	return -1;
+	if (obj && lua_isnumber(obj))
+		duration = luaFtol(lua_getnumber(obj));
+
+	if (_grim->isRemastered()) {
+		lua_pushobject(tableObj);
+		lua_pushobject(lua_getref(_luaTextObjLayerRef));
+		obj = lua_gettable();
+
+		if (obj && lua_isnumber(obj)) {
+			int layer = luaFtol(lua_getnumber(obj));
+
+			if (layer == 1)
+				params->flags |= 0x10;
+			else if (layer == 2)
+				params->flags |= 0x80;
+			else if (layer == 3)
+				params->flags |= 0x100;
+			else if (layer == 4)
+				params->flags |= 0x200;
+		}
+
+		lua_pushobject(tableObj);
+		lua_pushobject(lua_getref(_luaTextObjFadeRef));
+		obj = lua_gettable();
+
+		if (obj && lua_isnumber(obj)) {
+			int fade = luaFtol(lua_getnumber(obj));
+
+			params->flags &= ~0x1C00;
+
+			if (fade == 1) {
+				params->flags |= 0x400;
+				params->alpha = 0.0f;
+			} else if (fade == 2) {
+				params->flags |= 0x800;
+			} else if (fade == 3) {
+				params->flags |= 0x1000;
+			}
+		}
+
+		lua_pushobject(tableObj);
+		lua_pushobject(lua_getref(_luaTextObjHighlightRef));
+		obj = lua_gettable();
+
+		if (obj && lua_isnumber(obj))
+			params->highlight = luaFtol(lua_getnumber(obj));
+	}
+
+	return duration;
 }
 
 void SputText::parseSayLineTable(lua_Object tableObj, int *background, int *volume, int *pan, int *x, int *y) {
@@ -848,6 +972,10 @@ int SputText::restore(Common::ReadStream *stream) {
 		event->params.clip = &event->clip;
 		event->params.colorMap = (byte *)_sputRender->getColors();
 		event->actor = nullptr;
+		initHdEvent(event);
+		event->params.coords = 0;
+		event->params.highlight = -1;
+		event->params.alpha = 1.0f;
 
 		event->prev = nullptr;
 		event->next = _textQueue;
@@ -882,6 +1010,306 @@ int SputText::restore(Common::ReadStream *stream) {
 		_blastTextParams.font = _font;
 
 	return 0;
+}
+
+void SputText::update(int force, int page) {
+	if (_grim->isRemastered())
+		updateHd(force, page);
+	else
+		update(force);
+}
+
+int SputText::getTextCapacity() const {
+	if (_grim->isRemastered())
+		return kTextEventCapacity;
+
+	return kTextEventClassicCapacity;
+}
+
+int SputText::getCoordsFromTable(lua_Object tableObj) {
+	lua_pushobject(tableObj);
+	lua_pushobject(lua_getref(_luaTextObjCoordsRef));
+
+	lua_Object obj = lua_gettable();
+
+	if (obj && lua_isnumber(obj))
+		return luaFtol(lua_getnumber(obj));
+
+	return 0;
+}
+
+// The text area is the game screen of the canvas, in the units of the coordinates of the object
+void SputText::getHdClip(StdRect *clip, int coords) {
+	clip->x = 240;
+	clip->y = 0;
+	clip->width = 1440;
+	clip->height = 1080;
+	HdText::convertRectNative(clip, coords);
+}
+
+// The HD bitmap stays queued until the end of the frame, so the next update frees the event
+void SputText::queueBlastEvent(SputTextEvent *event) {
+	event->duration = 0;
+	event->flags = 0;
+	event->prev = nullptr;
+	event->next = _textQueue;
+
+	if (_textQueue)
+		_textQueue->prev = event;
+
+	_textQueue = event;
+}
+
+void SputText::initHdEvent(SputTextEvent *event) {
+	event->firstLine = 0;
+	event->lineCount = 999999;
+	event->hdCache = nullptr;
+}
+
+// The canvas keeps the pixels queued in this frame, so it has to forget them before they are freed
+void SputText::dropHdBitmap(HdTextCache *cache) {
+	HdCanvas *canvas = _grim->getHdCanvas();
+
+	if (canvas && cache->pixels)
+		canvas->dropPixels(cache->pixels);
+}
+
+void SputText::invalidateHdText(SputTextEvent *event) {
+	if (!event->hdCache)
+		return;
+
+	dropHdBitmap(event->hdCache);
+	delete event->hdCache;
+	event->hdCache = nullptr;
+}
+
+bool SputText::makeHdInfo(SputTextEvent *event, HdTextInfo *info) {
+	HdText *hdText = _blastText->getHdText();
+
+	if (!hdText)
+		return false;
+
+	BlastTextFont *font = event->params.font;
+
+	if (!font) {
+		font = _text->getSystemFont();
+		event->flags &= ~1;
+	}
+
+	const HdFont *hdFont = nullptr;
+	int baseLine = 0;
+
+	if (font) {
+		hdFont = font->hdFont;
+		baseLine = font->baseLine;
+	}
+
+	// The fonts without a TrueType file of their own use the custom font
+	if (!hdFont)
+		hdFont = hdText->getCustomFont();
+
+	if (!hdFont)
+		return false;
+
+	int x = event->x;
+	int y = event->y - baseLine;
+	int coords = event->params.coords;
+	StdRect rect = event->clip;
+
+	HdText::convertCoords1080(&x, &y, coords, false);
+	HdText::convertCoords1080(&rect.x, &rect.y, coords, false);
+	HdText::convertCoords1080(&rect.width, &rect.height, coords, true);
+
+	int flags = event->params.flags;
+
+	if (flags & 1) {
+		int space = x - rect.x;
+
+		if (rect.x + rect.width - x < space)
+			space = rect.x + rect.width - x;
+
+		info->alignX = 0.5f;
+		info->maxWidth = 2 * space;
+	} else if (flags & 2) {
+		info->alignX = 1.0f;
+		info->maxWidth = x - rect.x;
+	} else {
+		info->alignX = 0.0f;
+		info->maxWidth = rect.x + rect.width - x;
+	}
+
+	if (flags & 0x20)
+		info->alignY = 1.0f;
+	else if (flags & 0x40)
+		info->alignY = 0.5f;
+	else
+		info->alignY = 0.0f;
+
+	info->text = event->text;
+	info->font = hdFont;
+	info->x = x;
+	info->y = y;
+	info->color = event->params.fgColor;
+	info->alpha = event->params.alpha;
+	info->firstLine = event->firstLine;
+	info->lineCount = event->lineCount;
+
+	return true;
+}
+
+HdTextCache *SputText::getHdLayout(SputTextEvent *event) {
+	if (event->hdCache)
+		return event->hdCache;
+
+	HdTextInfo info;
+
+	if (!makeHdInfo(event, &info))
+		return nullptr;
+
+	HdTextCache *cache = new HdTextCache();
+
+	_blastText->getHdText()->layout(info, cache);
+	event->hdCache = cache;
+
+	return cache;
+}
+
+bool SputText::queryTextObject(SputTextEvent *event, int *x, int *y, int *width, int *height) {
+	*x = 0;
+	*y = 0;
+	*width = 0;
+	*height = 0;
+
+	HdTextCache *cache = getHdLayout(event);
+
+	if (!cache)
+		return false;
+
+	*x = cache->originX + cache->minX;
+	*y = cache->originY;
+	*width = cache->maxWidth;
+	*height = cache->maxHeight;
+
+	return true;
+}
+
+// The number of lines after the wrap, and of characters in one of them (for the timing of the subtitles)
+int SputText::getHdLineCount(SputTextEvent *event) {
+	HdTextCache *cache = getHdLayout(event);
+
+	if (!cache)
+		return 0;
+
+	return (int)cache->rows.size();
+}
+
+int SputText::getHdLineCharacterCount(SputTextEvent *event, int line) {
+	HdTextCache *cache = getHdLayout(event);
+
+	if (!cache || line < 0 || line >= (int)cache->rows.size())
+		return 0;
+
+	return cache->rows[line].numQuads;
+}
+
+void SputText::luaGetFontDimensions() {
+	lua_Object fontObj = lua_getparam(1);
+	BlastTextFont *font = nullptr;
+
+	if (lua_isuserdata(fontObj) && lua_tag(fontObj) == kSputTagFont)
+		font = static_cast<BlastTextFont *>(_res->handleFromSerialNumber(lua_getuserdata(fontObj)));
+
+	const HdFont *hdFont = nullptr;
+	HdText *hdText = _blastText->getHdText();
+
+	if (font)
+		hdFont = font->hdFont;
+
+	if (!hdFont && hdText)
+		hdFont = hdText->getCustomFont();
+
+	if (!font || !hdFont) {
+		warning("SputText::luaGetFontDimensions(): the font does not exist");
+		lua_pushnumber(0.0f);
+
+		return;
+	}
+
+	lua_pushnumber((float)HdText::getFontHeight(hdFont));
+}
+
+void SputText::drawHdEvent(SputTextEvent *event, int page) {
+	HdCanvas *canvas = _grim->getHdCanvas();
+
+	if (!canvas || !canvas->isActive())
+		return;
+
+	HdTextCache *cache = getHdLayout(event);
+
+	if (!cache)
+		return;
+
+	if (cache->bitmapAlpha != event->params.alpha || cache->bitmapFirstLine != event->firstLine
+			|| cache->bitmapLineCount != event->lineCount) {
+		HdTextInfo info;
+
+		if (!makeHdInfo(event, &info))
+			return;
+
+		dropHdBitmap(cache);
+		_blastText->getHdText()->render(info, cache);
+	}
+
+	if (cache->pixels)
+		canvas->queueBitmap(page, cache->pixels, cache->bitmapWidth, cache->bitmapHeight, cache->bitmapX, cache->bitmapY, 255);
+}
+
+void SputText::updateHd(int force, int page) {
+	if (_locked)
+		return;
+
+	int frameTime = _sputTime->getFrameTime();
+	SputTextEvent *event = _textQueue;
+
+	while (event) {
+		SputTextEvent *next = event->next;
+		bool deleteEvent = false;
+
+		// Fade in, then fade out (the last one can delete the event)
+		if (event->params.flags & 0x400) {
+			event->params.alpha += 1.0f / 18.0f;
+
+			if (event->params.alpha >= 1.0f) {
+				event->params.alpha = 1.0f;
+				event->params.flags &= ~0x400;
+			}
+		}
+
+		if (event->params.flags & 0x1800) {
+			event->params.alpha -= 1.0f / 18.0f;
+
+			if (event->params.alpha <= 0.0f) {
+				event->params.alpha = 0.0f;
+
+				if (event->params.flags & 0x1000)
+					deleteEvent = true;
+
+				event->params.flags &= ~0x1800;
+			}
+		}
+
+		if ((event->duration <= 0 && (!(event->flags & 1) || deleteEvent)) || (event->duration > 0 && deleteEvent)) {
+			killEvent(event);
+			event = next;
+			continue;
+		}
+
+		if ((force || (event->flags & 8)) && !(event->flags & 2) && HdText::getTextPage(event->params.flags) == page)
+			drawHdEvent(event, page);
+
+		event->duration -= frameTime;
+		event = next;
+	}
 }
 
 } // End of namespace Grim

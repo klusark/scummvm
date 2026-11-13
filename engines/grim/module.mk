@@ -259,6 +259,8 @@ MODULE_OBJS := \
 	lua_v1_opcodes/lua_v1.o \
 	lua_v1_opcodes/lua_v1_actor.o \
 	lua_v1_opcodes/lua_v1_graphics.o \
+	lua_v1_opcodes/lua_v1_mouse.o \
+	lua_v1_opcodes/lua_v1_remastered.o \
 	lua_v1_opcodes/lua_v1_set.o \
 	lua_v1_opcodes/lua_v1_sound.o \
 	lua_v1_opcodes/lua_v1_text.o \
@@ -277,15 +279,21 @@ MODULE_OBJS := \
 	movie/sputsmush.o \
 	movie/sputsmush_demo.o \
 	remastered/commentary.o \
+	remastered/dialoglog.o \
+	remastered/hdcanvas.o \
 	remastered/hotspot.o \
 	remastered/lua_remastered.o \
 	remastered/overlay.o \
+	remastered/pathfinder.o \
+	remastered/registry_unlocks.o \
+	remastered/sputmouse.o \
 	render/primitivequeue.o \
 	render/sputprimitive.o \
 	render/sputrender.o \
 	render/sputrender_buffers.o \
 	render/sputrender_color.o \
 	render/sputrender_debug.o \
+	render/sputrender_remastered.o \
 	render/sputrender_scene.o \
 	renderdroid/rd.o \
 	renderdroid/rd_active.o \
@@ -333,6 +341,7 @@ MODULE_OBJS := \
 	std/std_pic.o \
 	text/blasttext.o \
 	text/blasttext_fontdata.o \
+	text/hdtext.o \
 	text/normaltext.o \
 	text/polyglot.o \
 	text/sputtext.o \

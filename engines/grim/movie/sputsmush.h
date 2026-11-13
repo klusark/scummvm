@@ -33,6 +33,14 @@ class ReadStream;
 class WriteStream;
 }
 
+namespace Graphics {
+struct Surface;
+}
+
+namespace Video {
+class TheoraDecoder;
+}
+
 namespace Grim {
 
 class LegacyImporter;
@@ -69,6 +77,17 @@ public:
 	virtual void blitFrame() {}
 
 protected:
+	// Layer number of the HD movie frame in the 1920x1080 canvas
+	enum {
+		kHdMovieLayer = 30
+	};
+
+	bool startHdMovie(const char *name, int looping);
+	void stopHdMovie();
+	void pauseHdMovie(bool pause);
+	int periodicHd();
+	void queueHdFrame();
+
 	SmushPlay *_smushPlay;
 	Res *_res;
 	StdDisplay *_stdDisplay;
@@ -88,6 +107,13 @@ protected:
 	int _y;
 	uint _startTime;
 	uint _lastPeriodicTime;
+
+	// HD movie (remastered): the Theora decoder, the last decoded frame and its packed or scaled copy
+	Video::TheoraDecoder *_hdDecoder;
+	const Graphics::Surface *_hdFrame;
+	Graphics::Surface *_hdScaled;
+	bool _hdMovie;
+	bool _hdPaused;
 };
 
 } // End of namespace Grim

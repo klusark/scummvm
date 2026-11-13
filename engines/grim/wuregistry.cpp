@@ -26,6 +26,7 @@
 #include "common/textconsole.h"
 #include "common/util.h"
 
+#include "engines/grim/grim.h"
 #include "engines/grim/std/std_sort.h"
 #include "engines/grim/wuregistry.h"
 
@@ -127,6 +128,8 @@ enum {
 	kMapBool,
 	kMapPath,
 	kMapFloat,
+	kMapOptionalInt,
+	kMapOptionalVolume,
 	kMapLastSet
 };
 
@@ -155,16 +158,23 @@ static const WuRegistryMapping mappings[] = {
 	{ "JoystickEnabled", "joystick", kMapString },
 	{ "SpewOnError", "spew_on_error", kMapString },
 	{ "Transcript", "transcript", kMapString },
-	{ "DirectorsCommentary", "directors_commentary", kMapInt },
-	{ "Widescreen", "widescreen", kMapInt },
-	{ "Language", "grim_language", kMapInt },
-	{ "ResolutionScaling", "resolution_scaling", kMapInt },
-	{ "MouseSpeed", "mouse_speed", kMapInt },
-	{ "AdvancedLighting", "advanced_lighting", kMapInt },
-	{ "DirectorsCommentaryVolume", "directors_commentary_volume", kMapVolume },
-	{ "RenderingMode", "rendering_mode", kMapInt },
-	{ "Fullscreen", "grim_fullscreen", kMapInt }
+	{ "DirectorsCommentary", "directors_commentary", kMapOptionalInt },
+	{ "Widescreen", "widescreen", kMapOptionalInt },
+	{ "Language", "grim_language", kMapOptionalInt },
+	{ "ResolutionScaling", "resolution_scaling", kMapOptionalInt },
+	{ "MouseSpeed", "mouse_speed", kMapOptionalInt },
+	{ "AdvancedLighting", "advanced_lighting", kMapOptionalInt },
+	{ "DirectorsCommentaryVolume", "directors_commentary_volume", kMapOptionalVolume },
+	{ "RenderingMode", "rendering_mode", kMapOptionalInt },
+	{ "Fullscreen", "grim_fullscreen", kMapOptionalInt },
+	{ "ClassicLighting", "classic_lighting", kMapOptionalInt },
+	{ "ResolutionX", "resolution_x", kMapOptionalInt },
+	{ "ResolutionY", "resolution_y", kMapOptionalInt },
+	{ "CrossSaveAutoSync", "cross_save_auto_sync", kMapOptionalInt }
 };
+
+// The remastered stores the last slot as a number; the original games store a string
+static const WuRegistryMapping remasteredLastSavedGame = { "LastSavedGame", "last_saved_game", kMapOptionalInt };
 
 static uint convertVolumeToMixer(uint volume) {
 	return CLIP<uint>(volume * 2, 0, Audio::Mixer::kMaxMixerVolume);
@@ -206,6 +216,9 @@ static uint convertSpeechModeFromGUI(bool subtitles, bool speechMute) {
 }
 
 static const WuRegistryMapping *findMapping(const char *valueName) {
+	if (g_grim->isRemastered() && !scumm_stricmp(remasteredLastSavedGame.name, valueName))
+		return &remasteredLastSavedGame;
+
 	for (uint i = 0; i < ARRAYSIZE(mappings); i++) {
 		if (!scumm_stricmp(mappings[i].name, valueName))
 			return &mappings[i];
@@ -219,7 +232,7 @@ static bool isStringKind(int kind) {
 }
 
 static uint getMappedType(const WuRegistryMapping *mapping) {
-	if (mapping->kind == kMapFloat)
+	if (mapping->kind == kMapFloat || mapping->kind == kMapOptionalInt || mapping->kind == kMapOptionalVolume)
 		return ConfMan.hasKey(mapping->key) ? WuRegistry::kValueBinary : 0;
 
 	if (isStringKind(mapping->kind))
@@ -236,9 +249,11 @@ static bool readMappedText(const WuRegistryMapping *mapping, Common::String *tex
 static bool readMappedInt(const WuRegistryMapping *mapping, int *value) {
 	switch (mapping->kind) {
 	case kMapInt:
+	case kMapOptionalInt:
 		*value = ConfMan.getInt(mapping->key);
 		return true;
 	case kMapVolume:
+	case kMapOptionalVolume:
 		*value = convertVolumeFromMixer(ConfMan.getInt(mapping->key));
 		return true;
 	case kMapTalkSpeed:
@@ -311,9 +326,11 @@ static void writeMappedText(const WuRegistryMapping *mapping, const char *text) 
 static void writeMappedInt(const WuRegistryMapping *mapping, int value) {
 	switch (mapping->kind) {
 	case kMapInt:
+	case kMapOptionalInt:
 		ConfMan.setInt(mapping->key, value);
 		break;
 	case kMapVolume:
+	case kMapOptionalVolume:
 		ConfMan.setInt(mapping->key, convertVolumeToMixer(value));
 		break;
 	case kMapTalkSpeed:
@@ -387,6 +404,7 @@ void WuRegistry::shutdown() {
 	freeIndex();
 	_started = 0;
 
+	_unlocks.saveFile();
 	ConfMan.flushToDisk();
 }
 
@@ -707,6 +725,35 @@ uint WuRegistry::queryType(const char *valueName) {
 		return _values[index].type;
 
 	return isNumberText(ConfMan.get(key)) ? kValueBinary : kValueString;
+}
+
+void WuRegistry::saveRegistry() {
+	_unlocks.saveFile();
+	ConfMan.flushToDisk();
+}
+
+void WuRegistry::unlockCutscene(int index) {
+	_unlocks.unlockCutscene(index);
+}
+
+bool WuRegistry::isCutsceneUnlocked(int index) {
+	return _unlocks.isCutsceneUnlocked(index);
+}
+
+void WuRegistry::unlockConcept(int index) {
+	_unlocks.unlockConcept(index);
+}
+
+bool WuRegistry::isConceptUnlocked(int index) {
+	return _unlocks.isConceptUnlocked(index);
+}
+
+void WuRegistry::resetUnlocks() {
+	_unlocks.resetUnlocks();
+}
+
+bool WuRegistry::importRegistrySav(Common::SeekableReadStream *stream) {
+	return _unlocks.importRegistrySav(stream);
 }
 
 int WuRegistry::findValue(const char *valueName) const {

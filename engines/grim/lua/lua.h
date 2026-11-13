@@ -72,6 +72,7 @@ lua_CFunction lua_IDToFuncPtr(uint32 id);
 bool lua_FuncPtrHasID(lua_CFunction func);
 void lua_FuncIDsInvalidate();
 void lua_FuncIDsSetEmiDemo(bool isDemo);
+void lua_FuncIDsSetRemastered(bool isRemastered);
 
 void lua_removelibslists();
 

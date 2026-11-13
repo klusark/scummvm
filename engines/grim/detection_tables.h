@@ -411,7 +411,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			"grim",
 			"Remastered",
 			AD_ENTRY1s("VOX0001.LAB", "0ff872fb353707fbdb9579038d4cf31c", 382736476),
-			Common::EN_ANY,
+			Common::UNK_LANG,
 			Common::kPlatformWindows,
 			ADGF_REMASTERED,
 			GUI_OPTIONS_GRIME_REMASTERED

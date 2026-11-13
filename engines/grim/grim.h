@@ -44,6 +44,8 @@ class WriteStream;
 namespace Grim {
 
 class BlastText;
+class DialogLog;
+class HdCanvas;
 class IMuse;
 class NormalText;
 class Polyglot;
@@ -68,6 +70,7 @@ class SputCostume;
 class SputPrimitive;
 class SputRender;
 class SputResource;
+class SputMouse;
 class SputRoom;
 class SputSmush;
 class SputText;
@@ -143,6 +146,39 @@ public:
 	Common::Error loadGameState(int slot) override;
 	bool isRemastered() const { return !!(_gameFlags & ADGF_REMASTERED); }
 	bool useRemasterFixes() const { return _remasterFixes != 0; }
+	StdControl *getStdControl() const { return _stdControl; }
+
+	// Interface languages of the remastered, in the order of the Language registry value
+	enum {
+		kLanguageEnglish,
+		kLanguageGerman,
+		kLanguageSpanish,
+		kLanguageFrench,
+		kLanguageItalian,
+		kLanguagePortuguese,
+		kNumLanguages
+	};
+
+	// Values of the RenderingMode registry value
+	enum {
+		kRenderingModeHd = 0,
+		kRenderingModeClassic = 1
+	};
+
+	// Library modes set by the remastered scripts (SetGameRenderMode)
+	enum {
+		kLibModeNormal = 2,
+		kLibModeUser = 4,
+		kLibModeMenu = 5,
+		kLibModeExiting = 6
+	};
+
+	int getLanguage() const { return _language; }
+	void setLanguage(int language);
+	const char *getLanguageCode() const;
+	static int getLanguageCount() { return kNumLanguages; }
+	int getRenderingMode() const { return _renderingMode; }
+	void setRenderingMode(int mode);
 
 	void clearEventQueue();
 
@@ -174,6 +210,9 @@ public:
 	IMuse *getImuse() const { return _imuse; }
 	SputCostume *getSputCostume() const { return _sputCostume; }
 	SputResource *getSputResource() const { return _sputResource; }
+	HdCanvas *getHdCanvas() const { return _hdCanvas; }
+	SputMouse *getSputMouse() const { return _sputMouse; }
+	DialogLog *getDialogLog() const { return _dialogLog; }
 
 	// grimlib module
 	void overrideSelectedActorCostume(int instance);
@@ -260,6 +299,8 @@ protected:
 	void createModules();
 	void destroyModules();
 	int grimStartup();
+	void initLanguage();
+	void loadTranslations();
 	void grimMain();
 	void textOut(const char *text, int x, int y);
 	void grimShutdown();
@@ -287,7 +328,7 @@ protected:
 	static void addStickAction(Common::Keymap *keymap, const char *id, const Common::U32String &label, int stickAction, const char *input);
 	static void addStickActions(Common::Keymap *keymap);
 	static int applyStickAction(int *axes, const Common::Event &event);
-	static int getJoystickButtonIndex(int button);
+	static int getJoystickButtonIndex(int button, bool remastered = false);
 	void handleFocus(int hasFocus);
 	void handleKey(Common::EventType type, const Common::KeyState &key, bool repeat);
 	void handleKeyDebug(const Common::KeyState &key);
@@ -338,6 +379,8 @@ protected:
 	uint _hardwareBackends = 0;
 	int _preferredBackend = kStdDisplayBackendNone;
 	int _remasterFixes = 0;
+	int _language = kLanguageEnglish;
+	int _renderingMode = kRenderingModeClassic;
 	int _pendingDevice = 0;
 	int _pendingMode = 0;
 	int _pending3DDevice = -1;
@@ -348,6 +391,7 @@ protected:
 
 	Res *_res = nullptr;
 	StdDisplay *_stdDisplay = nullptr;
+	HdCanvas *_hdCanvas = nullptr;
 	SputResource *_sputResource = nullptr;
 	SputRoom *_sputRoom = nullptr;
 	SputTime *_sputTime = nullptr;
@@ -358,6 +402,8 @@ protected:
 	SputText *_sputText = nullptr;
 	SputPrimitive *_sputPrimitive = nullptr;
 	SputSmush *_sputSmush = nullptr;
+	SputMouse *_sputMouse = nullptr;
+	DialogLog *_dialogLog = nullptr;
 	Lua_V1 *_luaV1 = nullptr;
 	WalkSystem *_walkSystem = nullptr;
 	StdVBuffer *_mainGfxBuffer = nullptr;
@@ -367,6 +413,7 @@ protected:
 	int _sputStarted = 0;
 	int _loopCount = 0;
 	int _renderPending = 0;
+	int _displayPrevMode = 0;
 	int _runLua = 1;
 	int _sputPrevMode = 0;
 	PerfCounter _perfCounters[kNumPerfCounters] = {

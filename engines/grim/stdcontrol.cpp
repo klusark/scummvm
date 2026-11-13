@@ -19,15 +19,17 @@
  *
  */
 
+#include "common/events.h"
 #include "common/system.h"
 #include "common/textconsole.h"
+#include "common/util.h"
 #include "graphics/cursorman.h"
 
 #include "engines/grim/stdcontrol.h"
 
 namespace Grim {
 
-StdControl::StdControl() : _startup(0), _open(0), _controlsActive(0), _controlsIdle(0), _disableKeyboard(0),
+StdControl::StdControl(bool remastered) : _remastered(remastered), _startup(0), _open(0), _controlsActive(0), _controlsIdle(0), _disableKeyboard(0),
 		_readMouse(1), _readJoysticks(0), _curReadTime(0), _lastReadTime(0), _readDelta(0), _deltaTime(1.0f),
 		_deltaTimeMs(1.0f), _prevMouseX(0), _prevMouseY(0) {
 	memset(_abReadJoy, 0, sizeof(_abReadJoy));
@@ -209,7 +211,8 @@ void StdControl::setActivation(int active) {
 		return;
 
 	if (active) {
-		if (_readMouse)
+		// The remastered scripts draw their own cursor
+		if (_readMouse || _remastered)
 			CursorMan.showMouse(false);
 
 		_controlsActive = 1;
@@ -268,8 +271,15 @@ void StdControl::initJoysticks() {
 }
 
 void StdControl::initMouse() {
-	enableAxis(12, -250, 250, 0.0f);
-	enableAxis(13, -200, 200, 0.0f);
+	if (_remastered) {
+		// Absolute position over the 640x480 play area
+		enableAxis(12, 0, 640, 0.0f);
+		enableAxis(13, 0, 480, 0.0f);
+	} else {
+		enableAxis(12, -250, 250, 0.0f);
+		enableAxis(13, -200, 200, 0.0f);
+	}
+
 	enableAxis(14, -20, 20, 0.0f);
 }
 
@@ -403,13 +413,15 @@ void StdControl::readJoysticks() {
 			axisPos[5] = state->axisPos[5];
 
 		int now = _curReadTime;
+		int numButtons = _remastered ? 12 : 10;
 
-		for (int button = 0; button < 10; button++) {
+		for (int button = 0; button < numButtons; button++) {
 			updateKey(&_keyInfo[keyBase + button], buttonMask & state->buttons, now);
 			buttonMask *= 2;
 		}
 
-		if (state->flags & 0x200) {
+		// The remastered has no hat codes, buttons 11 and 12 use them
+		if (!_remastered && (state->flags & 0x200)) {
 			int pov = state->pov;
 			int povA = pov >= 22500 && pov <= 31500;
 			int povB = (pov >= 31500 || pov <= 4500) && pov >= 0 && pov != 0xFFFF;
@@ -428,13 +440,24 @@ void StdControl::readMouse() {
 	if (!_readMouse)
 		return;
 
-	_axisPos[14] = _input.mouse.z;
-	_axisPos[12] = _input.mouse.x;
-	_axisPos[13] = _input.mouse.y;
+	if (_remastered) {
+		int canvasX;
+		int canvasY;
 
-	if ((uint)_readDelta < 0x19) {
-		_axisPos[12] = (_input.mouse.x + _prevMouseX) >> 1;
-		_axisPos[13] = (_input.mouse.y + _prevMouseY) >> 1;
+		getMouseCanvasPosition(false, &canvasX, &canvasY);
+
+		_axisPos[14] = 0;
+		_axisPos[12] = 640 * (canvasX - kCanvasPlayOffset) / kCanvasPlayWidth;
+		_axisPos[13] = 480 * canvasY / kCanvasHeight;
+	} else {
+		_axisPos[14] = _input.mouse.z;
+		_axisPos[12] = _input.mouse.x;
+		_axisPos[13] = _input.mouse.y;
+
+		if ((uint)_readDelta < 0x19) {
+			_axisPos[12] = (_input.mouse.x + _prevMouseX) >> 1;
+			_axisPos[13] = (_input.mouse.y + _prevMouseY) >> 1;
+		}
 	}
 
 	_prevMouseX = _input.mouse.x;
@@ -457,6 +480,10 @@ void StdControl::readMouse() {
 			continue;
 
 		updateKey(&_keyInfo[event->offset + 272], event->data, event->timeStamp);
+
+		// The long tap key follows the first button
+		if (_remastered && event->offset == 12)
+			updateKey(&_keyInfo[kKeyMouseLong], event->data, event->timeStamp);
 	}
 
 	int overflow = _input.mouseOverflow;
@@ -469,6 +496,9 @@ void StdControl::readMouse() {
 
 		for (int i = 0; i < 4; i++)
 			updateKey(&_keyInfo[284 + i], _input.mouse.buttons[i], now);
+
+		if (_remastered)
+			updateKey(&_keyInfo[kKeyMouseLong], _input.mouse.buttons[0], now);
 	}
 }
 
@@ -486,6 +516,34 @@ void StdControl::flushMouse() {
 
 	for (int i = 0; i < 4; i++)
 		updateKey(&_keyInfo[284 + i], _input.mouse.buttons[i], now);
+
+	if (_remastered)
+		updateKey(&_keyInfo[kKeyMouseLong], _input.mouse.buttons[0], now);
+}
+
+void StdControl::getMouseCanvasPosition(bool menuMode, int *x, int *y) const {
+	Common::Point mouse = g_system->getEventManager()->getMousePos();
+	float width = (float)g_system->getWidth();
+	float height = (float)g_system->getHeight();
+	float refWidth = menuMode ? (float)kCanvasWidth : (float)kCanvasPlayWidth;
+	float scale = MIN(width / refWidth, height / (float)kCanvasHeight);
+
+	if (scale <= 0.0f) {
+		warning("StdControl::getMouseCanvasPosition(): the screen has no size");
+		*x = 0;
+		*y = 0;
+		return;
+	}
+
+	float offsetX = (width - refWidth * scale) / 2.0f;
+	float offsetY = (height - (float)kCanvasHeight * scale) / 2.0f;
+
+	// The 4:3 play area sits in the middle of the canvas
+	if (!menuMode)
+		offsetX -= (float)kCanvasPlayOffset * scale;
+
+	*x = (int)(((float)mouse.x - offsetX) / scale);
+	*y = (int)(((float)mouse.y - offsetY) / scale);
 }
 
 void StdControl::enableAxis(int axis, int minVal, int maxVal, float deadZone) {

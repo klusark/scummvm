@@ -10,6 +10,7 @@
 #include "common/stream.h"
 #include "common/textconsole.h"
 #include "common/array.h"
+#include "common/debug.h"
 #include "common/util.h"
 
 #include "engines/grim/lua/lapi.h"
@@ -912,21 +913,140 @@ static const LuaFuncIdAlias luaFuncIdAliasesEmiDemo[] = {
 	{ kListEmiFallback, "  nilFB", kGroupEmpty }
 };
 
+enum {
+	kListRemInternal,
+	kListRemState,
+	kListRemIo,
+	kListRemIoTag,
+	kListRemString,
+	kListRemMath,
+	kListRemMathPow,
+	kListRemMain,
+	kListRemExtra,
+	kListRemFallback,
+	kListRemCostume,
+	kListRemCommentary,
+	kListRemText,
+	kListRemPrimitives,
+	kListRemOverlay,
+	kListRemMouse,
+	kNumListsRemastered
+};
+
+// The main table of the remastered, in the order of its executable. It has no hardware list:
+// Is3DHardwareEnabled moved here
+static const char *const luaFuncIdNamesMainRemastered[] = {
+	"EnginePause", "EngineResume", "EngineDisplay", "PrintStack", "GetPlatform", "SearchForFileOrSwapCDs", "CheckForFile", "New", "Load", "Save",
+	"Erase", "GetSaveStatus", "StartCheckOfCrossSaveStatus", "GetCrossSaveStatus", "UnlockAchievement", "ResetAchievements", "AreAchievementsInstalled", "GlobalSaveResolved", "UnlockCutscene", "IsCutsceneUnlocked",
+	"UnlockConcept", "IsConceptUnlocked", "SetActorColormap", "GetActorCostume", "SetActorCostume", "GetActorScale", "SetActorScale", "GetActorTimeScale", "SetActorTimeScale", "GetActorNodeLocation",
+	"SetActorWalkChore", "SetActorTurnChores", "SetActorRestChore", "SetActorMumblechore", "SetActorTalkChore", "SetActorWalkRate", "GetActorWalkRate", "SetActorTurnRate", "GetActorTurnRate", "SetSelectedActor",
+	"LoadActor", "GetActorPos", "GetActorRect", "GetActorPuckVector", "GetActorYawToPoint", "SetActorReflection", "SetActorOffsetYaw", "PutActorAtInterest", "PutActorAtOrigin", "PutActorAt",
+	"PutActorInSet", "GetClippedPos", "WalkActorVector", "WalkActorForward", "DriveActorTo", "WalkActorTo", "WalkActorToAvoiding", "WalkActorToInterest", "WalkActorToMouseTarget", "ActorLookAt",
+	"IsActorLooking", "SetActorLookRate", "GetActorLookRate", "CanActorSee", "GetVisibleThings", "GetCameraActor", "SetActorHead", "SetActorVisibility", "SetActorFollowBoxes", "ShutUpActor",
+	"SetActorFrustrumCull", "SetActorBWMode", "SetActorHKHackMode", "PathfinderMode", "IsActorInSector", "GetActorSector", "IsPointInSector", "GetPointSector", "TurnActor", "GetActorRot",
+	"SetActorRot", "SetActorPitch", "SetActorRoll", "IsActorTurning", "PlayActorChore", "PlayActorChoreLooping", "StopActorChore", "CompleteActorChore", "IsActorMoving", "IsActorChoring",
+	"IsActorResting", "SetActorChoreLooping", "GetActorChores", "GetActorLoopingChores", "GetActorCostumeDepth", "WorldToScreen", "ScreenToWorld", "exit", "FunctionName", "EnableDebugKeys",
+	"LockFont", "UnLockFont", "LockSound", "UnlockSound", "LockCostume", "UnlockCostume", "EnableControl", "DisableControl", "GetControlState", "PrintMessage",
+	"PrintError", "PrintWarning", "PrintDebug", "MakeCurrentSet", "LockSet", "UnLockSet", "MakeCurrentSetup", "GetCurrentSetup", "NextSetup", "PreviousSetup",
+	"StartFullscreenMovie", "IsFullscreenMoviePlaying", "StartMovie", "StopMovie", "PauseMovie", "IsMoviePlaying", "PlaySound", "PlaySoundAt", "PlaySoundAttached", "IsSoundPlaying",
+	"SetSoundPosition", "FindSaveGames", "InitiateFindSaveGames", "GetFindSaveGameStatus", "FileFindFirst", "FileFindNext", "FileFindDispose", "InputDialog", "QueryDialog", "WriteRegistryValue",
+	"ReadRegistryValue", "ReadRegistryIntValue", "SaveRegistryToDisk", "GetSectorVertices", "GetSectorOppositeEdge", "IsSectorActive", "MakeSectorActive", "PreRender", "SpewStartup", "SpewShutdown",
+	"GetCurrentScript", "PrintActorCostumes", "PushActorCostume", "PopActorCostume", "LoadCostume", "GetPhysicalBytes", "SetMemoryUsage", "RotateVector", "GetCameraPosition", "SetCameraPosition",
+	"GetCameraInterest", "SetCameraInterest", "GetCameraFOV", "SetCameraFOV", "GetCameraRoll", "SetCameraRoll", "GetCameraLookVector", "EnableBackgroundRender", "PointActorAt", "TurnActorTo",
+	"PerSecond", "SnapToPlane", "GetAngleBetweenVectors", "GetAngleBetweenActors", "SetAmbientLight", "FindLight", "TurnLightOn", "IsLightOn", "SetLightType", "GetLightType",
+	"SetLightPosition", "GetLightPosition", "SetLightRotation", "GetLightRotation", "SetLightAngles", "GetLightAngles", "SetLightIntensity", "GetLightIntensity", "PointLightAt", "LightMgrStartup",
+	"LightMgrShutdown", "LightMgrSetChange", "ImStartRecording", "ImStopRecording", "ImStartSound", "play", "ImStopSound", "ImStopAllSounds", "quiet", "ImGetParam",
+	"ImSetParam", "ImFadeParam", "ImGetMasterVol", "ImSetMasterVol", "ImGetSfxVol", "ImSetSfxVol", "ImGetVoiceVol", "ImSetVoiceVol", "ImGetMusicVol", "ImSetMusicVol",
+	"ImGetCommentaryVol", "ImSetCommentaryVol", "ImStartVoice", "ImStopVoice", "ImSetState", "ImSetSequence", "ImSetAttribute", "ImSetCuePoint", "ImPause", "ImResume",
+	"vfx", "ImSetVoiceEffect", "ImGetMemoryFootprint", "ImGetSoundCacheSize", "LoadBundle", "UnloadBundle", "SetGamma", "SetResolutionScaling", "SetAdvancedLighting", "SetActorWalkDominate",
+	"SetActorConstrain", "RenderModeUser", "SetGameRenderMode", "GetGameRenderMode", "ForceRefresh", "DimScreen", "DimRegion", "CleanBuffer", "Display", "SetSpeechMode",
+	"GetSpeechMode", "SetShadowColor", "ActivateActorShadow", "ActorShadow", "SetActorShadowPlane", "SetActorShadowPoint", "SetActiveShadow", "ActorDistToShadowPlane", "KillActorShadows", "AddShadowPlane",
+	"SetActorShadowValid", "NewObjectState", "FreeObjectState", "SetObjectType", "SendObjectToBack", "SendObjectToFront", "ActorToClean", "FlushControls", "SetActorCollisionMode", "SetActorCollisionScale",
+	"MarkDirtyRect", "CacheRect", "RestoreCacheRect", "ResReport", "HardwareAccelerated", "SetActorClipActive", "SetActorClipPlane", "FadeOutChore", "FadeInChore", "IrisDown",
+	"IrisUp", "IrisComplete", "IrisClear", "DialogLogGetLineCount", "DialogLogGetLine", "DialogLogAddLine", "ScreenShot", "SaveScreen", "GetSaveGameImage", "GetImage",
+	"FreeImage", "BlastImage", "BlastRect", "SubmitSaveGameData", "GetSaveGameData", "SetTextSpeed", "GetTextSpeed", "FindFileOnAnyCD", "DetachFromResources", "AttachToResources",
+	"SetSoundParameters", "GetSoundParameters", "TEST", "ActorPuckOrient", "GetSystemTime", "GetTickCount", "ActorVoiceIs3D", "JustLoaded", "DumpMemoryLog", "ResetTextures",
+	"BuildCache", "RestoreCache", "ShrinkBoxes", "UnShrinkBoxes", "GetShrinkPos", "NukeResources", "SetActorInvClipNode", "GetDiskFreeSpace", "SetWalkSystemFadeTime", "SaveIMuse",
+	"RestoreIMuse", "GetMemoryUsage", "SetLanguage", "GetLanguage", "GetLanguageCount", "Is3DHardwareEnabled", "SetMouseSpeedScale", "SetKeyMappingMode", "ResetKeyMappingToDefault", "GetRemappedKeyName",
+	"GetRemappedKeyHint", "LoadRemappedKeys", "SaveRemappedKeys"
+};
+
+static const char *const luaFuncIdNamesCommentaryRemastered[] = {
+	"SetCommentary", "ClearCommentary", "PlayCurrentCommentary", "EnableCommentary", "StopCommentaryImmediately", "HasHeardCommentary", "IsPlayingCommentary"
+};
+
+static const char *const luaFuncIdNamesOverlayRemastered[] = {
+	"OverlayCreate", "OverlayMove", "OverlaySetLayer", "OverlayDestroy", "OverlayDimensions", "OverlayClearCache", "OverlayFade", "OverlayGetScreenSize", "OverlayScreenBoxingMode", "OverlayShowLoadSpinner",
+	"WidescreenCorrectionFactor"
+};
+
+static const char *const luaFuncIdNamesMouseRemastered[] = {
+	"QueryActiveHotspots", "GetFloorWalkPos", "GetSelectedDialog", "SetCursor", "ProjectToAxis", "ShowCursor", "AddHotspot", "RemoveHotspot", "GetCursorPosition", "CursorAnimation",
+	"UpdateHotspot", "LinkHotspot", "PreloadCursors", "CursorMovieEnabled"
+};
+
+static const LuaFuncIdList luaFuncIdListsRemastered[kNumListsRemastered] = {
+	{ "int_funcs", luaFuncIdNamesInternal, ARRAYSIZE(luaFuncIdNamesInternal), 36, false },
+	{ "stateFuncs", luaFuncIdNamesState, ARRAYSIZE(luaFuncIdNamesState), 1, false },
+	{ "iolib", luaFuncIdNamesIo, ARRAYSIZE(luaFuncIdNamesIo), 10, false },
+	{ "iolibtag", luaFuncIdNamesIoTag, ARRAYSIZE(luaFuncIdNamesIoTag), 5, false },
+	{ "strlib", luaFuncIdNamesString, ARRAYSIZE(luaFuncIdNamesString), 9, false },
+	{ "mathlib", luaFuncIdNamesMath, ARRAYSIZE(luaFuncIdNamesMath), 21, false },
+	{ "wrappermathlib", luaFuncIdNamesMathPow, ARRAYSIZE(luaFuncIdNamesMathPow), 1, false },
+	{ "main", luaFuncIdNamesMainRemastered, ARRAYSIZE(luaFuncIdNamesMainRemastered), 323, true },
+	{ "extra", luaFuncIdNamesExtra, ARRAYSIZE(luaFuncIdNamesExtra), 4, true },
+	{ "tmFuncs", luaFuncIdNamesFallback, ARRAYSIZE(luaFuncIdNamesFallback), 3, false },
+	{ "costume", luaFuncIdNamesCostume, ARRAYSIZE(luaFuncIdNamesCostume), 2, true },
+	{ "commentary", luaFuncIdNamesCommentaryRemastered, ARRAYSIZE(luaFuncIdNamesCommentaryRemastered), 7, true },
+	{ "text", luaFuncIdNamesText, ARRAYSIZE(luaFuncIdNamesText), 22, true },
+	{ "primitives", luaFuncIdNamesPrimitives, ARRAYSIZE(luaFuncIdNamesPrimitives), 6, true },
+	{ "overlay", luaFuncIdNamesOverlayRemastered, ARRAYSIZE(luaFuncIdNamesOverlayRemastered), 11, true },
+	{ "mouse", luaFuncIdNamesMouseRemastered, ARRAYSIZE(luaFuncIdNamesMouseRemastered), 14, true }
+};
+
+// In the remastered PrintError, PrintWarning and PrintDebug are three functions, and the
+// three light manager entries are the only ones that share the do-nothing function
+static const LuaFuncIdAlias luaFuncIdAliasesRemastered[] = {
+	{ kListRemState, "stderrorim", kGroupErrorIm },
+	{ kListRemFallback, "  nilFB", kGroupErrorIm },
+
+	{ kListRemMain, "LightMgrStartup", kGroupDoNothing },
+	{ kListRemMain, "LightMgrShutdown", kGroupDoNothing },
+	{ kListRemMain, "LightMgrSetChange", kGroupDoNothing },
+
+	{ kListRemMain, "ImStartSound", kGroupPlay },
+	{ kListRemMain, "play", kGroupPlay },
+
+	{ kListRemMain, "ImStopAllSounds", kGroupQuiet },
+	{ kListRemMain, "quiet", kGroupQuiet },
+
+	{ kListRemMain, "ImSetVoiceEffect", kGroupVoiceEffect },
+	{ kListRemMain, "vfx", kGroupVoiceEffect }
+};
+
+// The most lists a model has, for the arrays that follow
+enum {
+	kMaxLists = kNumListsRemastered
+};
+
+static_assert((int)kNumLists <= (int)kMaxLists && (int)kNumListsEmi <= (int)kMaxLists, "the id models have more lists than kMaxLists");
+
 struct LuaFuncIdEntry {
 	lua_CFunction func;
 	int group;
 };
 
 static bool isEmiDemoIdLists = false;
+static bool isRemasteredIdLists = false;
 
 static const LuaFuncIdList *lists = luaFuncIdLists;
 static int activeListCount = kNumLists;
 static const LuaFuncIdAlias *aliases = luaFuncIdAliases;
 static int numAliases = ARRAYSIZE(luaFuncIdAliases);
 
-static Common::Array<LuaFuncIdEntry> funcIdEntries[kNumLists];
+static Common::Array<LuaFuncIdEntry> funcIdEntries[kMaxLists];
 static Common::Array<lua_CFunction> groupFuncs[kNumGroups];
-static int claimedLists[kNumLists];
+static int claimedLists[kMaxLists];
 static int numLiveLists = 0;
 static bool isBuilt = false;
 static luaL_libList *builtHead = nullptr;
@@ -987,6 +1107,71 @@ static lua_CFunction findLibraryFunction(const Common::Array<luaL_libList *> &li
 	return nullptr;
 }
 
+// The ids of a saved state come from the model, so a live list that does not match it leaves
+// functions unresolved. Report the lists of the model that have no live list, and the names
+// that are missing or in another position in the lists that have one.
+static void checkLiveListsOfModel(const Common::Array<luaL_libList *> &live) {
+	bool hasUnmatched = false;
+	int numEngineLists = 0;
+	int numMatched = 0;
+
+	for (int i = 0; i < activeListCount; i++) {
+		const LuaFuncIdList &model = lists[i];
+
+		if (!model.isEngine)
+			continue;
+
+		numEngineLists++;
+
+		if (claimedLists[i] < 0) {
+			hasUnmatched = true;
+			warning("buildFuncIdLists(): no live list matches the list %s of the model (%d names, first '%s', last '%s')",
+				model.title, model.count, model.names[0], model.names[model.count - 1]);
+			continue;
+		}
+
+		const luaL_libList *liveList = live[claimedLists[i]];
+		int numMissing = 0;
+		int numMoved = 0;
+		const char *firstMissing = "-";
+		const char *firstMoved = "-";
+
+		for (int j = 0; j < model.count; j++) {
+			if (strcmp(liveList->list[j].name, model.names[j]) == 0)
+				continue;
+
+			if (findInLiveList(liveList, model.names[j], j)) {
+				if (!numMoved)
+					firstMoved = model.names[j];
+
+				numMoved++;
+			} else {
+				if (!numMissing)
+					firstMissing = model.names[j];
+
+				numMissing++;
+			}
+		}
+
+		if (numMissing || numMoved) {
+			warning("buildFuncIdLists(): the live list %s differs from the model: %d names are missing (first '%s'), %d names are in another position (first '%s')",
+				model.title, numMissing, firstMissing, numMoved, firstMoved);
+		} else {
+			numMatched++;
+		}
+	}
+
+	if (hasUnmatched) {
+		for (uint i = 0; i < live.size(); i++) {
+			if (live[i]->number > 0)
+				warning("buildFuncIdLists(): live list %d has %d names, first '%s', last '%s'", (int)i, (int)live[i]->number,
+					live[i]->list[0].name, live[i]->list[live[i]->number - 1].name);
+		}
+	}
+
+	debug(1, "buildFuncIdLists(): %d of the %d engine lists of the model match a live list exactly", numMatched, numEngineLists);
+}
+
 static void buildFuncIdLists() {
 	Common::Array<luaL_libList *> live;
 	Common::Array<bool> claimed;
@@ -998,7 +1183,12 @@ static void buildFuncIdLists() {
 
 	numLiveLists = live.size();
 
-	if (luaIsEmi && isEmiDemoIdLists) {
+	if (!luaIsEmi && isRemasteredIdLists) {
+		lists = luaFuncIdListsRemastered;
+		activeListCount = kNumListsRemastered;
+		aliases = luaFuncIdAliasesRemastered;
+		numAliases = ARRAYSIZE(luaFuncIdAliasesRemastered);
+	} else if (luaIsEmi && isEmiDemoIdLists) {
 		lists = luaFuncIdListsEmiDemo;
 		activeListCount = kNumListsEmi;
 		aliases = luaFuncIdAliasesEmiDemo;
@@ -1028,6 +1218,9 @@ static void buildFuncIdLists() {
 			claimed[liveIndex] = true;
 		}
 	}
+
+	if (!luaIsEmi && isRemasteredIdLists)
+		checkLiveListsOfModel(live);
 
 	for (int i = 0; i < activeListCount; i++) {
 		const LuaFuncIdList &model = lists[i];
@@ -1238,6 +1431,11 @@ void lua_FuncIDsInvalidate() {
 
 void lua_FuncIDsSetEmiDemo(bool isDemo) {
 	isEmiDemoIdLists = isDemo;
+	lua_FuncIDsInvalidate();
+}
+
+void lua_FuncIDsSetRemastered(bool isRemastered) {
+	isRemasteredIdLists = isRemastered;
 	lua_FuncIDsInvalidate();
 }
 
