@@ -284,46 +284,6 @@ int SputActorModule::findClosestCandidate(float *from, float *to, ObjectCorners 
 	return closest;
 }
 
-void SputActorModule::transformVectorOrtho34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat) {
-	for (int i = 0; i < 3; i++) {
-		double first = (float)((double)mat[i][0] * vec[0]);
-		double second = (float)((double)mat[i][1] * vec[1]);
-		double third = (float)((double)mat[i][2] * vec[2]);
-
-		out[i] = (float)((first + second) + third);
-	}
-}
-
-void SputActorModule::transformVector34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat) {
-	for (int i = 0; i < 3; i++) {
-		double first = (float)((double)mat[0][i] * vec[0]);
-		double second = (float)((double)mat[1][i] * vec[1]);
-		double third = (float)((double)mat[2][i] * vec[2]);
-
-		out[i] = (float)((first + second) + third);
-	}
-}
-
-void SputActorModule::transformPoint34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat) {
-	for (int i = 0; i < 3; i++) {
-		double first = (float)((double)mat[0][i] * vec[0]);
-		double second = (float)((double)mat[1][i] * vec[1]);
-		double third = (float)((double)mat[2][i] * vec[2]);
-
-		out[i] = (float)(((first + second) + third) + mat[3][i]);
-	}
-}
-
-void SputActorModule::transformPoint34AccRemastered(RdVector3 vec, RdMatrix34 mat) {
-	RdVector3 result;
-
-	transformPoint34Remastered(result, vec, mat);
-
-	vec[0] = result[0];
-	vec[1] = result[1];
-	vec[2] = result[2];
-}
-
 void SputActorModule::getOuttaTheBoxRemastered(float *point, const RdBound3 &box, RdMatrix34 matrix, float *origin) {
 	RdVector3 local;
 	RdVector3 out;
@@ -332,7 +292,7 @@ void SputActorModule::getOuttaTheBoxRemastered(float *point, const RdBound3 &box
 	local[1] = (float)((double)point[1] - origin[1]);
 	local[2] = (float)((double)point[2] - origin[2]);
 
-	transformVectorOrtho34Remastered(out, local, matrix);
+	_rd->transformVectorOrtho34Remastered(out, local, matrix);
 
 	if (!(box.min[2] < out[2] && box.min[1] < out[1] && box.max[1] > out[1] && box.min[0] < out[0] && box.max[0] > out[0] && box.max[2] > out[2]))
 		return;
@@ -382,7 +342,7 @@ void SputActorModule::getOuttaTheBoxRemastered(float *point, const RdBound3 &box
 		}
 	}
 
-	transformPoint34Remastered(point, local, matrix);
+	_rd->transformPoint34Remastered(point, local, matrix);
 }
 
 int SputActorModule::checkCollisionsRemastered(SputActor *actor, float *from, float *to, float *center, const RdBound3 &box, RdMatrix34 matrix, float *offset) {
@@ -421,7 +381,7 @@ void SputActorModule::findObjectCornersRemastered(RdModel3 *model, float margin,
 	out->corner[3][2] = model->bound.min[2];
 
 	for (int i = 0; i < 4; i++) {
-		transformPoint34AccRemastered(out->corner[i], mat);
+		_rd->transformPoint34AccRemastered(out->corner[i], mat);
 		out->corner[i][2] = z;
 		out->valid[i] = 1;
 	}
@@ -435,12 +395,12 @@ int SputActorModule::testCollisionRemastered(float *from, float *to, float *cent
 	local[0] = (float)((double)from[0] - center[0]);
 	local[1] = (float)((double)from[1] - center[1]);
 	local[2] = (float)((double)from[2] - center[2]);
-	transformVectorOrtho34Remastered(start, local, matrix);
+	_rd->transformVectorOrtho34Remastered(start, local, matrix);
 
 	local[0] = (float)((double)to[0] - center[0]);
 	local[1] = (float)((double)to[1] - center[1]);
 	local[2] = (float)((double)to[2] - center[2]);
-	transformVectorOrtho34Remastered(end, local, matrix);
+	_rd->transformVectorOrtho34Remastered(end, local, matrix);
 
 	float dirX = (float)((double)end[0] - start[0]);
 	float dirY = (float)((double)end[1] - start[1]);

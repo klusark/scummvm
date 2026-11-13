@@ -279,10 +279,6 @@ private:
 	void publishActors();
 	bool buildPath(SputActor *actor, float *start, float *goal, int tighten, unsigned *failFlag, SputActor *avoid);
 	int pathCapacity() const;
-	void transformVectorOrtho34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat);
-	void transformVector34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat);
-	void transformPoint34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat);
-	void transformPoint34AccRemastered(RdVector3 vec, RdMatrix34 mat);
 	float dot3Remastered(float *a, float *b);
 	float normalize2Remastered(float *vec);
 	float normalize3AccRemastered(float *vec);

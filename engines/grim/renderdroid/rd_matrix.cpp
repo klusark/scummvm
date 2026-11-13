@@ -73,6 +73,11 @@ void RenderDroid::build34(RdMatrix34 out, RdVector3 pyr, RdVector3 pos) {
 }
 
 void RenderDroid::buildFromVectorAngle34(RdMatrix34 out, RdVector3 axis, float angle) {
+	if (_remastered) {
+		buildFromVectorAngle34Remastered(out, axis, angle);
+		return;
+	}
+
 	float sinAngle, cosAngle;
 
 	_stdMath->sinCos(angle, &sinAngle, &cosAngle);
@@ -205,6 +210,11 @@ void RenderDroid::buildTranslate34(RdMatrix34 out, RdVector3 pos) {
 }
 
 void RenderDroid::extractAngles34(RdMatrix34 mat, RdVector3 pyr) {
+	if (_remastered) {
+		extractAngles34Remastered(mat, pyr);
+		return;
+	}
+
 	float m3Squared = (float)((double)mat[1][0] * mat[1][0]);
 	double sumOfSquares = (double)mat[1][1] * mat[1][1] + m3Squared;
 	float sumOfSquaresStored = (float)sumOfSquares;
@@ -447,12 +457,22 @@ void RenderDroid::preScale34(RdMatrix34 mat, RdVector3 scale) {
 }
 
 void RenderDroid::transformPoint34(RdVector3 out, RdVector3 pt, RdMatrix34 mat) {
+	if (_remastered) {
+		transformPoint34Remastered(out, pt, mat);
+		return;
+	}
+
 	out[0] = (float)((double)mat[2][0] * pt[2] + (double)mat[1][0] * pt[1] + (double)pt[0] * mat[0][0] + mat[3][0]);
 	out[1] = (float)((double)mat[2][1] * pt[2] + (double)mat[1][1] * pt[1] + (double)mat[0][1] * pt[0] + mat[3][1]);
 	out[2] = (float)((double)mat[1][2] * pt[1] + (double)mat[2][2] * pt[2] + (double)mat[0][2] * pt[0] + mat[3][2]);
 }
 
 void RenderDroid::transformPoint34Acc(RdVector3 pt, RdMatrix34 mat) {
+	if (_remastered) {
+		transformPoint34AccRemastered(pt, mat);
+		return;
+	}
+
 	float x = (float)((double)mat[2][0] * pt[2] + (double)mat[1][0] * pt[1] + (double)pt[0] * mat[0][0] + mat[3][0]);
 	float y = (float)((double)mat[2][1] * pt[2] + (double)mat[1][1] * pt[1] + (double)mat[0][1] * pt[0] + mat[3][1]);
 	float z = (float)((double)mat[1][2] * pt[1] + (double)mat[2][2] * pt[2] + (double)mat[0][2] * pt[0] + mat[3][2]);
@@ -475,12 +495,22 @@ void RenderDroid::transformPointLst34(RdMatrix34 mat, RdVector3 *in, RdVector3 *
 }
 
 void RenderDroid::transformVector34(RdVector3 out, RdVector3 vec, RdMatrix34 mat) {
+	if (_remastered) {
+		transformVector34Remastered(out, vec, mat);
+		return;
+	}
+
 	out[0] = (float)((double)mat[2][0] * vec[2] + (double)mat[1][0] * vec[1] + (double)vec[0] * mat[0][0]);
 	out[1] = (float)((double)mat[2][1] * vec[2] + (double)mat[1][1] * vec[1] + (double)mat[0][1] * vec[0]);
 	out[2] = (float)((double)mat[1][2] * vec[1] + (double)mat[2][2] * vec[2] + (double)mat[0][2] * vec[0]);
 }
 
 void RenderDroid::transformVector34Acc(RdVector3 vec, RdMatrix34 mat) {
+	if (_remastered) {
+		transformVector34AccRemastered(vec, mat);
+		return;
+	}
+
 	float x = (float)((double)mat[2][0] * vec[2] + (double)mat[1][0] * vec[1] + (double)vec[0] * mat[0][0]);
 	float y = (float)((double)mat[2][1] * vec[2] + (double)mat[1][1] * vec[1] + (double)mat[0][1] * vec[0]);
 	float z = (float)((double)mat[1][2] * vec[1] + (double)mat[2][2] * vec[2] + (double)mat[0][2] * vec[0]);
@@ -491,9 +521,202 @@ void RenderDroid::transformVector34Acc(RdVector3 vec, RdMatrix34 mat) {
 }
 
 void RenderDroid::transformVectorOrtho34(RdVector3 out, RdVector3 vec, RdMatrix34 mat) {
+	if (_remastered) {
+		transformVectorOrtho34Remastered(out, vec, mat);
+		return;
+	}
+
 	out[0] = (float)((double)mat[0][2] * vec[2] + (double)mat[0][1] * vec[1] + (double)vec[0] * mat[0][0]);
 	out[1] = (float)((double)mat[1][2] * vec[2] + (double)mat[1][1] * vec[1] + (double)mat[1][0] * vec[0]);
 	out[2] = (float)((double)mat[2][1] * vec[1] + (double)mat[2][2] * vec[2] + (double)mat[2][0] * vec[0]);
+}
+
+void RenderDroid::transformPoint34Remastered(RdVector3 out, RdVector3 pt, RdMatrix34 mat) {
+	for (int i = 0; i < 3; i++) {
+		float first = (float)((double)mat[0][i] * pt[0]);
+		float second = (float)((double)mat[1][i] * pt[1]);
+		float third = (float)((double)mat[2][i] * pt[2]);
+
+		out[i] = (float)((((double)first + second) + third) + mat[3][i]);
+	}
+}
+
+void RenderDroid::transformPoint34AccRemastered(RdVector3 pt, RdMatrix34 mat) {
+	RdVector3 result;
+
+	transformPoint34Remastered(result, pt, mat);
+
+	pt[0] = result[0];
+	pt[1] = result[1];
+	pt[2] = result[2];
+}
+
+void RenderDroid::transformVector34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat) {
+	for (int i = 0; i < 3; i++) {
+		float first = (float)((double)mat[0][i] * vec[0]);
+		float second = (float)((double)mat[1][i] * vec[1]);
+		float third = (float)((double)mat[2][i] * vec[2]);
+
+		out[i] = (float)(((double)first + second) + third);
+	}
+}
+
+void RenderDroid::transformVector34AccRemastered(RdVector3 vec, RdMatrix34 mat) {
+	RdVector3 result;
+
+	transformVector34Remastered(result, vec, mat);
+
+	vec[0] = result[0];
+	vec[1] = result[1];
+	vec[2] = result[2];
+}
+
+void RenderDroid::transformVectorOrtho34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat) {
+	for (int i = 0; i < 3; i++) {
+		float first = (float)((double)mat[i][0] * vec[0]);
+		float second = (float)((double)mat[i][1] * vec[1]);
+		float third = (float)((double)mat[i][2] * vec[2]);
+
+		out[i] = (float)(((double)first + second) + third);
+	}
+}
+
+void RenderDroid::buildFromVectorAngle34Remastered(RdMatrix34 out, RdVector3 axis, float angle) {
+	float sinAngle;
+	float cosAngle;
+
+	_stdMath->sinCos(angle, &sinAngle, &cosAngle);
+
+	double towardsPlusZ = 1.0 - axis[2];
+	double absTowardsPlusZ = towardsPlusZ < 0.0 ? -towardsPlusZ : towardsPlusZ;
+
+	if (!(absTowardsPlusZ > 0.00001f)) {
+		out[0][0] = cosAngle;
+		out[1][1] = cosAngle;
+		out[0][1] = sinAngle;
+		out[1][0] = -sinAngle;
+		out[0][2] = 0.0f;
+		out[1][2] = 0.0f;
+		out[2][0] = 0.0f;
+		out[2][1] = 0.0f;
+		out[2][2] = 1.0f;
+		out[3][0] = 0.0f;
+		out[3][1] = 0.0f;
+		out[3][2] = 0.0f;
+
+		return;
+	}
+
+	double towardsMinusZ = (double)axis[2] + 1.0;
+	double absTowardsMinusZ = towardsMinusZ < 0.0 ? -towardsMinusZ : towardsMinusZ;
+
+	if (!(absTowardsMinusZ > 0.00001f)) {
+		out[0][0] = cosAngle;
+		out[1][1] = cosAngle;
+		out[0][1] = -sinAngle;
+		out[1][0] = sinAngle;
+		out[0][2] = 0.0f;
+		out[1][2] = 0.0f;
+		out[2][0] = 0.0f;
+		out[2][1] = 0.0f;
+		out[2][2] = 1.0f;
+		out[3][0] = 0.0f;
+		out[3][1] = 0.0f;
+		out[3][2] = 0.0f;
+
+		return;
+	}
+
+	float oneMinusCos = (float)(1.0 - cosAngle);
+	float xy = (float)((double)axis[1] * axis[0]);
+	float xSin = (float)((double)axis[0] * sinAngle);
+	float ySin = (float)((double)axis[1] * sinAngle);
+	float zSin = (float)((double)sinAngle * axis[2]);
+	float xx = (float)((double)axis[0] * axis[0]);
+	float yy = (float)((double)axis[1] * axis[1]);
+	float z = (float)((1.0 - xx) - yy);
+	float denominator = (float)(1.0 - z);
+	float xxCos = (float)((double)xx * cosAngle);
+	float yyCos = (float)((double)yy * cosAngle);
+	float zx = (float)((double)axis[0] * axis[2]);
+	float zxOneMinusCos = (float)((double)zx * oneMinusCos);
+	float yz = (float)((double)axis[1] * axis[2]);
+	float yzOneMinusCos = (float)((double)yz * oneMinusCos);
+	double xyOneMinusCos = (double)oneMinusCos * xy;
+
+	out[0][0] = (float)((double)xx + ((double)xxCos * z + yyCos) / denominator);
+	out[1][1] = (float)((double)yy + ((double)yyCos * z + xxCos) / denominator);
+	out[2][2] = (float)(((double)z + xxCos) + yyCos);
+	out[0][1] = (float)((double)zSin + xyOneMinusCos);
+	out[1][0] = (float)(xyOneMinusCos - zSin);
+	out[0][2] = (float)((double)zxOneMinusCos - ySin);
+	out[1][2] = (float)((double)yzOneMinusCos + xSin);
+	out[2][0] = (float)((double)ySin + zxOneMinusCos);
+	out[2][1] = (float)((double)yzOneMinusCos - xSin);
+	out[3][0] = 0.0f;
+	out[3][1] = 0.0f;
+	out[3][2] = 0.0f;
+}
+
+void RenderDroid::extractAngles34Remastered(RdMatrix34 mat, RdVector3 pyr) {
+	float forwardX = mat[1][0];
+	float forwardY = mat[1][1];
+	float forwardZ = mat[1][2];
+	float negSideX = -mat[0][0];
+	float negSideY = -mat[0][1];
+	float negSideZ = -mat[0][2];
+	double forwardXSquared = (double)forwardX * forwardX;
+	double forwardYSquared = (double)forwardY * forwardY;
+	float length = (float)sqrt((forwardXSquared + forwardYSquared) + 0.0);
+
+	if (length < 0.001f) {
+		float angle = (float)(90.0 - _stdMath->arcSin3(-negSideX));
+
+		if ((negSideY > 0.0f && forwardZ > 0.0f) || (negSideY < 0.0f && forwardZ < 0.0f))
+			angle = -angle;
+
+		pyr[2] = angle;
+		pyr[1] = 0.0f;
+	} else {
+		float angle = (float)(90.0 - _stdMath->arcSin3((float)((double)forwardY / length)));
+
+		if (forwardX > 0.0f)
+			angle = -angle;
+
+		pyr[1] = angle;
+	}
+
+	if (length < 0.001f) {
+		pyr[0] = 90.0f;
+	} else {
+		float ratio = (float)(((forwardYSquared + forwardXSquared) + (double)forwardZ * 0.0) / length);
+
+		if (ratio < 1.0f)
+			pyr[0] = (float)(90.0 - _stdMath->arcSin3(ratio));
+		else
+			pyr[0] = 0.0f;
+	}
+
+	if (forwardZ < 0.0f)
+		pyr[0] = -pyr[0];
+
+	if (!(length >= 0.001f))
+		return;
+
+	double numerator = ((double)forwardX * negSideY + (double)(-forwardY) * negSideX) + (double)negSideZ * 0.0;
+	float cosValue = (float)(numerator / length);
+
+	if (cosValue < 1.0f) {
+		if (-1.0f < cosValue)
+			pyr[2] = (float)(90.0 - _stdMath->arcSin3(cosValue));
+		else
+			pyr[2] = 180.0f;
+	} else {
+		pyr[2] = 0.0f;
+	}
+
+	if (negSideZ < 0.0f)
+		pyr[2] = -pyr[2];
 }
 
 } // End of namespace Grim

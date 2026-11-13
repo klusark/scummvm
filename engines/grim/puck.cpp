@@ -65,191 +65,8 @@ Puck::~Puck() {
 		_next->_prev = _prev;
 }
 
-void Puck::transformPoint34AccRemastered(RdVector3 vec, RdMatrix34 mat) {
-	RdVector3 result;
-
-	for (int i = 0; i < 3; i++) {
-		float first = (float)((double)mat[0][i] * vec[0]);
-		float second = (float)((double)mat[1][i] * vec[1]);
-		float third = (float)((double)mat[2][i] * vec[2]);
-
-		result[i] = (float)((((double)first + second) + third) + mat[3][i]);
-	}
-
-	vec[0] = result[0];
-	vec[1] = result[1];
-	vec[2] = result[2];
-}
-
-void Puck::transformVector34AccRemastered(RdVector3 vec, RdMatrix34 mat) {
-	RdVector3 result;
-
-	for (int i = 0; i < 3; i++) {
-		float first = (float)((double)mat[0][i] * vec[0]);
-		float second = (float)((double)mat[1][i] * vec[1]);
-		float third = (float)((double)mat[2][i] * vec[2]);
-
-		result[i] = (float)(((double)first + second) + third);
-	}
-
-	vec[0] = result[0];
-	vec[1] = result[1];
-	vec[2] = result[2];
-}
-
-void Puck::transformVectorOrtho34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat) {
-	for (int i = 0; i < 3; i++) {
-		float first = (float)((double)mat[i][0] * vec[0]);
-		float second = (float)((double)mat[i][1] * vec[1]);
-		float third = (float)((double)mat[i][2] * vec[2]);
-
-		out[i] = (float)(((double)first + second) + third);
-	}
-}
-
-void Puck::buildFromVectorAngle34Remastered(RdMatrix34 out, RdVector3 axis, float angle) {
-	float sinAngle;
-	float cosAngle;
-
-	_system->_stdMath->sinCos(angle, &sinAngle, &cosAngle);
-
-	double towardsPlusZ = 1.0 - axis[2];
-	double absTowardsPlusZ = towardsPlusZ < 0.0 ? -towardsPlusZ : towardsPlusZ;
-
-	if (!(absTowardsPlusZ > 0.00001f)) {
-		out[0][0] = cosAngle;
-		out[1][1] = cosAngle;
-		out[0][1] = sinAngle;
-		out[1][0] = -sinAngle;
-		out[0][2] = 0.0f;
-		out[1][2] = 0.0f;
-		out[2][0] = 0.0f;
-		out[2][1] = 0.0f;
-		out[2][2] = 1.0f;
-		out[3][0] = 0.0f;
-		out[3][1] = 0.0f;
-		out[3][2] = 0.0f;
-
-		return;
-	}
-
-	double towardsMinusZ = (double)axis[2] + 1.0;
-	double absTowardsMinusZ = towardsMinusZ < 0.0 ? -towardsMinusZ : towardsMinusZ;
-
-	if (!(absTowardsMinusZ > 0.00001f)) {
-		out[0][0] = cosAngle;
-		out[1][1] = cosAngle;
-		out[0][1] = -sinAngle;
-		out[1][0] = sinAngle;
-		out[0][2] = 0.0f;
-		out[1][2] = 0.0f;
-		out[2][0] = 0.0f;
-		out[2][1] = 0.0f;
-		out[2][2] = 1.0f;
-		out[3][0] = 0.0f;
-		out[3][1] = 0.0f;
-		out[3][2] = 0.0f;
-
-		return;
-	}
-
-	float oneMinusCos = (float)(1.0 - cosAngle);
-	float xy = (float)((double)axis[1] * axis[0]);
-	float xSin = (float)((double)axis[0] * sinAngle);
-	float ySin = (float)((double)axis[1] * sinAngle);
-	float zSin = (float)((double)sinAngle * axis[2]);
-	float xx = (float)((double)axis[0] * axis[0]);
-	float yy = (float)((double)axis[1] * axis[1]);
-	float z = (float)((1.0 - xx) - yy);
-	float denominator = (float)(1.0 - z);
-	float xxCos = (float)((double)xx * cosAngle);
-	float yyCos = (float)((double)yy * cosAngle);
-	float zx = (float)((double)axis[0] * axis[2]);
-	float zxOneMinusCos = (float)((double)zx * oneMinusCos);
-	float yz = (float)((double)axis[1] * axis[2]);
-	float yzOneMinusCos = (float)((double)yz * oneMinusCos);
-	double xyOneMinusCos = (double)oneMinusCos * xy;
-
-	out[0][0] = (float)((double)xx + ((double)xxCos * z + yyCos) / denominator);
-	out[1][1] = (float)((double)yy + ((double)yyCos * z + xxCos) / denominator);
-	out[2][2] = (float)(((double)z + xxCos) + yyCos);
-	out[0][1] = (float)((double)zSin + xyOneMinusCos);
-	out[1][0] = (float)(xyOneMinusCos - zSin);
-	out[0][2] = (float)((double)zxOneMinusCos - ySin);
-	out[1][2] = (float)((double)yzOneMinusCos + xSin);
-	out[2][0] = (float)((double)ySin + zxOneMinusCos);
-	out[2][1] = (float)((double)yzOneMinusCos - xSin);
-	out[3][0] = 0.0f;
-	out[3][1] = 0.0f;
-	out[3][2] = 0.0f;
-}
-
-void Puck::extractAngles34Remastered(RdMatrix34 mat, RdVector3 pyr) {
-	float forwardX = mat[1][0];
-	float forwardY = mat[1][1];
-	float forwardZ = mat[1][2];
-	float negSideX = -mat[0][0];
-	float negSideY = -mat[0][1];
-	float negSideZ = -mat[0][2];
-	double forwardXSquared = (double)forwardX * forwardX;
-	double forwardYSquared = (double)forwardY * forwardY;
-	float length = (float)sqrt((forwardXSquared + forwardYSquared) + 0.0);
-
-	if (length < 0.001f) {
-		float angle = (float)(90.0 - _system->_stdMath->arcSin3(-negSideX));
-
-		if ((negSideY > 0.0f && forwardZ > 0.0f) || (negSideY < 0.0f && forwardZ < 0.0f))
-			angle = -angle;
-
-		pyr[2] = angle;
-		pyr[1] = 0.0f;
-	} else {
-		float angle = (float)(90.0 - _system->_stdMath->arcSin3((float)((double)forwardY / length)));
-
-		if (forwardX > 0.0f)
-			angle = -angle;
-
-		pyr[1] = angle;
-	}
-
-	if (length < 0.001f) {
-		pyr[0] = 90.0f;
-	} else {
-		float ratio = (float)(((forwardYSquared + forwardXSquared) + (double)forwardZ * 0.0) / length);
-
-		if (ratio < 1.0f)
-			pyr[0] = (float)(90.0 - _system->_stdMath->arcSin3(ratio));
-		else
-			pyr[0] = 0.0f;
-	}
-
-	if (forwardZ < 0.0f)
-		pyr[0] = -pyr[0];
-
-	if (!(length >= 0.001f))
-		return;
-
-	double numerator = ((double)forwardX * negSideY + (double)(-forwardY) * negSideX) + (double)negSideZ * 0.0;
-	float cosValue = (float)(numerator / length);
-
-	if (cosValue < 1.0f) {
-		if (-1.0f < cosValue)
-			pyr[2] = (float)(90.0 - _system->_stdMath->arcSin3(cosValue));
-		else
-			pyr[2] = 180.0f;
-	} else {
-		pyr[2] = 0.0f;
-	}
-
-	if (negSideZ < 0.0f)
-		pyr[2] = -pyr[2];
-}
-
 float *Puck::rot() {
-	if (_system->_remastered)
-		extractAngles34Remastered(_orient, _rot);
-	else
-		_system->_rd->extractAngles34(_orient, _rot);
+	_system->_rd->extractAngles34(_orient, _rot);
 
 	return _rot;
 }
@@ -280,12 +97,6 @@ void Puck::setPos(float *pos) {
 }
 
 void Puck::xform(float *vec) {
-	if (_system->_remastered) {
-		transformPoint34AccRemastered(vec, _orient);
-
-		return;
-	}
-
 	_system->_rd->transformPoint34Acc(vec, _orient);
 }
 
@@ -296,10 +107,7 @@ void Puck::invXform(float *vec) {
 	vec[1] = (float)((double)vec[1] - _pos[1]);
 	vec[2] = (float)((double)vec[2] - _pos[2]);
 
-	if (_system->_remastered)
-		transformVectorOrtho34Remastered(out, vec, _orient);
-	else
-		_system->_rd->transformVectorOrtho34(out, vec, _orient);
+	_system->_rd->transformVectorOrtho34(out, vec, _orient);
 
 	vec[0] = out[0];
 	vec[1] = out[1];
@@ -309,13 +117,8 @@ void Puck::invXform(float *vec) {
 void Puck::rotate(float angle) {
 	RdMatrix34 out;
 
-	if (_system->_remastered) {
-		buildFromVectorAngle34Remastered(out, _orient[2], angle);
-		transformVector34AccRemastered(_orient[1], out);
-	} else {
-		_system->_rd->buildFromVectorAngle34(out, _orient[2], angle);
-		_system->_rd->transformVector34Acc(_orient[1], out);
-	}
+	_system->_rd->buildFromVectorAngle34(out, _orient[2], angle);
+	_system->_rd->transformVector34Acc(_orient[1], out);
 
 	_orient[1][0] = (float)((double)_orient[1][0] + _orient[3][0]);
 	_orient[1][1] = (float)((double)_orient[3][1] + _orient[1][1]);

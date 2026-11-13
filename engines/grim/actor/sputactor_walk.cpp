@@ -518,9 +518,9 @@ int SputActorModule::actorWalkToImplRemastered(SputActor *actor, SputActor *targ
 	RdVector3 targetCenterOffset;
 	RdModel3 *targetModel = target->costumeStack->headThing->data.model3;
 
-	transformVector34Remastered(myCenterOffset, model->geomCenter, getOrientMatrix(actor));
-	transformPoint34Remastered(targetCenterWorld, targetModel->geomCenter, getOrientMatrix(target));
-	transformVector34Remastered(targetCenterOffset, targetModel->geomCenter, getOrientMatrix(target));
+	_rd->transformVector34Remastered(myCenterOffset, model->geomCenter, getOrientMatrix(actor));
+	_rd->transformPoint34Remastered(targetCenterWorld, targetModel->geomCenter, getOrientMatrix(target));
+	_rd->transformVector34Remastered(targetCenterOffset, targetModel->geomCenter, getOrientMatrix(target));
 
 	float targetScale = target->extra->collisionScale;
 	RdBound3 targetBox;
@@ -583,7 +583,7 @@ int SputActorModule::actorWalkToImplRemastered(SputActor *actor, SputActor *targ
 
 	RdVector3 snapped;
 
-	transformPoint34Remastered(snapped, _collisionImpact, getOrientMatrix(target));
+	_rd->transformPoint34Remastered(snapped, _collisionImpact, getOrientMatrix(target));
 
 	WalkPlane *plane = _walkSystem->planeClosest(snapped, -1);
 
@@ -775,7 +775,7 @@ void SputActorModule::getCollisionBoxes(SputActor *actor, int *count, int maxPoi
 
 	RdVector3 offset;
 
-	transformVector34Remastered(offset, model->geomCenter, getOrientMatrix(actor));
+	_rd->transformVector34Remastered(offset, model->geomCenter, getOrientMatrix(actor));
 
 	float centerX = (float)((double)actor->actorPos[0] + offset[0]);
 	float centerY = (float)((double)actor->actorPos[1] + offset[1]);
@@ -806,7 +806,7 @@ void SputActorModule::getCollisionBoxes(SputActor *actor, int *count, int maxPoi
 		RdModel3 *otherModel = other->costumeStack->headThing->data.model3;
 		RdVector3 otherCenter;
 
-		transformPoint34Remastered(otherCenter, otherModel->geomCenter, getOrientMatrix(other));
+		_rd->transformPoint34Remastered(otherCenter, otherModel->geomCenter, getOrientMatrix(other));
 
 		float otherRadius = otherModel->radius * other->extra->collisionScale;
 		double dx = (double)centerX - otherCenter[0];

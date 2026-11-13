@@ -64,11 +64,6 @@ public:
 private:
 	int forwardRemastered(float dist, float *direction, int allowLeft, int allowRight);
 	void orientToPlaneRemastered(WalkPlane *targetPlane);
-	void transformPoint34AccRemastered(RdVector3 vec, RdMatrix34 mat);
-	void transformVector34AccRemastered(RdVector3 vec, RdMatrix34 mat);
-	void transformVectorOrtho34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat);
-	void buildFromVectorAngle34Remastered(RdMatrix34 out, RdVector3 axis, float angle);
-	void extractAngles34Remastered(RdMatrix34 mat, RdVector3 pyr);
 
 	WalkSystem *_system;
 	RdVector3 _rot;

@@ -526,6 +526,14 @@ public:
 	void transformVector34Acc(RdVector3 vec, RdMatrix34 mat);
 	void transformVectorOrtho34(RdVector3 out, RdVector3 vec, RdMatrix34 mat);
 
+	void buildFromVectorAngle34Remastered(RdMatrix34 out, RdVector3 axis, float angle);
+	void extractAngles34Remastered(RdMatrix34 mat, RdVector3 pyr);
+	void transformPoint34Remastered(RdVector3 out, RdVector3 pt, RdMatrix34 mat);
+	void transformPoint34AccRemastered(RdVector3 pt, RdMatrix34 mat);
+	void transformVector34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat);
+	void transformVector34AccRemastered(RdVector3 vec, RdMatrix34 mat);
+	void transformVectorOrtho34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat);
+
 	class Module {
 	protected:
 		explicit Module(RenderDroid *rd) : _rd(rd) {}

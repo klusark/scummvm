@@ -509,7 +509,15 @@ void SputActorModule::updatePuck(SputActor *actor) {
 	if (extra->turnDir && !(actor->mode & 1)) {
 		float frameTime = _sputTime->getFrameTimeFlex();
 		float scaledTime = (float)((double)frameTime * extra->timeScale);
-		float turnAmount = (float)(((double)extra->turnRate * scaledTime) * (double)extra->turnDir);
+		float turnAmount;
+
+		if (_grim->isRemastered()) {
+			float turnStep = (float)((double)extra->turnRate * scaledTime);
+
+			turnAmount = (float)((double)turnStep * extra->turnDir);
+		} else {
+			turnAmount = (float)(((double)extra->turnRate * scaledTime) * (double)extra->turnDir);
+		}
 
 		extra->puck->rotate(turnAmount);
 	}
@@ -517,8 +525,13 @@ void SputActorModule::updatePuck(SputActor *actor) {
 	if (actor->extra->walking) {
 		float frameTime = _sputTime->getFrameTimeFlex();
 		Extra *walkExtra = actor->extra;
-		float distance = (float)(((double)frameTime * walkExtra->timeScale) * walkExtra->walkRate);
+		float distance;
 		int walking;
+
+		if (_grim->isRemastered())
+			distance = (float)((double)frameTime * ((double)walkExtra->timeScale * walkExtra->walkRate));
+		else
+			distance = (float)(((double)frameTime * walkExtra->timeScale) * walkExtra->walkRate);
 
 		if (walkExtra->walkDominate)
 			walking = walkExtra->puck->forward(distance, 1, 1);
