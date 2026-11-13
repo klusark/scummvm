@@ -160,6 +160,7 @@ private:
 	WalkPlane *newPlane(float (*verts)[3], int numPoints, const char *collection, const char *sectorName, int id, int visible, int type, int alwaysMerge,
 			int numTriangles, int (*triangles)[3]);
 	WpVertex *addVertexDemo(float *pos);
+	int buildPathWithFixes(float *from, float *to, int tighten);
 
 	RenderDroid *_rd;
 	StdMath *_stdMath;

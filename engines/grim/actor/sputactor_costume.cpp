@@ -22,6 +22,7 @@
 #include "common/textconsole.h"
 
 #include "engines/grim/chore/cos.h"
+#include "engines/grim/grim.h"
 #include "engines/grim/actor/sputactor.h"
 #include "engines/grim/costume/sputcostume.h"
 #include "engines/grim/costume/sputcostume_components.h"
@@ -131,6 +132,7 @@ void SputActorModule::drawCostumeImpl(CostumeNode *node, RdMatrix34 matrix) {
 		viewport[3] = 0;
 
 		if (modelInst->parentModel) {
+			RdColormap *previousColormap = _rd->_colormap.getCurrent();
 			ModelInst *colormapModel = modelInst;
 
 			// The demo only uses the colormap of the model itself
@@ -208,6 +210,9 @@ void SputActorModule::drawCostumeImpl(CostumeNode *node, RdMatrix34 matrix) {
 
 			if (!b3DAcceleration)
 				_stdDisplay->vBufferUnlock(_sputRender->drawBuffer());
+
+			if (!demo && g_grim->useRemasterFixes())
+				_rd->_colormap.setCurrent(previousColormap);
 		} else {
 			if (modelInst->colormap) {
 				_rd->_colormap.setCurrent(modelInst->colormap);

@@ -175,7 +175,7 @@ SputObjectState *LegacyImporter::addRoomObjectState(SputRoom *sputRoom, int setu
 }
 
 void LegacyImporter::setCurrentRoom(SputRoom *sputRoom, Room *room, byte minVol, byte maxVol, float maxDist, float panFactor, float maxRadius) {
-	sputRoom->setCurrentRoom(room);
+	sputRoom->setCurrentRoom(room, false);
 
 	sputRoom->_walkSystem->setCollection(room->name);
 

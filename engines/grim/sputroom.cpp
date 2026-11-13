@@ -145,7 +145,7 @@ int SputRoom::setSoundPosition(const char *soundName, float *pos, int minVol, in
 	return result;
 }
 
-void SputRoom::setCurrentRoom(Room *room) {
+void SputRoom::setCurrentRoom(Room *room, bool runUpdate) {
 	if (!_currentRoomRef.valid || _currentRoomRef.handle != room) {
 		if (_currentRoomRef.valid) {
 			unReference(static_cast<Room *>(_currentRoomRef.handle));
@@ -164,6 +164,9 @@ void SputRoom::setCurrentRoom(Room *room) {
 
 			if (!(_grim->getGameFlags() & ADGF_DEMO))
 				setSoundParameters(room, 8.0f, 20, 127, 1.5f, 0.8f);
+
+			if (runUpdate && _grim->useRemasterFixes() && !(_grim->getGameFlags() & ADGF_DEMO))
+				_sputActor->updateActors(0.0f);
 		}
 	}
 }

@@ -434,6 +434,13 @@ void SputActorModule::setActorRotation(SputActor *actor, float *rot, int flipTur
 }
 
 void SputActorModule::setReflection(SputActor *actor, float angle) {
+	if (_grim->useRemasterFixes()) {
+		if (!actor || !actor->extra) {
+			warning("SputActorModule::setReflection(): the actor has no extra data");
+			return;
+		}
+	}
+
 	Puck *puck = actor->extra->puck;
 
 	if (puck)
@@ -713,7 +720,12 @@ void SputActorModule::setFrustrumCull(SputActor *actor, int cull) {
 	if (!actor)
 		return;
 
-	if (cull)
+	bool setFlag = cull != 0;
+
+	if (_grim->useRemasterFixes())
+		setFlag = cull == 0;
+
+	if (setFlag)
 		actor->flags |= 4;
 	else
 		actor->flags &= ~4;

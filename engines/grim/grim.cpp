@@ -858,7 +858,7 @@ int GrimEngine::chooseHardwareBackend() {
 int GrimEngine::grimStartup() {
 	_hardwareBackends = getHardwareBackends();
 	_useHardware = ConfMan.getBool("grim_3d_acceleration") ? 1 : 0;
-	_remasterFixes = (isRemastered() || ConfMan.getBool("grim_remaster_bugfixes")) ? 1 : 0;
+	_remasterFixes = (!(_gameFlags & ADGF_DEMO) && (isRemastered() || ConfMan.getBool("grim_remaster_bugfixes"))) ? 1 : 0;
 
 	_stdDisplay->startup();
 	_polyglotV1->initialize(this);

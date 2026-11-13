@@ -21,6 +21,7 @@
 
 #include "common/textconsole.h"
 
+#include "engines/grim/grim.h"
 #include "engines/grim/puck.h"
 #include "engines/grim/renderdroid/rd.h"
 #include "engines/grim/walkplane.h"
@@ -502,7 +503,7 @@ int Puck::forward(float dist, int allowLeft, int allowRight) {
 	if (_system->_demo)
 		return forwardDemo(dist, allowLeft, allowRight);
 
-	if (_system->_remastered)
+	if (_system->_remastered || g_grim->useRemasterFixes())
 		return forwardRemastered(dist, nullptr, allowLeft, allowRight);
 
 	int result = 0;

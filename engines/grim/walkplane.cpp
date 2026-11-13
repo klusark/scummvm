@@ -22,6 +22,7 @@
 #include "common/str.h"
 #include "common/textconsole.h"
 
+#include "engines/grim/grim.h"
 #include "engines/grim/puck.h"
 #include "engines/grim/remastered/pathfinder.h"
 #include "engines/grim/renderdroid/rd.h"
@@ -1659,6 +1660,9 @@ int WalkSystem::buildPath(float *from, float *to, int tighten) {
 	if (!_demo && !planeAt(to, 4096))
 		return 0;
 
+	if (!_demo && g_grim->useRemasterFixes())
+		return buildPathWithFixes(from, to, tighten);
+
 	if (findPath(from, to, nullptr)) {
 		if (_numPathPoints >= 30) {
 			warning("WalkSystem::buildPath(): path has too many points");
@@ -1674,6 +1678,38 @@ int WalkSystem::buildPath(float *from, float *to, int tighten) {
 
 		result = 1;
 	}
+
+	allActive();
+
+	return result;
+}
+
+int WalkSystem::buildPathWithFixes(float *from, float *to, int tighten) {
+	int result = 0;
+
+	if (findPathRemastered(from, to, nullptr, 0)) {
+		_workingPath[_numWorkingPathPoints][0] = to[0];
+		_workingPath[_numWorkingPathPoints][1] = to[1];
+		_workingPath[_numWorkingPathPoints][2] = to[2];
+		_numWorkingPathPoints++;
+		result = 1;
+	} else if (findPathRemastered(from, to, nullptr, 1)) {
+		result = 1;
+	}
+
+	if (result && tighten)
+		tightenPathRemastered();
+
+	_numPathPoints = _numWorkingPathPoints;
+
+	if (_numPathPoints > 30) {
+		if (result)
+			warning("WalkSystem::buildPathWithFixes(): path has too many points");
+
+		_numPathPoints = 30;
+	}
+
+	memcpy(_path, _workingPath, _numPathPoints * sizeof(_path[0]));
 
 	allActive();
 

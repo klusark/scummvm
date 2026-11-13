@@ -23,13 +23,17 @@
 
 #include "common/textconsole.h"
 
+#include "engines/grim/grim.h"
 #include "engines/grim/lua_v1_opcodes/lua_v1.h"
+#include "engines/grim/puck.h"
 #include "engines/grim/actor/sputactor.h"
 #include "engines/grim/costume/sputcostume.h"
 #include "engines/grim/std/std_math.h"
 #include "engines/grim/walkplane.h"
 
 namespace Grim {
+
+static const int kActorFlagNotMain = 0x80;
 
 void SputActorModule::getOuttaTheBox(float *point, const RdBound3 &box, RdMatrix34 matrix, float *origin) {
 	RdVector3 local;
@@ -704,6 +708,255 @@ int SputActorModule::sweepIntoBox(float *from, float *to, const RdBound3 &box, f
 	return 1;
 }
 
+float SputActorModule::normalize2Remastered(float *vec) {
+	float length = (float)sqrt((double)vec[0] * vec[0] + (double)vec[1] * vec[1]);
+
+	if (length != 0.0f) {
+		vec[0] = (float)((double)vec[0] / length);
+		vec[1] = (float)((double)vec[1] / length);
+	}
+
+	return length;
+}
+
+float SputActorModule::normalize3AccRemastered(float *vec) {
+	float length = (float)sqrt(((double)vec[1] * vec[1] + (double)vec[0] * vec[0]) + (double)vec[2] * vec[2]);
+
+	if (length != 0.0f) {
+		float inverse = (float)(1.0 / length);
+
+		vec[0] = (float)(vec[0] * inverse);
+		vec[1] = (float)(inverse * vec[1]);
+		vec[2] = (float)(inverse * vec[2]);
+	}
+
+	return length;
+}
+
+int SputActorModule::findSlideCandidates(float *prevCenter, float *otherCenter, float radius, float moved, float *firstPoint, float *secondPoint) {
+	double deltaY = (double)otherCenter[1] - prevCenter[1];
+	double deltaX = (double)otherCenter[0] - prevCenter[0];
+	float squareX = (float)(deltaX * deltaX);
+	float squareY = (float)(deltaY * deltaY);
+	float distance = (float)sqrt((double)squareX + squareY);
+	float distanceSquared = (float)((double)distance * distance);
+	float radiusSquared = (float)((double)radius * radius);
+	float movedSquared = (float)((double)moved * moved);
+	float sum = (float)(((double)distanceSquared - movedSquared) + radiusSquared);
+	double twice = (double)distance + distance;
+	float sumSquared = (float)((double)sum * sum);
+	float discriminant = (float)((double)radiusSquared * ((double)distanceSquared * 4.0) - sumSquared);
+
+	if (discriminant < 0.0f)
+		return 0;
+
+	if (twice == 0.0) {
+		warning("SputActorModule::findSlideCandidates(): the previous position is on the center of the actor");
+		return 0;
+	}
+
+	float centerDistance = (float)((double)sum / twice);
+	float root = (float)sqrt((double)discriminant);
+	float halfChord = (float)((double)root / twice);
+	float direction[2];
+
+	direction[0] = (float)deltaX;
+	direction[1] = (float)deltaY;
+	normalize2Remastered(direction);
+
+	float negativeDirectionY = -direction[1];
+	double along = (double)distance - centerDistance;
+	RdVector3 base;
+	float step = (float)((double)direction[0] * along);
+
+	base[0] = (float)((double)step + prevCenter[0]);
+	step = (float)((double)direction[1] * along);
+	base[1] = (float)((double)step + prevCenter[1]);
+	step = (float)(along * 0.0);
+	base[2] = (float)((double)step + prevCenter[2]);
+
+	float offsetX = (float)((double)negativeDirectionY * halfChord);
+	float offsetY = (float)((double)direction[0] * halfChord);
+	float offsetZ = (float)((double)halfChord * 0.0);
+
+	firstPoint[0] = (float)((double)offsetX + base[0]);
+	firstPoint[1] = (float)((double)offsetY + base[1]);
+	firstPoint[2] = (float)((double)offsetZ + base[2]);
+
+	double backStep = (double)halfChord * -2.0;
+	float backX = (float)((double)negativeDirectionY * backStep);
+	float backY = (float)((double)direction[0] * backStep);
+	float backZ = (float)(backStep * 0.0);
+
+	secondPoint[0] = (float)((double)backX + firstPoint[0]);
+	secondPoint[1] = (float)((double)backY + firstPoint[1]);
+	secondPoint[2] = (float)((double)backZ + firstPoint[2]);
+
+	return 1;
+}
+
+int SputActorModule::findSlidePoint(float *otherCenter, float *prevCenter, float *center, float reach) {
+	float deltaZ = (float)((double)otherCenter[2] - center[2]);
+	float reachSquared = (float)((double)reach * reach);
+	float deltaZSquared = (float)((double)deltaZ * deltaZ);
+	float radiusSquared = (float)((double)reachSquared - deltaZSquared);
+
+	if (radiusSquared < 0.0f)
+		return 0;
+
+	double prevDeltaY = (double)prevCenter[1] - center[1];
+	double prevDeltaX = (double)prevCenter[0] - center[0];
+	double prevDeltaZ = (double)prevCenter[2] - center[2];
+	float prevSquareX = (float)(prevDeltaX * prevDeltaX);
+	float prevSquareY = (float)(prevDeltaY * prevDeltaY);
+	float prevSquareZ = (float)(prevDeltaZ * prevDeltaZ);
+	float moved = (float)sqrt(((double)prevSquareX + prevSquareY) + prevSquareZ);
+	float radius = (float)sqrt((double)radiusSquared);
+	RdVector3 firstPoint;
+	RdVector3 secondPoint;
+
+	if (!findSlideCandidates(prevCenter, otherCenter, radius, moved, firstPoint, secondPoint))
+		return 0;
+
+	double firstDeltaY = (double)center[1] - firstPoint[1];
+	double firstDeltaX = (double)center[0] - firstPoint[0];
+	double firstDeltaZ = (double)center[2] - firstPoint[2];
+	float secondDeltaY = (float)((double)center[1] - secondPoint[1]);
+	double secondDeltaX = (double)center[0] - secondPoint[0];
+	float secondDeltaZ = (float)((double)center[2] - secondPoint[2]);
+	float firstSquareX = (float)(firstDeltaX * firstDeltaX);
+	float firstSquareY = (float)(firstDeltaY * firstDeltaY);
+	float firstSquareZ = (float)(firstDeltaZ * firstDeltaZ);
+	float firstDistance = (float)sqrt(((double)firstSquareX + firstSquareY) + firstSquareZ);
+	float secondSquareX = (float)(secondDeltaX * secondDeltaX);
+	float secondSquareY = (float)((double)secondDeltaY * secondDeltaY);
+	float secondSquareZ = (float)((double)secondDeltaZ * secondDeltaZ);
+	float secondDistance = (float)sqrt(((double)secondSquareX + secondSquareY) + secondSquareZ);
+	float *chosen = firstDistance < secondDistance ? firstPoint : secondPoint;
+
+	center[0] = chosen[0];
+	center[1] = chosen[1];
+	center[2] = chosen[2];
+
+	return 1;
+}
+
+void SputActorModule::sphereCollisionRemastered(SputActor *actor, SputActor *other, float *myCenterOffset, float *myCenterWorld, float *prevCenterWorld,
+		float *otherCenterWorld, float myRadius, float otherRadius) {
+	Extra *extra = actor->extra;
+
+	extra->collided = 1;
+	other->extra->collided = 1;
+	_collisionIn[0] = actor->actorPos[0];
+	_collisionIn[1] = actor->actorPos[1];
+	_collisionIn[2] = actor->actorPos[2];
+
+	RdVector3 center;
+
+	center[0] = myCenterWorld[0];
+	center[1] = myCenterWorld[1];
+	center[2] = myCenterWorld[2];
+
+	int walking = (actor->mode & 1) != 0;
+	int notMain = actor->flags & kActorFlagNotMain;
+	double reach = (double)otherRadius + myRadius;
+
+	if (walking && !notMain && findSlidePoint(otherCenterWorld, prevCenterWorld, center, (float)reach)) {
+		if (extra->pathIndex < extra->numPathPoints) {
+			if (extra->pathIndex < 0 || extra->pathIndex >= pathCapacity()) {
+				warning("SputActorModule::sphereCollisionRemastered(): path index %d out of range", extra->pathIndex);
+			} else {
+				float *pathPoint = extra->path[extra->pathIndex];
+				RdVector3 nextPoint;
+
+				nextPoint[0] = (float)((double)pathPoint[0] + myCenterOffset[0]);
+				nextPoint[1] = (float)((double)pathPoint[1] + myCenterOffset[1]);
+				nextPoint[2] = (float)((double)pathPoint[2] + myCenterOffset[2]);
+
+				double nextDeltaY = (double)nextPoint[1] - otherCenterWorld[1];
+				double nextDeltaX = (double)nextPoint[0] - otherCenterWorld[0];
+				double nextDeltaZ = (double)nextPoint[2] - otherCenterWorld[2];
+				float nextSquareX = (float)(nextDeltaX * nextDeltaX);
+				float nextSquareY = (float)(nextDeltaY * nextDeltaY);
+				float nextSquareZ = (float)(nextDeltaZ * nextDeltaZ);
+				float nextDistance = (float)sqrt(((double)nextSquareX + nextSquareY) + nextSquareZ);
+
+				if (nextDistance < reach) {
+					walking = 0;
+				} else {
+					Puck *puck = extra->puck;
+					RdVector3 aim;
+
+					aim[0] = (float)((double)center[0] - prevCenterWorld[0]);
+					aim[1] = (float)((double)center[1] - prevCenterWorld[1]);
+					aim[2] = (float)((double)center[2] - prevCenterWorld[2]);
+					normalize3AccRemastered(aim);
+
+					if (puck) {
+						aim[0] = (float)((double)aim[0] + puck->_pos[0]);
+						aim[1] = (float)((double)puck->_pos[1] + aim[1]);
+						aim[2] = (float)((double)puck->_pos[2] + aim[2]);
+						puck->pointAt(aim, 3.4028235e38f);
+						alignToPuck(actor, puck, 0);
+					} else {
+						warning("SputActorModule::sphereCollisionRemastered(): the actor has no puck to turn");
+					}
+				}
+			}
+		}
+	} else {
+		double deltaX = (double)myCenterWorld[0] - otherCenterWorld[0];
+		double deltaY = (double)myCenterWorld[1] - otherCenterWorld[1];
+		double deltaZ = (double)myCenterWorld[2] - otherCenterWorld[2];
+		float squareX = (float)(deltaX * deltaX);
+		float squareY = (float)(deltaY * deltaY);
+		float squareZ = (float)(deltaZ * deltaZ);
+		float distance = (float)sqrt(((double)squareX + squareY) + squareZ);
+		RdVector3 direction;
+
+		direction[0] = (float)((double)myCenterWorld[0] - otherCenterWorld[0]);
+		direction[1] = (float)((double)myCenterWorld[1] - otherCenterWorld[1]);
+		direction[2] = (float)((double)myCenterWorld[2] - otherCenterWorld[2]);
+		normalize3AccRemastered(direction);
+
+		float ratio = (float)(((double)distance - otherRadius) / myRadius);
+		double pushOut = (double)myRadius * (1.0 - ratio);
+		float pushX = (float)((double)direction[0] * pushOut);
+		float pushY = (float)((double)direction[1] * pushOut);
+		float pushZ = (float)(pushOut * direction[2]);
+
+		center[0] = (float)((double)pushX + myCenterWorld[0]);
+		center[1] = (float)((double)pushY + myCenterWorld[1]);
+		center[2] = (float)((double)pushZ + myCenterWorld[2]);
+	}
+
+	center[0] = (float)((double)center[0] - myCenterOffset[0]);
+	center[1] = (float)((double)center[1] - myCenterOffset[1]);
+	center[2] = (float)((double)center[2] - myCenterOffset[2]);
+	setActorPosition(actor, center);
+
+	double movedDeltaX = (double)actor->actorPos[0] - actor->prevPosition[0];
+	double movedDeltaY = (double)actor->actorPos[1] - actor->prevPosition[1];
+	double movedDeltaZ = (double)actor->actorPos[2] - actor->prevPosition[2];
+	float movedSquareX = (float)(movedDeltaX * movedDeltaX);
+	float movedSquareY = (float)(movedDeltaY * movedDeltaY);
+	float movedSquareZ = (float)(movedDeltaZ * movedDeltaZ);
+	float moved = (float)sqrt(((double)movedSquareX + movedSquareY) + movedSquareZ);
+
+	if (moved < 0.001 && !notMain)
+		walking = 0;
+
+	_collisionOut[0] = actor->actorPos[0];
+	_collisionOut[1] = actor->actorPos[1];
+	_collisionOut[2] = actor->actorPos[2];
+	_collisionImpact[0] = actor->actorPos[0];
+	_collisionImpact[1] = actor->actorPos[1];
+	_collisionImpact[2] = actor->actorPos[2];
+
+	if (walking)
+		actor->mode |= 1;
+}
+
 void SputActorModule::updatePositions() {
 	for (int i = 0; i < _numCollisionActors; i++) {
 		SputActor *actor = _collisionActors[i];
@@ -724,6 +977,12 @@ void SputActorModule::updatePosition(SputActor *actor) {
 	myCenterWorld[0] = (float)((double)myCenterOffset[0] + actor->actorPos[0]);
 	myCenterWorld[1] = (float)((double)actor->actorPos[1] + myCenterOffset[1]);
 	myCenterWorld[2] = (float)((double)actor->actorPos[2] + myCenterOffset[2]);
+
+	RdVector3 prevCenterWorld;
+
+	prevCenterWorld[0] = (float)((double)myCenterOffset[0] + actor->prevPosition[0]);
+	prevCenterWorld[1] = (float)((double)myCenterOffset[1] + actor->prevPosition[1]);
+	prevCenterWorld[2] = (float)((double)myCenterOffset[2] + actor->prevPosition[2]);
 
 	float myRadius = (float)((double)model3->radius * actor->extra->collisionScale);
 
@@ -755,7 +1014,9 @@ void SputActorModule::updatePosition(SputActor *actor) {
 		if (!(distance < otherRadius + myRadius))
 			continue;
 
-		if (other->extra->collisionMode == 2) {
+		if (other->extra->collisionMode == 2 && g_grim->useRemasterFixes()) {
+			sphereCollisionRemastered(actor, other, myCenterOffset, myCenterWorld, prevCenterWorld, otherCenterWorld, myRadius, otherRadiusF);
+		} else if (other->extra->collisionMode == 2) {
 			actor->extra->collided = 1;
 			other->extra->collided = 1;
 

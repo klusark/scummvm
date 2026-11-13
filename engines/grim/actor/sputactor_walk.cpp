@@ -118,7 +118,7 @@ void SputActorModule::actorWalkTo(SputActor *actor, float *pos, float *goal, Spu
 
 	bool remastered = _grim->isRemastered();
 
-	if (remastered) {
+	if (_grim->useRemasterFixes() && !(_grim->getGameFlags() & ADGF_DEMO)) {
 		// The actor is moved onto the walk plane when it is just off it
 		if (!_walkSystem->planeAt(actor->actorPos, kPlaneTypeWalk)) {
 			WalkPlane *closest = _walkSystem->planeClosest(actor->actorPos, kPlaneTypeWalk);

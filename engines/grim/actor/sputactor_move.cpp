@@ -35,6 +35,9 @@
 
 namespace Grim {
 
+static const int kActorFlagBlackAndWhite = 0x40;
+static const int kActorModeHkHack = 4;
+
 int SputActorModule::canActorSeePoint(SputActor *actor, float *point, float *distance) {
 	CostumeNode *node = actor->costumeStack;
 
@@ -152,6 +155,77 @@ void SputActorModule::updateActors(float delta) {
 	_hadDynamicCollision = false;
 	updatePositions();
 	_dynamicCollisionFrames = _hadDynamicCollision ? _dynamicCollisionFrames + 1 : 0;
+
+	if (!g_grim->useRemasterFixes())
+		return;
+
+	// The scripts can allocate actors during the update: the table can move
+	SputActor *manny = getManny();
+
+	if (!manny || !(manny->mode & 1) || !manny->extra || manny->extra->pathIndex >= manny->extra->numPathPoints) {
+		_mannyAvgCnt = 0;
+		return;
+	}
+
+	Extra *extra = manny->extra;
+	double destDeltaY = (double)_mannyOldDest[1] - extra->walkTarget[1];
+	double destDeltaX = (double)_mannyOldDest[0] - extra->walkTarget[0];
+	double destDeltaZ = (double)_mannyOldDest[2] - extra->walkTarget[2];
+	float destSquareX = (float)(destDeltaX * destDeltaX);
+	float destSquareY = (float)(destDeltaY * destDeltaY);
+	float destSquareZ = (float)(destDeltaZ * destDeltaZ);
+	float destMoved = (float)sqrt(((double)destSquareX + destSquareY) + destSquareZ);
+
+	if (destMoved > 0.000001) {
+		_mannyOldDest[0] = extra->walkTarget[0];
+		_mannyOldDest[1] = extra->walkTarget[1];
+		_mannyOldDest[2] = extra->walkTarget[2];
+		_mannyAvgCnt = 0;
+		return;
+	}
+
+	_mannyOldPos[_mannyAvgIdx][0] = manny->actorPos[0];
+	_mannyOldPos[_mannyAvgIdx][1] = manny->actorPos[1];
+	_mannyOldPos[_mannyAvgIdx][2] = manny->actorPos[2];
+	_mannyAvgIdx = (_mannyAvgIdx + 1) % kMannyPositions;
+
+	if (_mannyAvgCnt < kMannyPositions)
+		_mannyAvgCnt++;
+
+	if (_mannyAvgCnt < kMannyPositions)
+		return;
+
+	float sums[2][3] = { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } };
+
+	for (int i = 0; i < kMannyPositions; i++) {
+		float *sample = _mannyOldPos[(_mannyAvgIdx + i) % kMannyPositions];
+		float *sum = sums[i / (kMannyPositions / 2)];
+
+		sum[0] = (float)((double)sample[0] + sum[0]);
+		sum[1] = (float)((double)sample[1] + sum[1]);
+		sum[2] = (float)((double)sample[2] + sum[2]);
+	}
+
+	double sumDeltaY = (double)sums[0][1] - sums[1][1];
+	double sumDeltaX = (double)sums[0][0] - sums[1][0];
+	double sumDeltaZ = (double)sums[0][2] - sums[1][2];
+	float sumSquareX = (float)(sumDeltaX * sumDeltaX);
+	float sumSquareY = (float)(sumDeltaY * sumDeltaY);
+	float sumSquareZ = (float)(sumDeltaZ * sumDeltaZ);
+	float sumMoved = (float)sqrt(((double)sumSquareX + sumSquareY) + sumSquareZ);
+	float average = (float)((double)sumMoved / 20.0);
+
+	if (average < 0.001)
+		setActorPosition(manny, extra->walkTarget);
+}
+
+SputActor *SputActorModule::getManny() {
+	for (int i = 0; i < _maxActors; i++) {
+		if (_actors[i].inUse && !(_actors[i].flags & 0x80))
+			return &_actors[i];
+	}
+
+	return nullptr;
 }
 
 void SputActorModule::updateActorsDemo(float delta) {
@@ -280,6 +354,15 @@ void SputActorModule::updateCostumes2(SputActor *actor, float delta) {
 	_rd->cross3(axis, up, target);
 	_rd->normalize3Acc(axis);
 
+	if (g_grim->useRemasterFixes() && dot3Remastered(axis, axis) < 0.0001f) {
+		target[0] = 0.0f;
+		target[1] = 0.0f;
+		target[2] = 1.0f;
+		axis[0] = 0.0f;
+		axis[1] = 1.0f;
+		axis[2] = 0.0f;
+	}
+
 	float turnLimit = (float)((double)node->headTurnRate * delta);
 	float dotValue = _rd->dot2(up, target);
 	double angle = 90.0 - _stdMath->arcSin2(dotValue);
@@ -304,6 +387,14 @@ void SputActorModule::updateCostumes2(SputActor *actor, float delta) {
 	_rd->buildFromVectorAngle34(turnMatrix, axis, turnLimit);
 	_rd->transformPoint34Acc(up, turnMatrix);
 	_rd->extractAngles(up, pitchYawRoll);
+
+	if (g_grim->useRemasterFixes()) {
+		if (isnan(pitchYawRoll[1]))
+			pitchYawRoll[1] = 0.0f;
+
+		if (isnan(pitchYawRoll[0]))
+			pitchYawRoll[0] = 0.0f;
+	}
 
 	RdThing *headThing = node->headThing;
 
@@ -437,7 +528,7 @@ void SputActorModule::updatePuck(SputActor *actor) {
 		actor->extra->walking = walking;
 	}
 
-	actor->extra->aligned = alignToPuck(actor, puck);
+	actor->extra->aligned = alignToPuck(actor, puck, actor->flags & kActorFlagBlackAndWhite);
 
 	Extra *lookExtra = actor->extra;
 
@@ -460,7 +551,8 @@ void SputActorModule::updatePuck(SputActor *actor) {
 	actor->matrixValid = 0;
 }
 
-int SputActorModule::alignToPuck(SputActor *actor, Puck *puck) {
+int SputActorModule::alignToPuck(SputActor *actor, Puck *puck, int flip) {
+	bool fixes = g_grim->useRemasterFixes() && !(_grim->getGameFlags() & ADGF_DEMO);
 	float *forward = getOrientMatrix(actor)[1];
 	RdVector3 vec;
 
@@ -479,13 +571,24 @@ int SputActorModule::alignToPuck(SputActor *actor, Puck *puck) {
 	vec[1] = puck->_pos[1] + vec[1];
 	vec[2] = puck->_pos[2] + vec[2];
 	puck->invXform(vec);
+
+	if (fixes && flip) {
+		vec[0] = -vec[0];
+		vec[1] = -vec[1];
+	}
+
 	vec[2] = 0.0f;
 	_rd->normalize3Acc(vec);
 
 	double angle = 90.0 - _stdMath->arcSin3(vec[1]);
 	float angleF = (float)angle;
 
-	if (angle < 0.5) {
+	if (fixes) {
+		if (angleF < 0.5 || ((actor->mode & kActorModeHkHack) && angleF < 50.0)) {
+			actor->extra->alignOff = 0.0f;
+			return 1;
+		}
+	} else if (angle < 0.5) {
 		actor->extra->alignOff = 0.0f;
 		return 1;
 	}
@@ -493,19 +596,40 @@ int SputActorModule::alignToPuck(SputActor *actor, Puck *puck) {
 	actor->extra->alignOff = angleF;
 
 	Extra *extra = actor->extra;
-	double limit;
 
-	if (extra->turnRate <= 0.0f) {
-		limit = 3.4028234663852886e38;
-		extra->turnRate = extra->turnRate * -1.0f;
+	if (fixes) {
+		float limit;
+
+		if (!(extra->turnRate > 0.0f)) {
+			limit = 3.4028235e38f;
+			extra->turnRate = extra->turnRate * -1.0f;
+		} else if (actor->mode & 1) {
+			float frameTime = _sputTime->getFrameTimeFlex();
+
+			limit = (float)((double)frameTime * ((double)extra->timeScale * 500.0));
+		} else {
+			float frameTime = _sputTime->getFrameTimeFlex();
+
+			limit = (float)(((double)frameTime * ((double)extra->timeScale * extra->turnRate)) * 1.5);
+		}
+
+		if (limit < angleF)
+			angleF = limit;
 	} else {
-		float frameTime = _sputTime->getFrameTimeFlex();
+		double limit;
 
-		limit = (double)frameTime * actor->extra->timeScale * actor->extra->turnRate;
+		if (extra->turnRate <= 0.0f) {
+			limit = 3.4028234663852886e38;
+			extra->turnRate = extra->turnRate * -1.0f;
+		} else {
+			float frameTime = _sputTime->getFrameTimeFlex();
+
+			limit = (double)frameTime * actor->extra->timeScale * actor->extra->turnRate;
+		}
+
+		if (angleF > limit)
+			angleF = (float)((angleF - limit) * 0.10000000149011612 + limit);
 	}
-
-	if (angleF > limit)
-		angleF = (float)((angleF - limit) * 0.10000000149011612 + limit);
 
 	float rotX = actor->actorRot[0];
 	float rotY = actor->actorRot[1];
@@ -702,6 +826,14 @@ void SputActorModule::leaveSector(SputActor *actor, WalkPlane *sector) {
 		sector->jumpOut(puck);
 		setActorPosition(actor, puck->_pos);
 	}
+}
+
+float SputActorModule::dot3Remastered(float *a, float *b) {
+	float productY = (float)((double)a[1] * b[1]);
+	float productX = (float)((double)a[0] * b[0]);
+	float productZ = (float)((double)a[2] * b[2]);
+
+	return (float)(((double)productY + productX) + productZ);
 }
 
 void SputActorModule::setActorConstrain(SputActor *actor, int constrain) {

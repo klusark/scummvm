@@ -154,7 +154,7 @@ public:
 	void setSoundParameters(Room *room, float maxDist, byte minVol, byte maxVol, float panFactor, float maxRadius);
 	void getSoundParameters(Room *room, float *maxDist, byte *minVol, byte *maxVol, float *panFactor, float *maxRadius);
 	int setSoundPosition(const char *soundName, float *pos, int minVol, int maxVol, float maxDist, float radius);
-	void setCurrentRoom(Room *room);
+	void setCurrentRoom(Room *room, bool runUpdate = true);
 	Room *getCurrentRoom();
 	const char *getCurrentRoomName();
 	int save(Common::WriteStream *stream);

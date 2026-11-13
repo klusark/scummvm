@@ -215,7 +215,7 @@ public:
 	void shutdown();
 	void updateCostumes3(SputActor *actor);
 	void updatePuck(SputActor *actor);
-	int alignToPuck(SputActor *actor, Puck *puck);
+	int alignToPuck(SputActor *actor, Puck *puck, int flip);
 	void updateCostumes4(SputActor *actor);
 	void actorWalkTo(SputActor *actor, float *pos, float *goal, SputActor *target);
 	int actorWalkToImpl(SputActor *actor, SputActor *target, float *path, int numPoints, float *outPath);
@@ -283,6 +283,18 @@ private:
 	void transformVector34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat);
 	void transformPoint34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat);
 	void transformPoint34AccRemastered(RdVector3 vec, RdMatrix34 mat);
+	float dot3Remastered(float *a, float *b);
+	float normalize2Remastered(float *vec);
+	float normalize3AccRemastered(float *vec);
+	SputActor *getManny();
+	int findSlidePoint(float *otherCenter, float *prevCenter, float *center, float reach);
+	int findSlideCandidates(float *prevCenter, float *otherCenter, float radius, float moved, float *firstPoint, float *secondPoint);
+	void sphereCollisionRemastered(SputActor *actor, SputActor *other, float *myCenterOffset, float *myCenterWorld, float *prevCenterWorld,
+			float *otherCenterWorld, float myRadius, float otherRadius);
+
+	enum {
+		kMannyPositions = 40
+	};
 
 	Res *_res;
 	RenderDroid *_rd;
@@ -326,6 +338,11 @@ private:
 
 	unsigned int _dynamicCollisionFrames = 0;
 	bool _hadDynamicCollision = false;
+
+	float _mannyOldDest[3] = { 0.0f, 0.0f, 0.0f };
+	float _mannyOldPos[kMannyPositions][3] = {};
+	int _mannyAvgIdx = 0;
+	int _mannyAvgCnt = 0;
 };
 
 } // End of namespace Grim
