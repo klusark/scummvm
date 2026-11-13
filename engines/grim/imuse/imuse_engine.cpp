@@ -22,6 +22,8 @@
 #include "common/system.h"
 #include "common/timer.h"
 
+#include "audio/mixer.h"
+
 #include "gui/debugger.h"
 
 #include "engines/grim/grim.h"
@@ -161,7 +163,31 @@ IMuse::IMuse(int sampleRate, Audio::Mixer *mixer, Common::Mutex *mutex, bool low
 
 	// The remastered calls the heartbeat every 16 ms, but its counters still advance by 20 ms each time
 	int timerPeriodUsec = _remastered ? IMUSE_REMASTERED_TIMER_PERIOD_USEC : 1000000 / _callbackFps;
-	g_system->getTimerManager()->installTimerProc(timer_handler, timerPeriodUsec, this, "IMuse");
+	_timerPeriodUsec = timerPeriodUsec;
+	// With game time (the mixer simulated, the test data's sim_frame_ms) the engine runs the heartbeats, see simulate()
+	if (!Audio::g_mixerSimulated)
+		g_system->getTimerManager()->installTimerProc(timer_handler, timerPeriodUsec, this, "IMuse");
+}
+
+void IMuse::simulate(uint32 totalMs) {
+	const uint64 due = (uint64)totalMs * 1000 / _timerPeriodUsec;
+	while (_simTicks < due) {
+		_simTicks++;
+		imHeartbeat();
+	}
+}
+
+void IMuse::simExtraHeartbeat() {
+	if (!Audio::g_mixerSimulated)
+		return;
+	_simExtraTicks++;
+	imHeartbeat();
+}
+
+uint32 IMuse::imMillis() const {
+	if (!Audio::g_mixerSimulated)
+		return g_system->getMillis();
+	return 1000 + (uint32)((_simTicks + _simExtraTicks) * _timerPeriodUsec / 1000);
 }
 
 IMuse::~IMuse() {
@@ -315,19 +341,24 @@ void IMuse::pause(bool p) {
 	}
 }
 
+// (with game time a heartbeat follows every round, as in the original with grimlaunch's imusetime, where these loops waited for the
+// heartbeat of the timer)
 void IMuse::soundsFloodMusicBuffer() {
 	while (!soundsIsMusicStreamIdle()) {
 		imProcessStreams();
+		simExtraHeartbeat();
 	}
 }
 
 void IMuse::soundsFillStreamsWhileMusicCritical(int fillTimesAfter) {
 	while (soundsIsMusicCritical()) {
 		imProcessStreams();
+		simExtraHeartbeat();
 	}
 
 	for (int i = 0; i < fillTimesAfter; i++) {
 		imProcessStreams();
+		simExtraHeartbeat();
 	}
 }
 

@@ -91,6 +91,10 @@ public:
 	void saveState(SaveGame *state);
 	void restoreState(SaveGame *state);
 
+	/** With game time (the test data's sim_frame_ms): the timer's work, the movie timer and the frames that are due; the engine
+	 * calls it each frame */
+	void simulate();
+
 protected:
 	static void timerCallback(void *ptr);
 	/**

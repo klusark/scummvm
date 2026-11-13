@@ -21,9 +21,16 @@
 
 #include "common/system.h"
 
+#include "video/video_decoder.h"
+
 #include "engines/grim/movie/smush_timer.h"
 
 namespace Grim {
+
+// The clock of the movie timer: game time when the engine runs on it (the test data's sim_frame_ms), the host's otherwise
+static inline uint32 timerMillis() {
+	return Video::g_videoSimulated ? Video::g_videoSimMillis : g_system->getMillis();
+}
 
 SmushTimer::SmushTimer() {
 	memset(_timers, 0, sizeof(_timers));
@@ -42,7 +49,7 @@ int SmushTimer::moduleStartup() {
 			_timers[i].callback = nullptr;
 
 		_sysTickIncrement = 19886;
-		_timerThreadLastTime = g_system->getMillis();
+		_timerThreadLastTime = timerMillis();
 	}
 
 	return 0;
@@ -57,14 +64,17 @@ void SmushTimer::timerThread() {
 		return;
 
 	// The host timer exists only after the first movie, don't replay the idle time as ticks
-	uint32 now = g_system->getMillis();
+	uint32 now = timerMillis();
 	if (now - _timerThreadLastTime > 1000)
 		_timerThreadLastTime = now;
 
-	int elapsed = now - _timerThreadLastTime;
-	if (elapsed > 16) {
+	// (the thread runs every few ms and ticks once each time; with game time it runs once a frame of 17 ms, so it ticks
+	// as often as is due)
+	while ((int)(now - _timerThreadLastTime) > 16) {
 		_timerThreadLastTime += 16;
 		timerTick();
+		if (!Video::g_videoSimulated)
+			break;
 	}
 }
 

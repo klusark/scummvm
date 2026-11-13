@@ -264,6 +264,8 @@ protected:
 	unsigned _speedLimitMs;
 	/** Test data: the length of every frame in milliseconds (sim_frame_ms in the configuration; 0 = real time) */
 	unsigned _testFrameMs = 0;
+	/** With _testFrameMs: the game time in ms, the sum of the frames (the clock of the sound and the movies) */
+	unsigned _testClockMs = 0;
 	EngineMode _testLastMode = NormalMode;
 	Set *_testLastSet = nullptr;
 	bool _showFps;

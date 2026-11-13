@@ -66,6 +66,11 @@ private:
 
 	int _callbackFps;
 	static void timer_handler(void *refConf);
+	// Game time (the test data's sim_frame_ms, Audio::g_mixerSimulated): no timer, the engine runs the heartbeats, see simulate()
+	int _timerPeriodUsec = 0;
+	uint64 _simTicks = 0;        // heartbeats of the frames' game time
+	uint64 _simExtraTicks = 0;   // heartbeats of the loops that wait for the music stream (soundsFloodMusicBuffer)
+	void simExtraHeartbeat();
 
 	bool _checkForUnderrun;
 	int _underrunCooldown;
@@ -342,6 +347,11 @@ private:
 public:
 	IMuse(int sampleRate, Audio::Mixer *mixer, Common::Mutex *mutex, bool lowLatencyMode = false, bool demo = false, bool remastered = false);
 	~IMuse();
+
+	/** With game time: runs the heartbeats due for totalMs milliseconds of it (one per 20 ms), instead of the timer */
+	void simulate(uint32 totalMs);
+	/** iMUSE's clock: the real one, or with game time 1000 + 20 ms per heartbeat (the original with grimlaunch's imusetime) */
+	uint32 imMillis() const;
 
 	// Wrapper functions used by the main engine
 

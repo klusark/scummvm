@@ -49,6 +49,9 @@
 
 #include "image/png.h"
 
+#include "audio/mixer_intern.h"
+#include "video/video_decoder.h"
+
 #include "engines/engine.h"
 #include "engines/util.h"
 
@@ -357,6 +360,13 @@ Common::Error GrimEngine::run() {
 		// original with the simtime patch of grimlaunch, so that what a test measures per frame is the same every run)
 		if (ConfMan.hasKey("sim_frame_ms"))
 			_testFrameMs = CLIP(ConfMan.getInt("sim_frame_ms"), 1, 1000);
+		// (Grim: the sound, iMUSE and the movies go by the same game time, not by the clock: the engine mixes the sound and runs
+		// their timers itself, once a frame, see luaUpdate(); the original with grimlaunch's smushtime and imusetime. EMI's original
+		// has its sound on the clock still, so EMI keeps it too)
+		if (_testFrameMs && getGameType() == GType_GRIM) {
+			static_cast<Audio::MixerImpl *>(_mixer)->setSimulated(true);
+			Video::g_videoSimulated = true;
+		}
 	}
 
 	// Try to see if we have the EMI Mac installer present
@@ -854,6 +864,16 @@ void GrimEngine::luaUpdate() {
 	if (_testFrameMs) {
 		// (test data: a fixed frame time, the frame after a load too)
 		_frameTime = _mode == PauseMode ? 0 : _testFrameMs;
+		// the sound, the movies and iMUSE move on by the frame (the original's frame stub of grimlaunch steps them before the frame)
+		if (Video::g_videoSimulated) {
+			_testClockMs += _testFrameMs;
+			static_cast<Audio::MixerImpl *>(_mixer)->simulateStep(_testClockMs);
+			Video::g_videoSimMillis = _testClockMs;
+			if (g_movie)
+				g_movie->simulate();
+			if (g_imuse)
+				g_imuse->simulate(_testClockMs);
+		}
 	} else if (_mode == PauseMode || _shortFrame) {
 		_frameTime = 0;
 	}

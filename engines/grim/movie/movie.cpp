@@ -24,6 +24,8 @@
 #include "common/system.h"
 #include "common/timer.h"
 
+#include "video/video_decoder.h"
+
 #include "engines/grim/movie/movie.h"
 #include "engines/grim/gfx_base.h"
 #include "engines/grim/grim.h"
@@ -86,6 +88,21 @@ void MoviePlayer::timerCallback(void *instance) {
 		movie->postHandleFrame();
 }
 
+void MoviePlayer::simulate() {
+	// the movie timer that the timer thread ticks in a real run (the SMUSH player is paced by it), then the frames that are due,
+	// a few at most: a movie that cannot keep up must not hold the engine
+	{
+		Common::StackLock lock(_frameMutex);
+		handleTimer();
+	}
+	for (int i = 0; i < 20; i++) {
+		Common::StackLock lock(_frameMutex);
+		if (!prepareFrame())
+			break;
+		postHandleFrame();
+	}
+}
+
 bool MoviePlayer::prepareFrame() {
 	if (!_videoLooping && _videoDecoder->endOfVideo()) {
 		_videoFinished = true;
@@ -146,7 +163,9 @@ void MoviePlayer::drawMovieSubtitle() {
 
 void MoviePlayer::init() {
 	if (!_timerStarted) {
-		g_system->getTimerManager()->installTimerProc(&timerCallback, 10000, this, "movieLoop");
+		// (with game time the engine decodes the frames itself, see simulate())
+		if (!Video::g_videoSimulated)
+			g_system->getTimerManager()->installTimerProc(&timerCallback, 10000, this, "movieLoop");
 		_timerStarted = true;
 	}
 
