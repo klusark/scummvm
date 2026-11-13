@@ -53,6 +53,9 @@ TheoraDecoder::TheoraDecoder() {
 	_videoTrack = 0;
 	_audioTrack = 0;
 	_hasVideo = _hasAudio = false;
+	_languageCodes = 0;
+	_numLanguageCodes = 0;
+	_languageHint = 0;
 }
 
 TheoraDecoder::~TheoraDecoder() {
@@ -63,6 +66,10 @@ bool TheoraDecoder::loadStream(Common::SeekableReadStream *stream) {
 	close();
 
 	_fileStream = stream;
+
+	// Pick the audio stream that matches the requested language, if any
+	int audioSerial = 0;
+	bool selectAudio = _languageCodes && findAudioStreamSerial(audioSerial);
 
 	// start up Ogg stream synchronization layer
 	ogg_sync_init(&_oggSync);
@@ -111,7 +118,8 @@ bool TheoraDecoder::loadStream(Common::SeekableReadStream *stream) {
 				memcpy(&_theoraOut, &test, sizeof(test));
 				theoraPackets = 1;
 				_hasVideo = true;
-			} else if (vorbisPackets == 0 && vorbis_synthesis_headerin(&_vorbisInfo, &vorbisComment, &_oggPacket) >= 0) {
+			} else if (vorbisPackets == 0 && (!selectAudio || ogg_page_serialno(&_oggPage) == audioSerial) &&
+					vorbis_synthesis_headerin(&_vorbisInfo, &vorbisComment, &_oggPacket) >= 0) {
 				// it is vorbis
 				memcpy(&_vorbisOut, &test, sizeof(test));
 				vorbisPackets = 1;
@@ -195,6 +203,122 @@ bool TheoraDecoder::loadStream(Common::SeekableReadStream *stream) {
 	vorbis_comment_clear(&vorbisComment);
 
 	return true;
+}
+
+bool TheoraDecoder::findAudioStreamSerial(int &audioSerial) {
+	const int kMaxStreams = 6;
+	const int kMaxPagesAfterBos = 256;
+
+	ogg_sync_state sync;
+	ogg_page page;
+	ogg_packet packet;
+	ogg_stream_state streams[kMaxStreams];
+	vorbis_info infos[kMaxStreams];
+	vorbis_comment comments[kMaxStreams];
+	int serials[kMaxStreams];
+	int headerPackets[kMaxStreams];
+	int numStreams = 0;
+	int pagesAfterBos = 0;
+	bool found = false;
+	bool done = false;
+
+	int64 startPos = _fileStream->pos();
+
+	ogg_sync_init(&sync);
+
+	// All the initial pages come first, then the comment and setup headers of every stream
+	while (!done) {
+		char *buffer = ogg_sync_buffer(&sync, 4096);
+		int bytes = _fileStream->read(buffer, 4096);
+
+		ogg_sync_wrote(&sync, bytes);
+
+		if (bytes == 0)
+			break;
+
+		while (!done && ogg_sync_pageout(&sync, &page) > 0) {
+			int serial = ogg_page_serialno(&page);
+
+			if (ogg_page_bos(&page)) {
+				if (numStreams == kMaxStreams)
+					continue;
+
+				ogg_stream_init(&streams[numStreams], serial);
+				vorbis_info_init(&infos[numStreams]);
+				vorbis_comment_init(&comments[numStreams]);
+				ogg_stream_pagein(&streams[numStreams], &page);
+
+				if (ogg_stream_packetout(&streams[numStreams], &packet) > 0 &&
+						vorbis_synthesis_headerin(&infos[numStreams], &comments[numStreams], &packet) >= 0) {
+					serials[numStreams] = serial;
+					headerPackets[numStreams] = 1;
+					numStreams++;
+				} else {
+					vorbis_comment_clear(&comments[numStreams]);
+					vorbis_info_clear(&infos[numStreams]);
+					ogg_stream_clear(&streams[numStreams]);
+				}
+
+				continue;
+			}
+
+			pagesAfterBos++;
+
+			bool allComplete = true;
+
+			for (int i = 0; i < numStreams; i++) {
+				if (headerPackets[i] < 3 && serials[i] == serial) {
+					ogg_stream_pagein(&streams[i], &page);
+
+					while (headerPackets[i] < 3 && ogg_stream_packetout(&streams[i], &packet) > 0) {
+						if (vorbis_synthesis_headerin(&infos[i], &comments[i], &packet) != 0) {
+							// Corrupt headers, no more to read from this stream
+							headerPackets[i] = 3;
+							break;
+						}
+
+						headerPackets[i]++;
+					}
+				}
+
+				if (headerPackets[i] < 3)
+					allComplete = false;
+			}
+
+			if (numStreams == 0 || allComplete || pagesAfterBos >= kMaxPagesAfterBos)
+				done = true;
+		}
+	}
+
+	for (int i = 0; i < numStreams && !found; i++) {
+		for (int j = 0; j < comments[i].comments; j++) {
+			int language = -1;
+
+			for (int k = 0; k < _numLanguageCodes; k++) {
+				if (strstr(comments[i].user_comments[j], _languageCodes[k])) {
+					language = k;
+					break;
+				}
+			}
+
+			if (language == _languageHint) {
+				audioSerial = serials[i];
+				found = true;
+				break;
+			}
+		}
+	}
+
+	for (int i = 0; i < numStreams; i++) {
+		vorbis_comment_clear(&comments[i]);
+		vorbis_info_clear(&infos[i]);
+		ogg_stream_clear(&streams[i]);
+	}
+
+	ogg_sync_clear(&sync);
+	_fileStream->seek(startPos, SEEK_SET);
+
+	return found;
 }
 
 void TheoraDecoder::close() {

@@ -27,6 +27,7 @@
 #define VIDEO_THEORA_DECODER_H
 
 #include "common/rational.h"
+#include "common/str.h"
 #include "video/video_decoder.h"
 #include "audio/mixer.h"
 #include "graphics/surface.h"
@@ -76,6 +77,23 @@ public:
 
 	/** Frames per second of the loaded video. */
 	Common::Rational getFrameRate() const;
+
+	/**
+	 * Select the Vorbis audio stream by language, for files that carry
+	 * several audio streams. A user comment of a stream is matched against
+	 * the codes in order (for example "eng", "spa"): its language is the
+	 * index of the first code that the comment contains. The first stream
+	 * that has a comment with the language @p hint is played.
+	 * If no stream matches, the first one is used, as without this call.
+	 * Only the first six audio streams of the file are considered.
+	 * The array of codes must stay valid until loadStream() returns.
+	 * Must be called before loadStream().
+	 */
+	void setAudioLanguage(const char *const *codes, int numCodes, int hint) {
+		_languageCodes = codes;
+		_numLanguageCodes = numCodes;
+		_languageHint = hint;
+	}
 
 protected:
 	void readNextPacket() override;
@@ -158,8 +176,12 @@ private:
 	int bufferData();
 	bool queueAudio();
 	void ensureAudioBufferSize();
+	bool findAudioStreamSerial(int &serial);
 
 	Common::SeekableReadStream *_fileStream;
+	const char *const *_languageCodes;
+	int _numLanguageCodes;
+	int _languageHint;
 
 	ogg_sync_state _oggSync;
 	ogg_page _oggPage;
