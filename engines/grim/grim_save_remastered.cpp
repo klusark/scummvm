@@ -50,7 +50,9 @@ namespace Grim {
 
 enum {
 	// The version of the format of the iMUSE data inside the Serializer
-	kRemasteredSoundsSaveVersion = 30
+	kRemasteredSoundsSaveVersion = 30,
+	// The canvas of the text goes back to the 4:3 one when a game is loaded
+	kTextCanvasWidthAfterLoad = 1440
 };
 
 static const char *const newGameSet = "mo.set";
@@ -99,19 +101,26 @@ void GrimEngine::saveRemastered() {
 	_libSaveRequest = 0;
 	_saveWriteStream = &buffer;
 
+	lua_collectgarbage(0);
+	_sputRender->allowLoadImage(0);
+	_sputRender->drawProgressBar(0.1f);
+
 	buffer.writeUint32LE(SaveStore::kVersion);
 
 	SaveStore::writeTag(&buffer, "LCBS");
 	_luaV1->saveGameCallback();
 	SaveStore::writeTag(&buffer, "LCBE");
+	_sputRender->drawProgressBar(0.2f);
 
 	SaveStore::writeTag(&buffer, "COSS");
 	_sputCostume->getCos()->save(&buffer);
 	SaveStore::writeTag(&buffer, "COSE");
+	_sputRender->drawProgressBar(0.3f);
 
 	SaveStore::writeTag(&buffer, "RESS");
 	_res->sysSaveRemastered(&buffer);
 	SaveStore::writeTag(&buffer, "RESE");
+	_sputRender->drawProgressBar(0.4f);
 
 	SaveStore::writeTag(&buffer, "TEXS");
 	_sputText->saveRemastered(&buffer);
@@ -124,6 +133,7 @@ void GrimEngine::saveRemastered() {
 	SaveStore::writeTag(&buffer, "COMS");
 	SaveStore::writeCommentary(&buffer);
 	SaveStore::writeTag(&buffer, "COME");
+	_sputRender->drawProgressBar(0.5f);
 
 	SaveStore::writeTag(&buffer, "ACTS");
 	_sputActor->saveRemastered(&buffer);
@@ -154,10 +164,12 @@ void GrimEngine::saveRemastered() {
 	SaveStore::writeTag(&buffer, "HOTE");
 
 	buffer.writeUint32LE((uint32)_sputPrevMode);
+	_sputRender->drawProgressBar(0.75f);
 
 	SaveStore::writeTag(&buffer, "LUAS");
 	lua_SaveRemastered(saveWriteCallback);
 	SaveStore::writeTag(&buffer, "LUAE");
+	_sputRender->drawProgressBar(1.0f);
 
 	Common::Serializer ser(nullptr, &buffer);
 
@@ -166,6 +178,7 @@ void GrimEngine::saveRemastered() {
 	_imuse->soundsSaveLoadRemastered(ser);
 	SaveStore::writeTag(&buffer, "IMUE");
 
+	_sputRender->allowLoadImage(1);
 	_saveWriteStream = nullptr;
 
 	if (buffer.err() || buffer.size() >= SaveStore::kMaxUncompressedSize) {
@@ -190,6 +203,7 @@ void GrimEngine::saveRemastered() {
 			_remasteredSaveTitle.c_str());
 
 	if (status == SaveStore::kStatusOk) {
+		_wuRegistry->saveSlotTime(_remasteredSaveSlot);
 		_wuRegistry->saveInt("LastSavedGame", _remasteredSaveSlot);
 		_wuRegistry->saveRegistry();
 	}
@@ -226,12 +240,14 @@ void GrimEngine::restoreRemastered() {
 	}
 
 	_sputRender->allowLoadImage(0);
+	_sputRender->drawProgressBar(0.1f);
 	_imuse->imStopAllSounds();
 	_sputSmush->stopMovie();
 	_sputSmush->periodic();
 	_res->freeAll();
 	_sputActor->clearShadowMaterial();
 	_sputResource->stopPurge(1);
+	lua_collectgarbage(0);
 
 	_saveReadStream = new Common::MemoryReadStream(&data[0], (uint32)data.size(), DisposeAfterUse::NO);
 
@@ -247,10 +263,12 @@ void GrimEngine::restoreRemastered() {
 
 	stream->seek((int)blockSize, SEEK_CUR);
 	valid = SaveStore::readTag(stream, "LCBE") && valid;
+	_sputRender->drawProgressBar(0.2f);
 
 	valid = SaveStore::readTag(stream, "COSS") && valid;
 	_sputCostume->getCos()->restore(stream);
 	valid = SaveStore::readTag(stream, "COSE") && valid;
+	_sputRender->drawProgressBar(0.3f);
 
 	valid = SaveStore::readTag(stream, "RESS") && valid;
 	valid = _res->sysLoadRemastered(stream) == 0 && valid;
@@ -259,6 +277,7 @@ void GrimEngine::restoreRemastered() {
 	valid = SaveStore::readTag(stream, "TEXS") && valid;
 	valid = _sputText->restoreRemastered(stream) == 0 && valid;
 	valid = SaveStore::readTag(stream, "TEXE") && valid;
+	_sputRender->drawProgressBar(0.4f);
 
 	valid = SaveStore::readTag(stream, "ROMS") && valid;
 	valid = _sputRoom->restoreRemastered(stream) == 0 && valid;
@@ -297,10 +316,12 @@ void GrimEngine::restoreRemastered() {
 	valid = SaveStore::readTag(stream, "HOTE") && valid;
 
 	_sputPrevMode = (int)stream->readUint32LE();
+	_sputRender->drawProgressBar(0.75f);
 
 	valid = SaveStore::readTag(stream, "LUAS") && valid;
 	lua_RestoreRemastered(saveReadCallback);
 	valid = SaveStore::readTag(stream, "LUAE") && valid;
+	_sputRender->drawProgressBar(1.0f);
 
 	Common::Serializer ser(stream, nullptr);
 
@@ -308,8 +329,6 @@ void GrimEngine::restoreRemastered() {
 	valid = SaveStore::readTag(stream, "IMUS") && valid;
 	_imuse->soundsSaveLoadRemastered(ser);
 	valid = SaveStore::readTag(stream, "IMUE") && valid;
-
-	_libMode = kLibModeNormal;
 
 	_sputResource->stopPurge(0);
 
@@ -326,18 +345,28 @@ void GrimEngine::restoreRemastered() {
 
 	_libJustLoaded = 1;
 	_sputRender->allowLoadImage(1);
+	_remasteredLoadLast = false;
 
 	StdRect rect = { 0, 0, 640, 480 };
 
 	_sputRender->markAllPagesDirty(&rect, 1);
 
-	_remasteredSaveStatus = valid ? SaveStore::kStatusOk : SaveStore::kStatusCorrupt;
+	_libMode = kLibModeNormal;
+	setTextCanvasWidth(kTextCanvasWidthAfterLoad);
+	_luaV1->resetLastInputMode();
+
+	if (!valid)
+		warning("GrimEngine::restoreRemastered(): the slot %d has blocks that are not as expected", _remasteredLoadSlot);
+
+	// A load that went on to the end always answers success to the scripts
+	_remasteredSaveStatus = SaveStore::kStatusOk;
 }
 
 // The files are emptied, which takes the slot out of the list
 void GrimEngine::eraseRemastered() {
 	_remasteredEraseRequest = 0;
 	_remasteredSaveStatus = SaveStore::eraseSlot(_remasteredEraseSlot);
+	_wuRegistry->removeSlotTime(_remasteredEraseSlot);
 }
 
 // A new game: the sounds, the movie, the resources and the actors of the game that is over go

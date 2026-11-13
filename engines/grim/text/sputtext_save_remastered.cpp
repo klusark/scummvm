@@ -48,9 +48,9 @@ int SputText::saveRemastered(Common::WriteStream *stream) {
 	for (SputTextEvent *event = _textQueue; event; event = event->next) {
 		// The surface and the clip only have to be different from zero
 		stream->write(event->text, kTextEventCapacity);
-		stream->writeSint32LE(1);
+		stream->writeSint32LE(event->params.surface ? 1 : 0);
 		stream->writeSint32LE(0);
-		stream->writeSint32LE(1);
+		stream->writeSint32LE(event->params.clip ? 1 : 0);
 		stream->writeSint32LE(0);
 		stream->writeSint32LE(_res->serialFromHandle(event->params.font));
 		stream->writeSint32LE(0);
@@ -83,7 +83,9 @@ int SputText::saveRemastered(Common::WriteStream *stream) {
 	stream->writeSint32LE(0);
 	stream->writeSint32LE(_res->serialFromHandle(_defaultTextParams.font));
 	stream->writeSint32LE(0);
-	stream->writeSint32LE(_res->serialFromHandle(_blastTextParams.font));
+	// The third value is the address of the font of the canvas, not a font: no resource has it as
+	// serial, so the canvas gets the system font back when the game is loaded
+	stream->writeUint32LE((uint32)(uintptr)&_blastTextParams.font);
 	stream->writeSint32LE(0);
 
 	if (stream->err()) {
@@ -110,10 +112,13 @@ int SputText::restoreRemastered(Common::ReadStream *stream) {
 
 		stream->read(event->text, kTextEventCapacity);
 
-		// The pointers of the surface and the clip
+		// The pointers of the surface and the clip: only the fact that they are there matters
+		int hasSurface = stream->readSint32LE();
+
 		stream->readSint32LE();
-		stream->readSint32LE();
-		stream->readSint32LE();
+
+		int hasClip = stream->readSint32LE();
+
 		stream->readSint32LE();
 
 		int fontSerial = stream->readSint32LE();
@@ -143,8 +148,7 @@ int SputText::restoreRemastered(Common::ReadStream *stream) {
 		event->clip.height = stream->readSint32LE();
 		event->duration = stream->readSint32LE();
 
-		// The actor is found again when the actors are restored
-		stream->readSint32LE();
+		int actorHandle = stream->readSint32LE();
 
 		event->flags = stream->readSint32LE();
 		event->serial = stream->readSint32LE();
@@ -166,10 +170,10 @@ int SputText::restoreRemastered(Common::ReadStream *stream) {
 
 		event->params.font = static_cast<BlastTextFont *>(_res->handleFromSerialNumber(fontSerial));
 
-		event->params.surface = _blastText->getSurface();
-		event->params.clip = &event->clip;
+		event->params.surface = hasSurface ? _blastText->getSurface() : nullptr;
+		event->params.clip = hasClip ? &event->clip : nullptr;
 		event->params.colorMap = (byte *)_sputRender->getColors();
-		event->actor = nullptr;
+		event->actor = actorHandle == -1 ? nullptr : _sputActor->actorDeref(actorHandle);
 		initHdEvent(event);
 		event->params.coords = coords;
 		event->params.highlight = highlight;

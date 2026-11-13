@@ -220,6 +220,11 @@ void Lua_V1::StartMovieDemo() {
 }
 
 void Lua_V1::IsFullscreenMoviePlaying() {
+	if (g_grim->isRemastered()) {
+		pushbool(g_grim->getLibMode() == 3 || (g_grim->_sputSmush->videoIsPlayingMovie() && g_grim->_sputSmush->videoIsVisible()));
+		return;
+	}
+
 	pushbool(g_grim->_sputSmush->moviePlaying() != 0);
 }
 
@@ -236,7 +241,11 @@ void Lua_V1::StopMovie() {
 }
 
 void Lua_V1::PauseMovie() {
-	g_grim->_sputSmush->pause(lua_isnil(lua_getparam(1)));
+	// The remastered pauses with any argument but nil
+	if (g_grim->isRemastered())
+		g_grim->_sputSmush->pause(!lua_isnil(lua_getparam(1)));
+	else
+		g_grim->_sputSmush->pause(lua_isnil(lua_getparam(1)));
 }
 
 void Lua_V1::PurgePrimitiveQueue() {
@@ -368,8 +377,12 @@ void Lua_V1::ChangePrimitive() {
 	lua_pushobject(tableObj);
 	lua_pushstring("color");
 	lua_Object colorObj = lua_gettable();
-	if (lua_isuserdata(colorObj) && lua_tag(colorObj) == MKTAG('R','L','O','C'))
+	if (lua_isuserdata(colorObj) && lua_tag(colorObj) == MKTAG('R','L','O','C')) {
 		queue->changeColor(id, getScreenColor(lua_getuserdata(colorObj)));
+
+		if (g_grim->isRemastered())
+			queue->changeColorRgb(id, (uint)lua_getuserdata(colorObj));
+	}
 
 	lua_pushobject(tableObj);
 	lua_pushstring("layer");
@@ -447,6 +460,8 @@ void Lua_V1::DrawRectangle() {
 	int layer = 2;
 	int color = 0;
 	int filled = 0;
+	uint colorRgb = 0;
+	float alpha = 1.0f;
 	lua_Object x1Obj = lua_getparam(1);
 	lua_Object y1Obj = lua_getparam(2);
 	lua_Object x2Obj = lua_getparam(3);
@@ -467,8 +482,10 @@ void Lua_V1::DrawRectangle() {
 		lua_pushobject(tableObj);
 		lua_pushstring("color");
 		lua_Object colorObj = lua_gettable();
-		if (lua_isuserdata(colorObj) && lua_tag(colorObj) == MKTAG('R','L','O','C'))
+		if (lua_isuserdata(colorObj) && lua_tag(colorObj) == MKTAG('R','L','O','C')) {
 			color = getScreenColor(lua_getuserdata(colorObj));
+			colorRgb = (uint)lua_getuserdata(colorObj);
+		}
 
 		lua_pushobject(tableObj);
 		lua_pushstring("filled");
@@ -481,9 +498,24 @@ void Lua_V1::DrawRectangle() {
 		lua_Object layerObj = lua_gettable();
 		if (lua_isnumber(layerObj))
 			layer = luaFtol(lua_getnumber(layerObj));
+
+		if (g_grim->isRemastered()) {
+			lua_pushobject(tableObj);
+			lua_pushstring("alpha");
+			lua_Object alphaObj = lua_gettable();
+			if (lua_isnumber(alphaObj))
+				alpha = lua_getnumber(alphaObj);
+		}
 	}
 
-	lua_pushnumber((float)(uint)queue->addRect(x1, y1, x2, y2, color, filled, layer));
+	int id = queue->addRect(x1, y1, x2, y2, color, filled, layer);
+
+	if (g_grim->isRemastered()) {
+		queue->changeColorRgb(id, colorRgb);
+		queue->setAlpha(id, alpha);
+	}
+
+	lua_pushnumber((float)(uint)id);
 }
 
 void Lua_V1::BlastRect() {

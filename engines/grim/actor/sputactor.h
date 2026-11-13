@@ -39,7 +39,6 @@ class Cos;
 class GrimEngine;
 class LegacyImporter;
 class Lua_V1;
-class PathFinder;
 class Puck;
 class SputCostume;
 class SputRender;
@@ -89,6 +88,10 @@ struct ActorShadow {
 	WalkPlane *clipPlane[12];
 };
 
+enum {
+	kExtraPathPoints = 128
+};
+
 struct Extra {
 	RdVector3 lookCarrot;
 	int walking;
@@ -102,7 +105,7 @@ struct Extra {
 	RdVector3 walkTarget;
 	RdVector3 goal;
 	int numPathPoints;
-	RdVector3 path[30];
+	RdVector3 path[kExtraPathPoints];
 	int pathIndex;
 	Puck *puck;
 	int inBoxes;
@@ -157,7 +160,6 @@ class SputActorModule {
 public:
 	SputActorModule(Res *res, RenderDroid *rd, StdMath *stdMath, StdDisplay *stdDisplay, WalkSystem *walkSystem, SputResource *sputResource,
 			SputRoom *sputRoom, SputRender *sputRender, SputCostume *sputCostume, SputText *sputText, SputTime *sputTime);
-	~SputActorModule();
 
 	void setGrimEngine(GrimEngine *grim) { _grim = grim; }
 	void setLua(Lua_V1 *lua) { _lua = lua; }
@@ -194,7 +196,7 @@ public:
 	int setSelectedActor(int handle);
 	SputActor *actorDeref(int handle);
 	int getActorHandle(SputActor *actor);
-	int allocateActor();
+	int allocateActor(int flag20 = 0, int flag80 = 0);
 	void allocateActorExtra(SputActor *actor);
 	void enableWalkSystem(SputActor *actor, int enable);
 	void enablePuck(SputActor *actor, int enable);
@@ -218,14 +220,21 @@ public:
 	void updateCostumes4(SputActor *actor);
 	void actorWalkTo(SputActor *actor, float *pos, float *goal, SputActor *target);
 	int actorWalkToImpl(SputActor *actor, SputActor *target, float *path, int numPoints, float *outPath);
+	int actorWalkToImplRemastered(SputActor *actor, SputActor *target, float *path, int numPoints, float *outPath);
 	// The remastered: walk to the point under the pointer, given as mouse axes from -1 to 1
 	void walkActorToMouseTarget(SputActor *actor, float axisX, float axisY);
-	void setPathfinderMode(int mode) { _pathfinderMode = mode != 0; }
+	void setPathfinderMode(int mode);
+	void getCollisionBoxes(SputActor *actor, int *count, int maxPoints, float (*points)[3], SputActor *avoid);
 	void getOuttaTheBox(float *point, const RdBound3 &box, RdMatrix34 matrix, float *origin);
 	int checkCollisions(float *from, float *to, float *center, const RdBound3 &box, RdMatrix34 matrix, float *offset);
 	void findObjectCorners(RdModel3 *model, float margin, RdMatrix34 mat, float z, ObjectCorners *out);
 	int testCollision(float *from, float *to, float *center, const RdBound3 &box, RdMatrix34 matrix);
 	int findClosestCandidate(float *from, float *to, ObjectCorners *corners);
+	void getOuttaTheBoxRemastered(float *point, const RdBound3 &box, RdMatrix34 matrix, float *origin);
+	int checkCollisionsRemastered(SputActor *actor, float *from, float *to, float *center, const RdBound3 &box, RdMatrix34 matrix, float *offset);
+	void findObjectCornersRemastered(RdModel3 *model, float margin, RdMatrix34 mat, float z, ObjectCorners *out);
+	int testCollisionRemastered(float *from, float *to, float *center, const RdBound3 &box, RdMatrix34 matrix);
+	int findClosestCandidateRemastered(float *from, float *to, ObjectCorners *corners);
 	void sayLine(SputActor *actor, const char *msgId, int voiceStream, int volume, int pan, int x, int y);
 	void shutUp(SputActor *actor);
 	void setSpeechMode(int mode);
@@ -270,12 +279,13 @@ public:
 	void enumCostumeComponents(int inst);
 
 private:
-	enum {
-		kPathFinderMaxPoints = 128
-	};
-
 	void publishActors();
-	int buildPathFinderPath(float *from, float *to, float **path);
+	bool buildPath(SputActor *actor, float *start, float *goal, int tighten, unsigned *failFlag, SputActor *avoid);
+	int pathCapacity() const;
+	void transformVectorOrtho34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat);
+	void transformVector34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat);
+	void transformPoint34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat);
+	void transformPoint34AccRemastered(RdVector3 vec, RdMatrix34 mat);
 
 	Res *_res;
 	RenderDroid *_rd;
@@ -317,10 +327,8 @@ private:
 	RdMaterial _demoShadowMaterial;
 	RdMatCel _demoShadowCel;
 
-	// The remastered finds the paths with the path finder first
-	PathFinder *_pathFinder = nullptr;
-	bool _pathfinderMode = false;
-	float _pathFinderPoints[kPathFinderMaxPoints][3];
+	unsigned int _dynamicCollisionFrames = 0;
+	bool _hadDynamicCollision = false;
 };
 
 } // End of namespace Grim

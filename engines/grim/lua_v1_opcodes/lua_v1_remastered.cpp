@@ -29,6 +29,7 @@
 #include "engines/grim/movie/sputsmush.h"
 #include "engines/grim/puck.h"
 #include "engines/grim/render/sputrender.h"
+#include "engines/grim/stdcontrol.h"
 #include "engines/grim/wuregistry.h"
 
 namespace Grim {
@@ -36,7 +37,16 @@ namespace Grim {
 enum {
 	kImuseGroupCommentary = 5,
 	kActorFlagBlackAndWhite = 0x40,
-	kActorModeHkHack = 4
+	kActorModeHkHack = 4,
+	kTextCanvasWidthPlay = 1440,
+	kTextCanvasWidthMenu = 1920
+};
+
+// The kinds of input device the scripts are told about
+enum {
+	kInputModePad = 1,
+	kInputModeKeys = 2,
+	kInputModeMouse = 3
 };
 
 // Opcodes of the main table that the remastered has and the original does not.
@@ -118,7 +128,7 @@ void Lua_V1::SetActorBWMode() {
 	lua_Object actorObj = lua_getparam(1);
 	lua_Object modeObj = lua_getparam(2);
 
-	if (!isSputActor(actorObj))
+	if (!isSputActor(actorObj) || !lua_isnumber(modeObj))
 		return;
 
 	SputActor *actor = getSputActor(actorObj);
@@ -126,15 +136,17 @@ void Lua_V1::SetActorBWMode() {
 	if (!actor)
 		return;
 
-	if (lua_getnumber(modeObj) > 0.0f) {
-		actor->flags |= kActorFlagBlackAndWhite;
-	} else if (actor->flags & kActorFlagBlackAndWhite) {
-		actor->flags &= ~kActorFlagBlackAndWhite;
+	if (lua_getnumber(modeObj) <= 0.0f) {
+		if (actor->flags & kActorFlagBlackAndWhite) {
+			actor->flags &= ~kActorFlagBlackAndWhite;
 
-		if (actor->extra && actor->extra->puck)
-			actor->extra->puck->rotate(180.0f);
-		else
-			warning("Lua_V1::SetActorBWMode(): the actor has no puck to turn around");
+			if (actor->extra && actor->extra->puck)
+				actor->extra->puck->rotate(180.0f);
+			else
+				warning("Lua_V1::SetActorBWMode(): the actor has no puck to turn around");
+		}
+	} else {
+		actor->flags |= kActorFlagBlackAndWhite;
 	}
 }
 
@@ -150,7 +162,7 @@ void Lua_V1::SetActorHKHackMode() {
 	if (!actor)
 		return;
 
-	if (lua_getnumber(modeObj) > 0.0f)
+	if (lua_isnumber(modeObj) && lua_getnumber(modeObj) > 0.0f)
 		actor->mode |= kActorModeHkHack;
 	else
 		actor->mode &= ~kActorModeHkHack;
@@ -178,7 +190,12 @@ void Lua_V1::SaveRegistryToDisk() {
 }
 
 void Lua_V1::EnableBackgroundRender() {
-	int enable = luaFtol(lua_getnumber(lua_getparam(1)));
+	lua_Object enableObj = lua_getparam(1);
+
+	if (!lua_isnumber(enableObj))
+		return;
+
+	int enable = luaFtol(lua_getnumber(enableObj));
 
 	g_grim->_sputRender->preRendered(enable, enable);
 }
@@ -200,7 +217,7 @@ void Lua_V1::ImSetCommentaryVol() {
 void Lua_V1::SetResolutionScaling() {
 	lua_Object valueObj = lua_getparam(1);
 
-	if (g_grim->getLibMode() == GrimEngine::kLibModeUser)
+	if (!lua_isnumber(valueObj) || g_grim->getLibMode() == GrimEngine::kLibModeUser)
 		return;
 
 	_resolutionScaling = lua_getnumber(valueObj);
@@ -209,23 +226,23 @@ void Lua_V1::SetResolutionScaling() {
 void Lua_V1::SetAdvancedLighting() {
 	lua_Object valueObj = lua_getparam(1);
 
-	if (g_grim->getLibMode() == GrimEngine::kLibModeUser)
+	if (!lua_isnumber(valueObj) || g_grim->getLibMode() == GrimEngine::kLibModeUser)
 		return;
 
-	_advancedLighting = lua_getnumber(valueObj);
+	_advancedLighting = (uint32)luaFtol(lua_getnumber(valueObj));
 }
 
-// The menu and the user modes pause the movie, and leaving them draws the scene again
+// The menu and the user modes pause the movie, and leaving them draws the scene again unless
+// the second argument is set. A mode that is not a number is mode 0, as in the original.
 void Lua_V1::SetGameRenderMode() {
 	lua_Object modeObj = lua_getparam(1);
-
-	if (!lua_isnumber(modeObj)) {
-		warning("Lua_V1::SetGameRenderMode(): the mode is not a number");
-		return;
-	}
-
+	lua_Object keepObj = lua_getparam(2);
 	int mode = luaFtol(lua_getnumber(modeObj));
 	int oldMode = g_grim->getLibMode();
+
+	if (mode == oldMode)
+		return;
+
 	bool wasPaused = oldMode == GrimEngine::kLibModeUser || oldMode == GrimEngine::kLibModeMenu;
 	bool isPaused = mode == GrimEngine::kLibModeUser || mode == GrimEngine::kLibModeMenu;
 
@@ -233,10 +250,13 @@ void Lua_V1::SetGameRenderMode() {
 		g_grim->_sputSmush->pause(1);
 	} else if (!isPaused && wasPaused) {
 		g_grim->_sputSmush->pause(0);
-		g_grim->_sputRender->forceRefresh();
+
+		if (lua_isnil(keepObj) || luaFtol(lua_getnumber(keepObj)) == 0)
+			g_grim->_sputRender->forceRefresh();
 	}
 
 	g_grim->setLibMode(mode);
+	g_grim->setTextCanvasWidth(mode == GrimEngine::kLibModeMenu ? kTextCanvasWidthMenu : kTextCanvasWidthPlay);
 }
 
 void Lua_V1::GetGameRenderMode() {
@@ -260,6 +280,168 @@ void Lua_V1::GetLanguage() {
 
 void Lua_V1::GetLanguageCount() {
 	lua_pushnumber((float)GrimEngine::getLanguageCount());
+}
+
+void Lua_V1::LoadRemappedKeys() {
+	for (int i = 0; i < StdControl::kNumRemappedKeys; i++) {
+		Common::String name = Common::String::format("Remap%d", i);
+		int sdlKey = g_grim->_wuRegistry->getInt(name.c_str(), 0);
+
+		if (sdlKey)
+			g_grim->_stdControl->setRemappedKey(i, sdlKey);
+	}
+}
+
+void Lua_V1::SaveRemappedKeys() {
+	for (int i = 0; i < StdControl::kNumRemappedKeys; i++) {
+		Common::String name = Common::String::format("Remap%d", i);
+
+		g_grim->_wuRegistry->saveInt(name.c_str(), g_grim->_stdControl->getRemappedKey(i));
+	}
+}
+
+bool Lua_V1::getSaveSlotTime(int slot, Common::String *time) {
+	return g_grim->_wuRegistry->getSlotTime(slot, time);
+}
+
+// Tells the scripts that the player changed the kind of device, and gives the new one and the
+// old one. The handler is called whatever it is, a missing one is an error of the scripts.
+void Lua_V1::changeInputMode(int mode, lua_Object func) {
+	if (mode == _lastInputMode)
+		return;
+
+	lua_pushnumber((float)mode);
+	lua_pushnumber((float)_lastInputMode);
+	lua_callfunction(func);
+
+	_lastInputMode = mode;
+}
+
+// The control update of the remastered. Besides the buttons and the axes it tells the scripts
+// which kind of device is used, pings them every fifth call and reports a long press of the
+// mouse button.
+int Lua_V1::controlCallbackRemastered(float frameTime) {
+	StdControl *stdControl = g_grim->_stdControl;
+	ControlSymbol *symbols = g_grim->_sputControl->getSymbols();
+	int numSymbols = g_grim->_sputControl->getNumSymbols();
+	lua_Object buttonFunc;
+	lua_Object buttonSelf;
+	lua_Object axisFunc;
+	lua_Object axisSelf;
+
+	lua_beginblock();
+
+	bool buttonHandler = getSystemHandler("buttonHandler", true, &buttonFunc, &buttonSelf);
+	bool axisHandler = getSystemHandler("axisHandler", true, &axisFunc, &axisSelf);
+
+	lua_pushobject(lua_getref(_refSystemTable));
+	lua_pushstring("inputModeHandler");
+	lua_Object modeFunc = lua_gettable();
+
+	_controlEventCount = (_controlEventCount + 1) % 5;
+
+	for (int i = 0; i < numSymbols; i++) {
+		ControlSymbol *symbol = &symbols[i];
+
+		if (!(symbol->flags & 1))
+			continue;
+
+		if (symbol->flags & 4) {
+			int pressCount = 0;
+			int doubleClick = 0;
+			int longPress = 0;
+			int value = stdControl->readKey(symbol->code, &pressCount, &doubleClick, &longPress);
+
+			if (symbol->code == StdControl::kKeyMousePing) {
+				if (_controlEventCount == 0 && buttonHandler) {
+					if (buttonSelf != LUA_NOOBJECT)
+						lua_pushobject(buttonSelf);
+
+					lua_pushnumber((float)i);
+					lua_pushnumber(1);
+					lua_pushnumber((float)(uint)pressCount);
+					lua_pushnumber(0);
+					lua_callfunction(buttonFunc);
+				}
+			} else if (symbol->code == StdControl::kKeyMouseLong) {
+				if (value && buttonHandler && longPress) {
+					if (buttonSelf != LUA_NOOBJECT)
+						lua_pushobject(buttonSelf);
+
+					lua_pushnumber((float)i);
+					lua_pushnil();
+					lua_pushnumber((float)(uint)pressCount);
+					lua_pushnumber(0);
+					lua_callfunction(buttonFunc);
+				}
+			} else if (value != symbol->lastValue && buttonHandler) {
+				int mode = kInputModeKeys;
+
+				if (symbol->code >= 256 && symbol->code <= 283)
+					mode = kInputModePad;
+				else if (symbol->code >= 284 && symbol->code <= 289)
+					mode = kInputModeMouse;
+
+				if (value)
+					changeInputMode(mode, modeFunc);
+
+				if (buttonSelf != LUA_NOOBJECT)
+					lua_pushobject(buttonSelf);
+
+				lua_pushnumber((float)i);
+
+				if (value)
+					lua_pushnumber(1);
+				else
+					lua_pushnil();
+
+				lua_pushnumber((float)(uint)pressCount);
+				lua_pushnumber((float)doubleClick);
+				lua_callfunction(buttonFunc);
+				symbol->lastValue = value;
+			}
+		} else {
+			float value = stdControl->readAxis(symbol->code);
+			float lastValue;
+
+			if (symbol->flags & 8)
+				value = -value;
+
+			memcpy(&lastValue, &symbol->lastValue, sizeof(lastValue));
+
+			if (value != lastValue && axisHandler) {
+				changeInputMode(symbol->code <= 11 ? kInputModePad : kInputModeMouse, modeFunc);
+
+				if (axisSelf != LUA_NOOBJECT)
+					lua_pushobject(axisSelf);
+
+				lua_pushnumber((float)i);
+				lua_pushnumber(value);
+				lua_callfunction(axisFunc);
+				memcpy(&symbol->lastValue, &value, sizeof(value));
+			}
+		}
+	}
+
+	lua_endblock();
+
+	return 0;
+}
+
+// The key mapping asks the scripts to take the result: 0 the key was taken, 1 it cannot be used,
+// 2 the slot does not exist, 3 the key is in use, 4 the player cancelled
+void Lua_V1::notifyKeyMapped(int result) {
+	lua_beginblock();
+
+	lua_pushobject(lua_getref(_refSystemTable));
+	lua_pushstring("NotifyKeyMapped");
+
+	lua_Object func = lua_gettable();
+
+	lua_pushnumber((float)result);
+	lua_callfunction(func);
+
+	lua_endblock();
 }
 
 } // end of namespace Grim

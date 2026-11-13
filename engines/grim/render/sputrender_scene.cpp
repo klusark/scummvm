@@ -172,15 +172,21 @@ void SputRender::update() {
 
 		_grim->getHdCanvas()->beginFrame();
 
-		if (mode != 3)
-			_clearedBehindMovie = 0;
-
 		if (mode == 3) {
 			if (!updateMovieRemastered())
 				return;
 
 			mode = _grim->getLibMode();
 		}
+
+		// The whole scene is redrawn every frame, so it comes back by itself after the menus blank it
+		StdRect redrawRect;
+
+		redrawRect.x = 0;
+		redrawRect.y = 0;
+		redrawRect.width = 640;
+		redrawRect.height = 480;
+		markDirtyRect(&redrawRect, 1);
 	}
 
 	switch (mode) {
@@ -286,6 +292,9 @@ void SputRender::update() {
 		drawPrimitives(1);
 		_stdDisplay->vBufferUnlock(_backBuffer);
 	}
+
+	if (remastered)
+		drawPrimitivesCanvas(kPrimitiveLayerUnderlay);
 
 	for (SputObjectState *state = setup->ObjectStates; state; state = state->next)
 		state->update(1, _backBuffer, _zBuffer);
@@ -405,6 +414,9 @@ void SputRender::update() {
 		drawPrimitives(2);
 		_stdDisplay->vBufferUnlock(_backBuffer);
 	}
+
+	if (remastered)
+		drawPrimitivesCanvas(kPrimitiveLayerOverlay);
 
 	if (!(_grim->getGameFlags() & ADGF_DEMO) && (_debugFlags & 1))
 		drawRoomDebug();

@@ -26,6 +26,7 @@
 
 namespace Grim {
 
+class PathFinder;
 class Puck;
 class RenderDroid;
 class StdConffile;
@@ -59,6 +60,10 @@ struct WpCacheVert {
 
 class WalkPlane {
 public:
+	enum {
+		kMaxTriangles = 10
+	};
+
 	WalkPlane(WalkSystem *system, float (*verts)[3], int numPoints, const char *collection);
 	~WalkPlane();
 
@@ -67,6 +72,7 @@ public:
 	int within(float *point, uint flags);
 	int closestPoint(float *point);
 	double intersection(float *a, float *b, float *out);
+	double intersection(float *a, float *b, float *out, float *edge);
 	void snapTo(float *point);
 	void project(float *point);
 	void draw(uint16 color);
@@ -91,14 +97,20 @@ public:
 	int _quadAxis;
 	int _axisU;
 	int _axisV;
+	int _alwaysMerge;
+	// Triangles of the Remastered sector files: three indices of the vertices of the plane each
+	int _numTriangles;
+	int _triangles[kMaxTriangles][3];
 
 private:
+	int closestPointRemastered(float *point);
+
 	WalkSystem *_system;
 };
 
 class WalkSystem {
 public:
-	WalkSystem(RenderDroid *rd, StdMath *stdMath, StdConffile *stdConffile, bool isDemo);
+	WalkSystem(RenderDroid *rd, StdMath *stdMath, StdConffile *stdConffile, bool isDemo, bool isRemastered = false);
 	~WalkSystem();
 
 	void buildCache();
@@ -122,6 +134,18 @@ public:
 	int findExitPoints(WalkPlane *plane, float *from, float *out);
 	void tightenPath();
 	void shrinkBoxes(float amount);
+	PathFinder *getPathFinder();
+	void markPathFinderDirty();
+
+	// Walk box path of the remastered: the working path holds 128 points
+	int getPathRemastered(float **path);
+	float (*getWorkingPath())[3] { return _workingPath; }
+	int getNumWorkingPathPoints() const { return _numWorkingPathPoints; }
+	void setNumWorkingPathPoints(int count) { _numWorkingPathPoints = count; }
+	int findPathRemastered(float *from, float *to, WalkPlane *plane, unsigned int mode);
+	int findExitPointsRemastered(WalkPlane *plane, float *to, float *out);
+	int closestVertWithinRemastered(WalkPlane *a, WalkPlane *b, float *target, float *out);
+	void tightenPathRemastered();
 
 	WalkPlane *getHead() const { return _wpHead; }
 	Puck *getPuckHead() const { return _puckHead; }
@@ -131,7 +155,8 @@ private:
 	friend class WalkPlane;
 	friend class Puck;
 
-	WalkPlane *newPlane(float (*verts)[3], int numPoints, const char *collection, const char *sectorName, int id, int visible, int type);
+	WalkPlane *newPlane(float (*verts)[3], int numPoints, const char *collection, const char *sectorName, int id, int visible, int type, int alwaysMerge,
+			int numTriangles, int (*triangles)[3]);
 	WpVertex *addVertexDemo(float *pos);
 
 	RenderDroid *_rd;
@@ -147,9 +172,14 @@ private:
 	Puck *_puckHead;
 	int _forwardCounter;
 	bool _demo;
+	bool _remastered;
 
 	float _path[30][3];
 	int _numPathPoints;
+	float _workingPath[128][3];
+	int _numWorkingPathPoints;
+	int _totIterations;
+	int _pathFindFail;
 	float _constraintVector[3];
 	char _sectionName[48];
 
@@ -158,6 +188,8 @@ private:
 	int _numPlanes;
 	int _numCacheVerts;
 	int _cacheBuilt;
+
+	PathFinder *_pathFinder;
 };
 
 } // End of namespace Grim

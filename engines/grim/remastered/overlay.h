@@ -85,6 +85,7 @@ public:
 	explicit OverlayManager(HdCanvas *canvas);
 	~OverlayManager();
 
+	// An empty name makes an overlay without image. The image is loaded at once.
 	int create(const Common::String &name, int x, int y, const OverlayProps &props);
 	void move(int handle, int x, int y);
 	void setLayer(int handle, int layer);
@@ -94,6 +95,14 @@ public:
 	void clearCache();
 	void fade(int handle, int type, bool hasValue, float value);
 	void showLoadSpinner(bool show, int x, int y);
+
+	// The cursors and the hotspots reach the entries and the cache of the images directly: the image of
+	// an entry is replaced without a reference count, an unknown handle does nothing
+	bool loadCached(const Common::String &name, int cacheMode);
+	void setImage(int handle, const Common::String &name);
+	bool getLayer(int handle, int *layer);
+	bool hasImage(int handle);
+	void preloadImage(const Common::String &name);
 
 	// Queues the overlays of a layer in the canvas and steps their fades
 	void render(int layer, int boxing);
@@ -118,6 +127,8 @@ private:
 		kSavedNameSize = 128
 	};
 
+	// lastHandle is the handle of the last overlay created with the image: the cache drops the
+	// smallest one first
 	struct CachedImage {
 		Common::String name;
 		int refCount;
@@ -126,7 +137,7 @@ private:
 		int width;
 		int height;
 		bool loadAllowed;
-		uint32 lastUse;
+		int lastHandle;
 	};
 
 	struct Overlay {
@@ -147,23 +158,27 @@ private:
 	};
 
 	int findOverlay(int handle) const;
-	int nextHandle();
-	CachedImage *findImage(const Common::String &name) const;
-	CachedImage *acquireImage(const Common::String &name, int cacheMode);
+	Overlay *fromHandle(int handle);
+	CachedImage *acquireImage(const Common::String &name);
 	void ensureLoaded(CachedImage *image);
 	bool loadPng(CachedImage *image);
 	void buildMural(CachedImage *image);
 	void freePixels(CachedImage *image);
-	void deleteImage(CachedImage *image);
-	void drawOverlay(const Overlay &overlay);
+	void releaseImage(CachedImage *image);
+	void removeOverlay(int index);
+	void drawOverlay(const Overlay &overlay, int boxing);
 	bool stepFade(Overlay &overlay);
 
 	HdCanvas *_canvas;
-	Common::Array<Overlay> _overlays;
-	Common::Array<CachedImage *> _images;
+
+	// The slots are kept like the original keeps them: the entries after the last one hold what the
+	// compaction left there, and the handles are chosen with them in mind
+	Overlay _overlays[kMaxOverlays];
+	int _numOverlays;
+	CachedImage *_images[kMaxImages];
+	int _numImages;
 	int _serial;
 	int _spinnerHandle;
-	uint32 _useCounter;
 };
 
 } // End of namespace Grim

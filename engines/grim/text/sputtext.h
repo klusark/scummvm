@@ -78,7 +78,7 @@ struct SputTextEvent {
 
 class SputText {
 public:
-	SputText(Res *res, RenderDroid *rd, NormalText *normalText, Text *text, BlastText *blastText, SputTime *sputTime, Polyglot *polyglot);
+	SputText(Res *res, RenderDroid *rd, NormalText *normalText, Text *text, BlastText *blastText, SputTime *sputTime, Polyglot *polyglot, bool isRemastered);
 
 	void setSputRender(SputRender *sputRender) { _sputRender = sputRender; }
 	void setSputRoom(SputRoom *sputRoom) { _sputRoom = sputRoom; }
@@ -137,7 +137,6 @@ private:
 	Lua_V1 *_lua = nullptr;
 
 	void initHdEvent(SputTextEvent *event);
-	void dropHdBitmap(HdTextCache *cache);
 	void updateHd(int force, int page);
 	void drawHdEvent(SputTextEvent *event, int page);
 	HdTextCache *getHdLayout(SputTextEvent *event);

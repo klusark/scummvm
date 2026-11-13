@@ -78,10 +78,39 @@ int SputSmush::restoreRemastered(Common::ReadStream *stream) {
 
 	Common::strlcpy(_curMovieFile, name, sizeof(_curMovieFile));
 
-	if (_playing)
-		startMovie(_curMovieFile, _looping, _x, _y);
+	if (_playing) {
+		if (isHdMovieName(_curMovieFile))
+			_playing = 0;
+		else
+			startMovie(_curMovieFile, _looping, _x, _y);
+	}
 
 	return 0;
+}
+
+// The movies that have a HD version are not restarted by a load
+bool SputSmush::isHdMovieName(const char *name) {
+	static const char *const hdMovieNames[] = {
+		"albinizod.snm", "brunopk.snm", "byebye.snm", "byeruba.snm",
+		"coffrock.snm", "copaldie.snm", "credits.snm", "crushed.snm",
+		"distbeav.snm", "dooropen.snm", "eatbird.snm", "eldepot.snm",
+		"escape.snm", "exodus.snm", "falling.snm", "getshcks.snm",
+		"glotdriv.snm", "greenhse.snm", "hecdie.snm", "hecgetit.snm",
+		"heloruba.snm", "heltrain.snm", "hostage.snm", "intro.snm",
+		"logos.snm", "lol.snm", "loladies.snm", "lsahq.snm",
+		"mnycutfl.snm", "neonlady.snm", "normarae.snm", "oldjob.snm",
+		"plunge.snm", "poseidon.snm", "repmec1c.snm", "repmec3c.snm",
+		"reunion.snm", "shanghai.snm", "stocking.snm", "stump1c.snm",
+		"stump3c.snm", "subsaway.snm", "swtchbrd.snm", "swtchsuc.snm",
+		"swtchuns.snm", "thepearl.snm", "vivamaro.snm", "yr2intro.snm"
+	};
+
+	for (uint i = 0; i < ARRAYSIZE(hdMovieNames); i++) {
+		if (!strcmp(name, hdMovieNames[i]))
+			return true;
+	}
+
+	return false;
 }
 
 } // End of namespace Grim

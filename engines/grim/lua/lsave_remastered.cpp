@@ -43,12 +43,6 @@ static void saveSerial(SaveRestoreAccess *saveFunc, uint32 value) {
 	saveInt32(saveFunc, 0);
 }
 
-// A value with a sign, like the one that the hook gives to a userdata
-static void saveSignedValue(SaveRestoreAccess *saveFunc, int32 value) {
-	saveInt32(saveFunc, value);
-	saveInt32(saveFunc, value < 0 ? -1 : 0);
-}
-
 static uint32 getUserdataSerial(const UserData *userdata) {
 	uint64 key = ((uint64)(uint32)userdata->tag << 32) | (uint32)userdata->id;
 	uint32 index;
@@ -123,7 +117,8 @@ static void luaS_writeuserdata(SaveRestoreAccess *saveFunc) {
 			value = lua_savehook(userdata->tag, value, saveFunc);
 
 		saveInt32(saveFunc, userdata->tag);
-		saveSignedValue(saveFunc, value);
+		// The original keeps a value of -1 as 0xFFFFFFFF with a zero high half
+		saveSerial(saveFunc, (uint32)value);
 	}
 }
 

@@ -21,6 +21,7 @@
 
 #include "common/util.h"
 
+#include "engines/grim/grim.h"
 #include "engines/grim/render/primitivequeue.h"
 #include "engines/grim/renderdroid/rd.h"
 #include "engines/grim/render/sputrender.h"
@@ -29,7 +30,7 @@
 namespace Grim {
 
 SputPrimitiveObject::SputPrimitiveObject(int id, int shape) : next(nullptr), prev(nullptr), shape(shape), id(id),
-		layer(2), x1(0), y1(0), x2(0), y2(0), color(0), pattern(-1), filled(0) {
+		layer(2), x1(0), y1(0), x2(0), y2(0), color(0), pattern(-1), filled(0), colorRgb(0), alpha(1.0f) {
 }
 
 PrimitiveQueue::PrimitiveQueue(RenderDroid *rd) : _rd(rd), _sputRender(nullptr), _head(nullptr), _tail(nullptr), _nextId(1) {
@@ -109,8 +110,13 @@ SputPrimitiveObject *PrimitiveQueue::addObject(int id, int layer) {
 		_head = obj;
 	}
 
-	if (layer != 2 && layer != 1)
+	// The remastered also has the passes of the menus (4) and of the dialogs (8); the other values are the overlay pass
+	if (g_grim->isRemastered()) {
+		if (layer != 1 && layer != 4 && layer != 8)
+			layer = 2;
+	} else if (layer != 2 && layer != 1) {
 		layer = 2;
+	}
 
 	_tail->layer = layer;
 
@@ -152,12 +158,26 @@ void PrimitiveQueue::changeColor(int id, int color) {
 		obj->color = color;
 }
 
+void PrimitiveQueue::changeColorRgb(int id, uint colorRgb) {
+	for (SputPrimitiveObject *obj = findPrimitive(id, nullptr); obj; obj = findPrimitive(id, obj))
+		obj->colorRgb = colorRgb;
+}
+
+void PrimitiveQueue::setAlpha(int id, float alpha) {
+	for (SputPrimitiveObject *obj = findPrimitive(id, nullptr); obj; obj = findPrimitive(id, obj))
+		obj->alpha = alpha;
+}
+
 void PrimitiveQueue::changeLayer(int id, int layer) {
 	for (SputPrimitiveObject *obj = findPrimitive(id, nullptr); obj; obj = findPrimitive(id, obj)) {
 		markDirty(obj);
 
-		if (layer != 2 && layer != 1)
+		if (g_grim->isRemastered()) {
+			if (layer != 1 && layer != 4 && layer != 8)
+				layer = 2;
+		} else if (layer != 2 && layer != 1) {
 			layer = 2;
+		}
 
 		obj->layer = layer;
 	}

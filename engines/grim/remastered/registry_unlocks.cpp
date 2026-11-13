@@ -30,7 +30,7 @@ namespace Grim {
 
 static const char *const registryFileName = "registry.sav";
 
-RegistryUnlocks::RegistryUnlocks() : _loaded(false), _dirty(false), _entriesKept(false) {
+RegistryUnlocks::RegistryUnlocks() : _loaded(false), _entriesKept(false) {
 	memset(_entries, 0, sizeof(_entries));
 	memset(_cutsceneBits, 0, sizeof(_cutsceneBits));
 	memset(_conceptBits, 0, sizeof(_conceptBits));
@@ -46,7 +46,6 @@ void RegistryUnlocks::unlockCutscene(int index) {
 		return;
 
 	_cutsceneBits[index >> 3] |= (byte)(1 << (index & 7));
-	_dirty = true;
 }
 
 bool RegistryUnlocks::isCutsceneUnlocked(int index) {
@@ -65,7 +64,6 @@ void RegistryUnlocks::unlockConcept(int index) {
 		return;
 
 	_conceptBits[index >> 3] |= (byte)(1 << (index & 7));
-	_dirty = true;
 }
 
 bool RegistryUnlocks::isConceptUnlocked(int index) {
@@ -79,23 +77,16 @@ void RegistryUnlocks::resetUnlocks() {
 
 	memset(_cutsceneBits, 0, sizeof(_cutsceneBits));
 	memset(_conceptBits, 0, sizeof(_conceptBits));
-	_dirty = true;
 }
 
 bool RegistryUnlocks::importRegistrySav(Common::SeekableReadStream *stream) {
 	ensureLoaded();
 
-	if (!mergeRegistrySav(stream))
-		return false;
-
-	_dirty = true;
-
-	return true;
+	return mergeRegistrySav(stream);
 }
 
 void RegistryUnlocks::saveFile() {
-	if (!_dirty)
-		return;
+	ensureLoaded();
 
 	Common::OutSaveFile *file = g_system->getSavefileManager()->openForSaving(registryFileName, false);
 
@@ -112,8 +103,6 @@ void RegistryUnlocks::saveFile() {
 
 	if (file->err())
 		warning("RegistryUnlocks::saveFile(): cannot write %s", registryFileName);
-	else
-		_dirty = false;
 
 	delete file;
 }

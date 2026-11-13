@@ -22,7 +22,9 @@
 #ifndef GRIM_STDCONTROL_H
 #define GRIM_STDCONTROL_H
 
+#include "common/keyboard.h"
 #include "common/scummsys.h"
+#include "common/str.h"
 
 namespace Grim {
 
@@ -43,6 +45,7 @@ struct StdControlKey {
 	int lastPressTime;
 	int pressCount;
 	int doubleClick;
+	int longFlag;
 };
 
 struct StdControlDeviceEvent {
@@ -95,7 +98,8 @@ public:
 	enum {
 		kNumAxes = 15,
 		kNumKeys = 290,
-		kKeyMouseLong = 288
+		kKeyMouseLong = 288,
+		kKeyMousePing = 289
 	};
 
 	// Size of the canvas the remastered scripts use for the cursor position
@@ -104,6 +108,11 @@ public:
 		kCanvasHeight = 1080,
 		kCanvasPlayWidth = 1440,
 		kCanvasPlayOffset = 240
+	};
+
+	// Number of keys of the remastered that can be remapped
+	enum {
+		kNumRemappedKeys = 13
 	};
 
 	StdControl(bool remastered);
@@ -124,22 +133,43 @@ public:
 	int pressButton(uint button);
 	void readControls();
 	float readAxis(int axis);
-	int readKey(int key, int *pressCount, int *doubleClick);
+	int readKey(int key, int *pressCount, int *doubleClick, int *longPress = nullptr);
 	void setActivation(int active);
 
+	// Key remapping of the remastered. The keys are SDL key codes, the ones the registry stores.
+	void setKeyMappingMode(int slot);
+	void resetKeyMappingToDefault();
+	int getRemappedKey(int slot) const;
+	void setRemappedKey(int slot, int sdlKey);
+	bool isKeyMappingActive() const { return _keyMappingActive; }
+	Common::KeyCode translateKey(Common::KeyCode keycode) const;
+	int endKeyMapping(Common::KeyCode keycode);
+	static int getSdlKey(Common::KeyCode keycode);
+	static Common::KeyCode getKeyCode(int sdlKey);
+	static Common::String getSdlKeyName(int sdlKey);
+	static bool getKeyGlyph(int sdlKey, const char **glyphFile, const char **glyphText);
+
 private:
+	static bool isReservedKey(int sdlKey);
+	static bool isNameableKey(int sdlKey);
+	int validateMappedKey(int slot, int sdlKey) const;
+
 	void initJoysticks();
 	void initMouse();
 	void setButtonPressed(uint button);
 	void readKeyboard();
+	void applyKeyboardEvents();
 	void flushKeyboard();
 	void readJoysticks();
 	void readMouse();
 	void flushMouse();
 	void enableAxis(int axis, int minVal, int maxVal, float deadZone);
-	void updateKey(StdControlKey *key, int down, int time);
+	void updateKey(StdControlKey *key, int down, int time, bool canLongPress);
 
 	bool _remastered;
+	bool _keyMappingActive;
+	int _mappingSlot;
+	int _remappedKeys[kNumRemappedKeys];
 	int _startup;
 	int _open;
 	int _controlsActive;

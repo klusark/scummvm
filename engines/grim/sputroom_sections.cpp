@@ -421,6 +421,8 @@ int SputRoom::parseSectors() {
 	if (nextSection)
 		findSectionHandler(nextSection);
 
+	_walkSystem->markPathFinderDirty();
+
 	return 1;
 }
 

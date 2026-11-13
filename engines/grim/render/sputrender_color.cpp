@@ -23,6 +23,7 @@
 #include "common/util.h"
 
 #include "engines/grim/grim.h"
+#include "engines/grim/remastered/hdcanvas.h"
 #include "engines/grim/renderdroid/rd.h"
 #include "engines/grim/sputobjectstate.h"
 #include "engines/grim/render/sputprimitive.h"
@@ -89,6 +90,11 @@ void SputRender::setGamma(float gamma) {
 	// The demo always rebuilds the tables
 	if (_gammaCorrection != gamma || (_grim->getGameFlags() & ADGF_DEMO)) {
 		_gammaCorrection = gamma;
+
+		// The quads of the canvas use the gamma at the moment they are queued
+		if (_grim->getHdCanvas())
+			_grim->getHdCanvas()->setGamma(gamma);
+
 		loadSetupBackground(_colorInfo);
 
 		Room *room = _sputRoom->getCurrentRoom();

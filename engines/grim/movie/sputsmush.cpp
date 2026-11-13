@@ -25,6 +25,7 @@
 #include "common/stream.h"
 #include "common/system.h"
 #include "common/textconsole.h"
+#include "common/util.h"
 
 #include "graphics/pixelformat.h"
 #include "graphics/surface.h"
@@ -47,8 +48,10 @@ namespace Grim {
 SputSmush::SputSmush(Res *res, StdDisplay *stdDisplay, SputRender *sputRender, StdVBuffer *mainGfxBuffer, WuRegistry *wuRegistry) :
 		_res(res), _stdDisplay(stdDisplay), _sputRender(sputRender), _mainGfxBuffer(mainGfxBuffer),
 		_wuRegistry(wuRegistry), _hs(nullptr), _started(0), _presentBuf(nullptr), _buf(0), _playing(0), _paused(0), _abort(0),
-		_looping(0), _x(0), _y(0), _startTime(0), _lastPeriodicTime(0), _hdDecoder(nullptr), _hdFrame(nullptr),
-		_hdScaled(nullptr), _hdMovie(false), _hdPaused(false) {
+		_looping(0), _x(0), _y(0), _startTime(0), _lastPeriodicTime(0), _videoClip(nullptr), _movieSurface(nullptr),
+		_releasedSurface(nullptr), _scaledSurface(nullptr), _frameTime(0.0f), _isVideoVisible(false), _playFromMenu(false),
+		_videoExtraFramesLeft(0), _videoDuration(0), _playingMovie(false), _wasPlayingMovie(false), _commentaryDucking(false),
+		_movieSerial(0) {
 	memset(_curMovieFile, 0, sizeof(_curMovieFile));
 
 	_smushPlay = new SmushPlay(g_grim->isRemastered());
@@ -61,19 +64,19 @@ SputSmush::SputSmush(Res *res, StdDisplay *stdDisplay, SputRender *sputRender, S
 }
 
 SputSmush::~SputSmush() {
-	stopHdMovie();
+	freeVideoResources();
 
 	delete _smushPlay;
 	_smushPlay = nullptr;
 }
 
 int SputSmush::getMovieTime() {
-#ifdef USE_THEORADEC
-	if (_hdMovie && _hdDecoder)
-		return (int)_hdDecoder->getTime();
-#endif
+	int movieTime = _smushPlay->getMovieTime();
 
-	return _smushPlay->getMovieTime();
+	if (movieTime == 0 && _started && videoIsPlayingMovie())
+		return videoGetMovieTimeMs();
+
+	return movieTime;
 }
 
 int SputSmush::initialize(SysStruct *hs) {
@@ -147,7 +150,7 @@ int SputSmush::startup() {
 }
 
 int SputSmush::shutdown() {
-	stopHdMovie();
+	freeVideoResources();
 
 	if (_started)
 		_smushPlay->sysShutdown();
@@ -168,11 +171,36 @@ int SputSmush::periodic() {
 	if (!_started || !_playing)
 		return 1;
 
+	if (videoIsPlayingMovie()) {
+		videoUpdate(0);
+
+		if (!_abort) {
+			_wasPlayingMovie = true;
+
+			return !videoIsVisible();
+		}
+
+		_playing = 0;
+		_smushPlay->stopMovie();
+		videoStop();
+		_wasPlayingMovie = false;
+
+		return 1;
+	}
+
+	if (_wasPlayingMovie) {
+		_playing = 0;
+		_abort = 0;
+		videoUpdate(1);
+		_smushPlay->stopMovie();
+		videoStop();
+		_wasPlayingMovie = false;
+
+		return 1;
+	}
+
 	if (_paused)
 		return 0;
-
-	if (_hdMovie)
-		return periodicHd();
 
 	_smushPlay->setTranslationTable(_sputRender->getColorLookup());
 
@@ -210,27 +238,26 @@ int SputSmush::startMovie(const char *name, int looping, int x, int y) {
 		return 1;
 
 	if (_playing) {
+		_wasPlayingMovie = false;
 		_smushPlay->stopMovie();
-		stopHdMovie();
+		videoStop();
 		_playing = 0;
 	}
 
+	_smushPlay->setTranslationTable(_sputRender->getColorLookup());
+
+	_looping = looping;
+	_x = x;
+	_y = y;
+
 	// The HD movie is preferred, the classic one is the fallback
-	if (g_grim->isRemastered() && startHdMovie(name, looping)) {
-		_looping = looping;
-		_x = x;
-		_y = y;
-	} else {
+	int libMode = g_grim->getLibMode();
+
+	if (!(g_grim->isRemastered() && videoPlay(name, libMode == GrimEngine::kLibModeMenu || libMode == 0))) {
 		if (!_presentBuf) {
 			warning("SputSmush::startMovie(): the target is not set");
 			return 1;
 		}
-
-		_smushPlay->setTranslationTable(_sputRender->getColorLookup());
-
-		_looping = looping;
-		_x = x;
-		_y = y;
 
 		if (_smushPlay->startMovie(name, looping != 0 ? 0x10 : 0, 100000, x, y, _presentBuf->tex.width, _presentBuf->tex.height, 0, 1))
 			return 1;
@@ -345,37 +372,61 @@ int SputSmush::pause(int pause) {
 	else
 		_smushPlay->resumeMovie();
 
-	pauseHdMovie(pause != 0);
-
 	return 0;
 }
 
-bool SputSmush::startHdMovie(const char *name, int looping) {
-#ifdef USE_THEORADEC
-	static const int languageHint[GrimEngine::kNumLanguages] = { 0, 2, 1, 4, 3, 5 };
-	static const char *const hintCode[6] = { "eng", "spa", "ger", "ita", "fre", "por" };
+int SputSmush::getVideoDurationMs(const char *name) {
+	struct HdMovieDuration {
+		const char *name;
+		int duration;
+	};
 
-	stopHdMovie();
+	static const HdMovieDuration durations[] = {
+		{ "albinizod.snm", 4466 }, { "brunopk.snm", 115666 }, { "byebye.snm", 129533 }, { "byeruba.snm", 217266 },
+		{ "coffrock.snm", 64800 }, { "copaldie.snm", 72733 }, { "credits.snm", 523000 }, { "crushed.snm", 100333 },
+		{ "distbeav.snm", 5866 }, { "dooropen.snm", 7400 }, { "eatbird.snm", 72200 }, { "eldepot.snm", 60066 },
+		{ "escape.snm", 35800 }, { "exodus.snm", 71600 }, { "falling.snm", 23133 }, { "getshcks.snm", 38200 },
+		{ "glotdriv.snm", 3600 }, { "greenhse.snm", 98466 }, { "hecdie.snm", 14333 }, { "hecgetit.snm", 4266 },
+		{ "heloruba.snm", 50266 }, { "heltrain.snm", 64400 }, { "hostage.snm", 60266 }, { "intro.snm", 187466 },
+		{ "logos.snm", 3866 }, { "lol.snm", 102333 }, { "loladies.snm", 66733 }, { "lsahq.snm", 85466 },
+		{ "mnycutfl.snm", 13266 }, { "neonlady.snm", 3466 }, { "normarae.snm", 73933 }, { "oldjob.snm", 68000 },
+		{ "plunge.snm", 9400 }, { "poseidon.snm", 6600 }, { "repmec1c.snm", 51200 }, { "repmec3c.snm", 82333 },
+		{ "reunion.snm", 84933 }, { "shanghai.snm", 82266 }, { "stocking.snm", 6666 }, { "stump1c.snm", 35600 },
+		{ "stump3c.snm", 10000 }, { "subsaway.snm", 41933 }, { "swtchbrd.snm", 4466 }, { "swtchsuc.snm", 7800 },
+		{ "swtchuns.snm", 9333 }, { "thepearl.snm", 13800 }, { "vivamaro.snm", 126133 }, { "yr2intro.snm", 62066 }
+	};
+
+	for (uint i = 0; i < ARRAYSIZE(durations); i++) {
+		if (!strcmp(name, durations[i].name))
+			return durations[i].duration;
+	}
+
+	return -1;
+}
+
+bool SputSmush::videoPlay(const char *name, bool playFromMenu) {
+#ifdef USE_THEORADEC
+	static const int languageHint[GrimEngine::kNumLanguages - 1] = { 2, 1, 4, 3, 5 };
+	static const char *const languageCodes[6] = { "eng", "spa", "ger", "ita", "fre", "por" };
 
 	HdCanvas *canvas = g_grim->getHdCanvas();
 
 	if (!canvas || !canvas->isActive())
 		return false;
 
-	// The HD file has the same name as the classic one, with another extension
-	Common::String lowerName(name);
+	delete _videoClip;
+	_videoClip = nullptr;
 
-	lowerName.toLowercase();
+	const char *extension = strstr(name, ".snm");
 
-	size_t extensionPos = lowerName.find(".snm");
-
-	if (extensionPos == Common::String::npos)
+	if (!extension) {
+		warning("SputSmush::videoPlay(): the movie name has no .snm extension");
 		return false;
+	}
 
-	Common::String hdName(name, (uint32)extensionPos);
+	Common::String hdName(name, (uint32)(extension - name));
 
 	hdName += ".ogv";
-	hdName += name + extensionPos + 4;
 
 	Common::Path hdPath(hdName);
 
@@ -388,26 +439,39 @@ bool SputSmush::startHdMovie(const char *name, int looping) {
 		return false;
 
 	int language = g_grim->getLanguage();
+	int hint = 0;
 
-	if (language < 0 || language >= GrimEngine::kNumLanguages)
-		language = GrimEngine::kLanguageEnglish;
+	if (language >= 1 && language <= 5)
+		hint = languageHint[language - 1];
 
 	Video::TheoraDecoder *decoder = new Video::TheoraDecoder();
 
-	decoder->setSoundType(Audio::Mixer::kSFXSoundType);
-	decoder->setAudioLanguage(hintCode[languageHint[language]]);
+	// The audio of the movies follows the voice volume
+	decoder->setSoundType(Audio::Mixer::kSpeechSoundType);
+	decoder->setAudioLanguage(languageCodes, ARRAYSIZE(languageCodes), hint);
 
 	if (!decoder->loadStream(stream) || !decoder->setOutputPixelFormat(Graphics::PixelFormat::createFormatRGBA32())) {
-		warning("SputSmush::startHdMovie(): cannot play %s, using the classic movie", hdName.c_str());
+		warning("SputSmush::videoPlay(): cannot play %s, using the classic movie", hdName.c_str());
 		delete decoder;
 		return false;
 	}
 
 	decoder->start();
 
-	_hdDecoder = decoder;
-	_hdMovie = true;
-	_hdPaused = false;
+	_videoClip = decoder;
+	_frameTime = 0.0f;
+	_isVideoVisible = true;
+	_playFromMenu = playFromMenu;
+	_videoExtraFramesLeft = 0;
+	_videoDuration = getVideoDurationMs(name);
+
+	if (!_movieSurface) {
+		_movieSurface = new Graphics::Surface();
+		_movieSurface->create(decoder->getWidth(), decoder->getHeight(), Graphics::PixelFormat::createFormatRGBA32());
+		_movieSerial++;
+	}
+
+	_playingMovie = true;
 
 	return true;
 #else
@@ -415,90 +479,127 @@ bool SputSmush::startHdMovie(const char *name, int looping) {
 #endif
 }
 
-void SputSmush::stopHdMovie() {
+void SputSmush::videoStop() {
 #ifdef USE_THEORADEC
-	if (_hdScaled) {
-		_hdScaled->free();
-		delete _hdScaled;
-		_hdScaled = nullptr;
-	}
+	if (_videoClip) {
+		delete _videoClip;
+		_videoClip = nullptr;
 
-	delete _hdDecoder;
-	_hdDecoder = nullptr;
-#endif
-
-	_hdFrame = nullptr;
-	_hdMovie = false;
-	_hdPaused = false;
-}
-
-void SputSmush::pauseHdMovie(bool pause) {
-#ifdef USE_THEORADEC
-	if (!_hdMovie || !_hdDecoder || pause == _hdPaused)
-		return;
-
-	_hdDecoder->pauseVideo(pause);
-	_hdPaused = pause;
-#endif
-}
-
-int SputSmush::periodicHd() {
-#ifdef USE_THEORADEC
-	bool finished = _abort != 0;
-
-	if (!finished && _hdDecoder->endOfVideo()) {
-		if (_looping) {
-			// Open the file again, the Theora decoder cannot rewind
-			finished = !startHdMovie(_curMovieFile, _looping);
-		} else {
-			finished = true;
-		}
-	}
-
-	if (finished) {
-		StdRect frameRect;
-
-		stopHdMovie();
-		_playing = 0;
-
-		frameRect.x = 0;
-		frameRect.y = 0;
-		frameRect.width = 640;
-		frameRect.height = 480;
-		_sputRender->markAllPagesDirty(&frameRect, 0);
-
-		return 1;
-	}
-
-	if (_hdDecoder->needsUpdate()) {
-		const Graphics::Surface *frame = _hdDecoder->decodeNextFrame();
-
-		if (frame) {
-			_hdFrame = frame;
-
-			if (_hdScaled) {
-				_hdScaled->free();
-				delete _hdScaled;
-				_hdScaled = nullptr;
+		// The canvas may still read the frame of the last update, so the surface is freed later
+		if (_movieSurface) {
+			if (_releasedSurface) {
+				_releasedSurface->free();
+				delete _releasedSurface;
 			}
 
-			// The canvas needs a packed frame of the canvas height
-			if (frame->h != HdCanvas::kHeight || frame->pitch != frame->w * 4)
-				_hdScaled = frame->scale(frame->w * HdCanvas::kHeight / frame->h, HdCanvas::kHeight, true);
+			_releasedSurface = _movieSurface;
+			_movieSurface = nullptr;
 		}
 	}
-
-	queueHdFrame();
 #endif
 
-	return 0;
+	_playingMovie = false;
+}
+
+bool SputSmush::videoIsPlayingMovie() const {
+	if (_playFromMenu && !_isVideoVisible)
+		return _videoExtraFramesLeft != 0;
+
+	return _playingMovie;
+}
+
+int SputSmush::videoGetMovieTimeMs() const {
+	return (int)(_frameTime * 1000.0f);
+}
+
+void SputSmush::freeVideoResources() {
+#ifdef USE_THEORADEC
+	delete _videoClip;
+	_videoClip = nullptr;
+
+	if (_movieSurface) {
+		_movieSurface->free();
+		delete _movieSurface;
+		_movieSurface = nullptr;
+	}
+
+	if (_releasedSurface) {
+		_releasedSurface->free();
+		delete _releasedSurface;
+		_releasedSurface = nullptr;
+	}
+
+	if (_scaledSurface) {
+		_scaledSurface->free();
+		delete _scaledSurface;
+		_scaledSurface = nullptr;
+	}
+#endif
+}
+
+void SputSmush::videoUpdate(int force) {
+#ifdef USE_THEORADEC
+	if (_videoClip || _videoExtraFramesLeft || force) {
+		// The speech sound type of the decoder already applies the voice volume, so the
+		// volume of the decoder only has to bring the gain down to 5% while a commentary plays
+		float gain = _wuRegistry->getFloat("VoiceVolume", 127.0f) / 127.0f;
+		float volumeScale = 1.0f;
+
+		if (_commentaryDucking && gain > 0.05f)
+			volumeScale = 0.05f / gain;
+
+		if (_videoClip)
+			_videoClip->setVolume((byte)CLIP((int)(Audio::Mixer::kMaxChannelVolume * volumeScale + 0.5f), 0, (int)Audio::Mixer::kMaxChannelVolume));
+
+		if (_movieSurface && _videoClip) {
+			float timePosition = (float)_videoClip->getTime() / 1000.0f;
+			float elapsedMs = timePosition * 1000.0f;
+
+			if (elapsedMs >= (float)(uint32)_videoDuration) {
+				if (_isVideoVisible)
+					_videoExtraFramesLeft = 1;
+
+				_isVideoVisible = false;
+			}
+
+			if (_videoClip->endOfVideo()) {
+				_isVideoVisible = false;
+				_playingMovie = false;
+			}
+
+			// The decoder has to be read in every call, also when the frame is not shown, to feed the audio
+			if (_videoClip->needsUpdate()) {
+				const Graphics::Surface *frame = _videoClip->decodeNextFrame();
+
+				if (frame && _isVideoVisible) {
+					int rows = MIN<int>(frame->h, _movieSurface->h);
+					int rowBytes = MIN<int>(frame->w, _movieSurface->w) * 4;
+
+					for (int y = 0; y < rows; y++)
+						memcpy(_movieSurface->getBasePtr(0, y), frame->getBasePtr(0, y), rowBytes);
+
+					_movieSerial++;
+				}
+			}
+
+			if (_isVideoVisible || _videoExtraFramesLeft) {
+				if (_videoExtraFramesLeft)
+					_videoExtraFramesLeft--;
+
+				queueHdFrame();
+			} else if (_playFromMenu && force) {
+				queueHdFrame();
+			}
+
+			_frameTime = (float)_videoClip->getTime() / 1000.0f;
+		}
+	}
+#endif
 }
 
 void SputSmush::queueHdFrame() {
 #ifdef USE_THEORADEC
-	const Graphics::Surface *frame = _hdScaled ? _hdScaled : _hdFrame;
-
-	if (!frame)
+	if (!_movieSurface)
 		return;
 
 	HdCanvas *canvas = g_grim->getHdCanvas();
@@ -506,7 +607,10 @@ void SputSmush::queueHdFrame() {
 	if (!canvas)
 		return;
 
-	canvas->queueBitmap(kHdMovieLayer, (const byte *)frame->getPixels(), frame->w, frame->h, (HdCanvas::kWidth - frame->w) / 2, 0, 255);
+	// The canvas scales the frame itself and does not copy it: it is read until the frame is presented
+	const Graphics::Surface *frame = _movieSurface;
+
+	canvas->queueMovie((const byte *)frame->getPixels(), frame->w, frame->h, _movieSerial);
 #endif
 }
 

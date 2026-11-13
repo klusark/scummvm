@@ -47,7 +47,7 @@ static uint16 colorToRgb565(int color) {
 	return (uint16)(((value >> 19) & 0x1F) | (32 * (((uint16)(value >> 3) << 6) | ((value >> 10) & 0x3F))));
 }
 
-SputText::SputText(Res *res, RenderDroid *rd, NormalText *normalText, Text *text, BlastText *blastText, SputTime *sputTime, Polyglot *polyglot) :
+SputText::SputText(Res *res, RenderDroid *rd, NormalText *normalText, Text *text, BlastText *blastText, SputTime *sputTime, Polyglot *polyglot, bool isRemastered) :
 		_res(res), _rd(rd), _normalText(normalText), _text(text), _blastText(blastText), _sputTime(sputTime),
 		_polyglot(polyglot),
 		_sputRender(nullptr), _sputRoom(nullptr), _grim(nullptr),
@@ -90,7 +90,7 @@ SputText::SputText(Res *res, RenderDroid *rd, NormalText *normalText, Text *text
 	_defaultTextParams.fxColor = 0;
 	_defaultTextParams.scaleX = 0x10000;
 	_defaultTextParams.scaleY = 0x10000;
-	_defaultTextParams.flags = 5;
+	_defaultTextParams.flags = isRemastered ? 0x45 : 5;
 	_defaultTextParams.colorMap = nullptr;
 	_defaultTextParams.coords = 0;
 	_defaultTextParams.highlight = -1;
@@ -192,6 +192,38 @@ SputTextEvent *SputText::createActorText(SputActor *actor, const char *text, int
 	if (!actor || !actor->extra || !params.font) {
 		warning("SputText::createActorText(): no actor, actor extra data or font");
 		return nullptr;
+	}
+
+	if (_grim->isRemastered()) {
+		// The text is centered at (x, y), wrapped inside the middle of the screen, and grows upward from y
+		int penX = x;
+		int penY = y;
+
+		if (x == -1 && y == -1) {
+			penX = surface->width / 2;
+			penY = surface->height - 40;
+		}
+
+		clip.x = 320;
+		clip.y = 0;
+		clip.width = 1280;
+		clip.height = 1080;
+		HdText::convertRectNative(&clip, 0);
+
+		params.clip = &clip;
+		params.fgColor = actor->extra->talkColor;
+		params.bgColor = 0;
+		params.fxColor = 0;
+		params.flags |= 0x65;
+		params.x = penX;
+		params.y = penY;
+
+		SputTextEvent *hdEvent = allocEvent(&params, text);
+
+		hdEvent->actor = actor;
+		actor->flags |= 4;
+
+		return hdEvent;
 	}
 
 	clip.x = 0;
@@ -666,16 +698,21 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 	obj = lua_gettable();
 
 	if (obj && lua_isnumber(obj)) {
-		int baseLine = 0;
-
-		if (params->font)
-			baseLine = params->font->baseLine;
-		else
-			warning("SputText::getTextObjectParams(): no font");
-
 		int y = luaFtol(lua_getnumber(obj));
 
-		params->y = y + baseLine;
+		// The remastered adds the baseline of the font when the text is queued
+		if (_grim->isRemastered()) {
+			params->y = y;
+		} else {
+			int baseLine = 0;
+
+			if (params->font)
+				baseLine = params->font->baseLine;
+			else
+				warning("SputText::getTextObjectParams(): no font");
+
+			params->y = y + baseLine;
+		}
 
 		if (event)
 			event->y = y;
@@ -743,7 +780,7 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 		lua_pushobject(lua_getref(_luaTextObjAlphaRef));
 		obj = lua_gettable();
 
-		if (obj && lua_isnumber(obj))
+		if (obj && !lua_isnil(obj))
 			params->alpha = lua_getnumber(obj);
 	}
 
@@ -1066,19 +1103,10 @@ void SputText::initHdEvent(SputTextEvent *event) {
 	event->hdCache = nullptr;
 }
 
-// The canvas keeps the pixels queued in this frame, so it has to forget them before they are freed
-void SputText::dropHdBitmap(HdTextCache *cache) {
-	HdCanvas *canvas = _grim->getHdCanvas();
-
-	if (canvas && cache->pixels)
-		canvas->dropPixels(cache->pixels);
-}
-
 void SputText::invalidateHdText(SputTextEvent *event) {
 	if (!event->hdCache)
 		return;
 
-	dropHdBitmap(event->hdCache);
 	delete event->hdCache;
 	event->hdCache = nullptr;
 }
@@ -1181,14 +1209,13 @@ bool SputText::queryTextObject(SputTextEvent *event, int *x, int *y, int *width,
 	*height = 0;
 
 	HdTextCache *cache = getHdLayout(event);
+	HdCanvas *canvas = _grim->getHdCanvas();
+	HdTextInfo info;
 
-	if (!cache)
+	if (!cache || !canvas || !makeHdInfo(event, &info))
 		return false;
 
-	*x = cache->originX + cache->minX;
-	*y = cache->originY;
-	*width = cache->maxWidth;
-	*height = cache->maxHeight;
+	HdText::queryText(info, cache, canvas->getTextCanvas(), x, y, width, height);
 
 	return true;
 }
@@ -1219,17 +1246,11 @@ void SputText::luaGetFontDimensions() {
 	if (lua_isuserdata(fontObj) && lua_tag(fontObj) == kSputTagFont)
 		font = static_cast<BlastTextFont *>(_res->handleFromSerialNumber(lua_getuserdata(fontObj)));
 
-	const HdFont *hdFont = nullptr;
-	HdText *hdText = _blastText->getHdText();
+	const HdFont *hdFont = font ? font->hdFont : nullptr;
 
-	if (font)
-		hdFont = font->hdFont;
-
-	if (!hdFont && hdText)
-		hdFont = hdText->getCustomFont();
-
-	if (!font || !hdFont) {
-		warning("SputText::luaGetFontDimensions(): the font does not exist");
+	// A font without a TrueType file gives an unwritten value in the original
+	if (!hdFont) {
+		warning("SputText::luaGetFontDimensions(): the font has no TrueType file");
 		lua_pushnumber(0.0f);
 
 		return;
@@ -1245,23 +1266,16 @@ void SputText::drawHdEvent(SputTextEvent *event, int page) {
 		return;
 
 	HdTextCache *cache = getHdLayout(event);
+	HdTextInfo info;
 
-	if (!cache)
+	if (!cache || !makeHdInfo(event, &info))
 		return;
 
-	if (cache->bitmapAlpha != event->params.alpha || cache->bitmapFirstLine != event->firstLine
-			|| cache->bitmapLineCount != event->lineCount) {
-		HdTextInfo info;
+	// The canvas draws the boxes in the order of the calls, whatever the page is
+	HdTextDraw draw;
 
-		if (!makeHdInfo(event, &info))
-			return;
-
-		dropHdBitmap(cache);
-		_blastText->getHdText()->render(info, cache);
-	}
-
-	if (cache->pixels)
-		canvas->queueBitmap(page, cache->pixels, cache->bitmapWidth, cache->bitmapHeight, cache->bitmapX, cache->bitmapY, 255);
+	_blastText->getHdText()->buildDraw(info, cache, canvas->getTextCanvas(), &draw);
+	canvas->queueText(draw);
 }
 
 void SputText::updateHd(int force, int page) {
@@ -1275,7 +1289,8 @@ void SputText::updateHd(int force, int page) {
 		SputTextEvent *next = event->next;
 		bool deleteEvent = false;
 
-		// Fade in, then fade out (the last one can delete the event)
+		// Every call steps the fade and the time of every event, whatever the page is
+		// (fade in, or fade out that can delete the event)
 		if (event->params.flags & 0x400) {
 			event->params.alpha += 1.0f / 18.0f;
 
@@ -1283,9 +1298,7 @@ void SputText::updateHd(int force, int page) {
 				event->params.alpha = 1.0f;
 				event->params.flags &= ~0x400;
 			}
-		}
-
-		if (event->params.flags & 0x1800) {
+		} else if (event->params.flags & 0x1800) {
 			event->params.alpha -= 1.0f / 18.0f;
 
 			if (event->params.alpha <= 0.0f) {

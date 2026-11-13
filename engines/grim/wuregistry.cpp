@@ -23,6 +23,7 @@
 
 #include "common/config-manager.h"
 #include "common/endian.h"
+#include "common/system.h"
 #include "common/textconsole.h"
 #include "common/util.h"
 
@@ -369,12 +370,15 @@ int WuRegistry::startup(const char *version) {
 
 	ConfMan.set("joystick", "false");
 
-	char storedVersion[128];
+	// The remastered does not keep a version
+	if (!g_grim->isRemastered()) {
+		char storedVersion[128];
 
-	if (getStr("Version", storedVersion, sizeof(storedVersion), nullptr) && scumm_stricmp(storedVersion, version))
-		warning("WuRegistry::startup(): the stored version '%s' differs from '%s', the stored values are kept", storedVersion, version);
+		if (getStr("Version", storedVersion, sizeof(storedVersion), nullptr) && scumm_stricmp(storedVersion, version))
+			warning("WuRegistry::startup(): the stored version '%s' differs from '%s', the stored values are kept", storedVersion, version);
 
-	saveStr("Version", version);
+		saveStr("Version", version);
+	}
 
 	return loadIndex();
 }
@@ -404,7 +408,9 @@ void WuRegistry::shutdown() {
 	freeIndex();
 	_started = 0;
 
-	ConfMan.flushToDisk();
+	// The remastered writes the registry only when the scripts ask for it
+	if (!g_grim->isRemastered())
+		ConfMan.flushToDisk();
 }
 
 void WuRegistry::freeIndex() {
@@ -729,6 +735,38 @@ uint WuRegistry::queryType(const char *valueName) {
 void WuRegistry::saveRegistry() {
 	_unlocks.saveFile();
 	ConfMan.flushToDisk();
+}
+
+// The folders of the saves have no way to tell when a file was written, so the time is kept here
+// as the date of the C locale followed by hours and minutes
+static Common::String getSlotTimeKey(int slot) {
+	return Common::String::format("save_time_%d", slot);
+}
+
+void WuRegistry::saveSlotTime(int slot) {
+	TimeDate now;
+
+	g_system->getTimeAndDate(now);
+	ConfMan.set(getSlotTimeKey(slot), Common::String::format("%02d/%02d/%02d %02d:%02d", now.tm_mon + 1, now.tm_mday,
+			now.tm_year % 100, now.tm_hour, now.tm_min));
+}
+
+bool WuRegistry::getSlotTime(int slot, Common::String *time) {
+	Common::String key = getSlotTimeKey(slot);
+
+	if (!ConfMan.hasKey(key))
+		return false;
+
+	*time = ConfMan.get(key);
+
+	return true;
+}
+
+void WuRegistry::removeSlotTime(int slot) {
+	Common::String key = getSlotTimeKey(slot);
+
+	if (ConfMan.hasKey(key))
+		ConfMan.removeKey(key, ConfMan.getActiveDomainName());
 }
 
 void WuRegistry::unlockCutscene(int index) {

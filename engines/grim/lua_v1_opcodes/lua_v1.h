@@ -87,6 +87,10 @@ public:
 	virtual int doCharacterCallback(int character);
 	virtual void saveGameCallback();
 
+	// The remastered: tells the scripts how a key press for the key mapping ended
+	void notifyKeyMapped(int result);
+	void resetLastInputMode() { _lastInputMode = 0; }
+
 protected:
 	// Opcodes
 	DECLARE_LUA_OPCODE(new_dofile);
@@ -373,6 +377,8 @@ protected:
 	DECLARE_LUA_OPCODE(SetLanguage);
 	DECLARE_LUA_OPCODE(GetLanguage);
 	DECLARE_LUA_OPCODE(GetLanguageCount);
+	DECLARE_LUA_OPCODE(LoadRemappedKeys);
+	DECLARE_LUA_OPCODE(SaveRemappedKeys);
 
 	// Mouse, hotspots, path finder and dialog log of the remastered, see lua_v1_mouse.cpp
 	DECLARE_LUA_OPCODE(WalkActorToMouseTarget);
@@ -457,9 +463,16 @@ protected:
 	DECLARE_LUA_OPCODE(GetKeyLength);
 	DECLARE_LUA_OPCODE(GetSmushLength);
 
+	// The remastered: the default handlers of the system table, two functions that do nothing
+	DECLARE_LUA_OPCODE(DefaultCamChangeHandler);
+	DECLARE_LUA_OPCODE(DefaultControlHandler);
+
 protected:
 	void registerControls();
 	bool getSystemHandler(const char *name, bool allowTable, lua_Object *funcPointer, lua_Object *self);
+	int controlCallbackRemastered(float frameTime);
+	void changeInputMode(int mode, lua_Object func);
+	bool getSaveSlotTime(int slot, Common::String *time);
 
 private:
 	enum {
@@ -492,7 +505,9 @@ private:
 	int _nextImageHandle;
 	int _nextObjectStateHandle;
 	float _resolutionScaling;
-	float _advancedLighting;
+	uint32 _advancedLighting;
+	int _controlEventCount;
+	int _lastInputMode;
 	Common::Array<ResRef *> _lockedFontRefs;
 };
 

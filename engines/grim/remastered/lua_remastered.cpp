@@ -23,10 +23,12 @@
 #include "common/util.h"
 
 #include "engines/grim/grim.h"
+#include "engines/grim/remastered/commentary.h"
 #include "engines/grim/remastered/hdcanvas.h"
 #include "engines/grim/remastered/lua_remastered.h"
 #include "engines/grim/remastered/overlay.h"
 #include "engines/grim/lua/lauxlib.h"
+#include "engines/grim/stdcontrol.h"
 
 namespace Grim {
 
@@ -88,16 +90,16 @@ static struct luaL_reg remasteredMainOpcodes[] = {
 	{ "SetActorReflection", LUA_OPCODE(Lua_V1, SetActorReflection) },
 	{ "SetActorOffsetYaw", LUA_OPCODE(Lua_V1, SetActorOffsetYaw) },
 	{ "PutActorAtInterest", LUA_OPCODE(Lua_V1, PutActorAtInterest) },
-	{ "PutActorAtOrigin", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "PutActorAtOrigin", LUA_OPCODE(Lua_Remastered, NoOpPutActorAtOrigin) },
 	{ "PutActorAt", LUA_OPCODE(Lua_V1, PutActorAt) },
 	{ "PutActorInSet", LUA_OPCODE(Lua_V1, PutActorInSet) },
-	{ "GetClippedPos", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "GetClippedPos", LUA_OPCODE(Lua_Remastered, NoOpGetClippedPos) },
 	{ "WalkActorVector", LUA_OPCODE(Lua_V1, WalkActorVector) },
 	{ "WalkActorForward", LUA_OPCODE(Lua_V1, WalkActorForward) },
-	{ "DriveActorTo", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "DriveActorTo", LUA_OPCODE(Lua_Remastered, NoOpDriveActorTo) },
 	{ "WalkActorTo", LUA_OPCODE(Lua_V1, WalkActorTo) },
 	{ "WalkActorToAvoiding", LUA_OPCODE(Lua_V1, WalkActorToAvoiding) },
-	{ "WalkActorToInterest", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "WalkActorToInterest", LUA_OPCODE(Lua_Remastered, NoOpWalkActorToInterest) },
 	{ "WalkActorToMouseTarget", LUA_OPCODE(Lua_V1, WalkActorToMouseTarget) },
 	{ "ActorLookAt", LUA_OPCODE(Lua_V1, ActorLookAt) },
 	{ "IsActorLooking", LUA_OPCODE(Lua_V1, IsActorLooking) },
@@ -141,11 +143,11 @@ static struct luaL_reg remasteredMainOpcodes[] = {
 	{ "FunctionName", LUA_OPCODE(Lua_V1, FunctionName) },
 	{ "EnableDebugKeys", LUA_OPCODE(Lua_V1, EnableDebugKeys) },
 	{ "LockFont", LUA_OPCODE(Lua_V1, LockFont) },
-	{ "UnLockFont", LUA_OPCODE(LuaBase, dummyHandler) },
-	{ "LockSound", LUA_OPCODE(LuaBase, dummyHandler) },
-	{ "UnlockSound", LUA_OPCODE(LuaBase, dummyHandler) },
-	{ "LockCostume", LUA_OPCODE(LuaBase, dummyHandler) },
-	{ "UnlockCostume", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "UnLockFont", LUA_OPCODE(Lua_Remastered, NoOpUnLockFont) },
+	{ "LockSound", LUA_OPCODE(Lua_Remastered, NoOpLockSound) },
+	{ "UnlockSound", LUA_OPCODE(Lua_Remastered, NoOpUnlockSound) },
+	{ "LockCostume", LUA_OPCODE(Lua_Remastered, NoOpLockCostume) },
+	{ "UnlockCostume", LUA_OPCODE(Lua_Remastered, NoOpUnlockCostume) },
 	{ "EnableControl", LUA_OPCODE(Lua_V1, EnableControl) },
 	{ "DisableControl", LUA_OPCODE(Lua_V1, DisableControl) },
 	{ "GetControlState", LUA_OPCODE(Lua_V1, GetControlState) },
@@ -166,10 +168,10 @@ static struct luaL_reg remasteredMainOpcodes[] = {
 	{ "StopMovie", LUA_OPCODE(Lua_V1, StopMovie) },
 	{ "PauseMovie", LUA_OPCODE(Lua_V1, PauseMovie) },
 	{ "IsMoviePlaying", LUA_OPCODE(Lua_V1, IsMoviePlaying) },
-	{ "PlaySound", LUA_OPCODE(LuaBase, dummyHandler) },
-	{ "PlaySoundAt", LUA_OPCODE(LuaBase, dummyHandler) },
-	{ "PlaySoundAttached", LUA_OPCODE(LuaBase, dummyHandler) },
-	{ "IsSoundPlaying", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "PlaySound", LUA_OPCODE(Lua_Remastered, NoOpPlaySound) },
+	{ "PlaySoundAt", LUA_OPCODE(Lua_Remastered, NoOpPlaySoundAt) },
+	{ "PlaySoundAttached", LUA_OPCODE(Lua_Remastered, NoOpPlaySoundAttached) },
+	{ "IsSoundPlaying", LUA_OPCODE(Lua_Remastered, NoOpIsSoundPlaying) },
 	{ "SetSoundPosition", LUA_OPCODE(Lua_V1, SetSoundPosition) },
 	{ "FindSaveGames", LUA_OPCODE(Lua_Remastered, FindSaveGames) },
 	{ "InitiateFindSaveGames", LUA_OPCODE(Lua_Remastered, InitiateFindSaveGames) },
@@ -183,7 +185,7 @@ static struct luaL_reg remasteredMainOpcodes[] = {
 	{ "ReadRegistryValue", LUA_OPCODE(Lua_V1, ReadRegistryValue) },
 	{ "ReadRegistryIntValue", LUA_OPCODE(Lua_V1, ReadRegistryIntValue) },
 	{ "SaveRegistryToDisk", LUA_OPCODE(Lua_V1, SaveRegistryToDisk) },
-	{ "GetSectorVertices", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "GetSectorVertices", LUA_OPCODE(Lua_Remastered, NoOpGetSectorVertices) },
 	{ "GetSectorOppositeEdge", LUA_OPCODE(Lua_V1, GetSectorOppositeEdge) },
 	{ "IsSectorActive", LUA_OPCODE(Lua_V1, IsSectorActive) },
 	{ "MakeSectorActive", LUA_OPCODE(Lua_V1, MakeSectorActive) },
@@ -264,8 +266,8 @@ static struct luaL_reg remasteredMainOpcodes[] = {
 	{ "ImSetVoiceEffect", LUA_OPCODE(Lua_V1, ImSetVoiceEffect) }, // same function as vfx
 	{ "ImGetMemoryFootprint", LUA_OPCODE(Lua_V1, ImGetMemoryFootprint) },
 	{ "ImGetSoundCacheSize", LUA_OPCODE(Lua_V1, ImGetSoundCacheSize) },
-	{ "LoadBundle", LUA_OPCODE(LuaBase, dummyHandler) },
-	{ "UnloadBundle", LUA_OPCODE(LuaBase, dummyHandler) },
+	{ "LoadBundle", LUA_OPCODE(Lua_Remastered, NoOpLoadBundle) },
+	{ "UnloadBundle", LUA_OPCODE(Lua_Remastered, NoOpUnloadBundle) },
 	{ "SetGamma", LUA_OPCODE(Lua_V1, SetGamma) },
 	{ "SetResolutionScaling", LUA_OPCODE(Lua_V1, SetResolutionScaling) },
 	{ "SetAdvancedLighting", LUA_OPCODE(Lua_V1, SetAdvancedLighting) },
@@ -355,14 +357,14 @@ static struct luaL_reg remasteredMainOpcodes[] = {
 	{ "SetLanguage", LUA_OPCODE(Lua_V1, SetLanguage) },
 	{ "GetLanguage", LUA_OPCODE(Lua_V1, GetLanguage) },
 	{ "GetLanguageCount", LUA_OPCODE(Lua_V1, GetLanguageCount) },
-	{ "Is3DHardwareEnabled", LUA_OPCODE(Lua_V1, Is3DHardwareEnabled) },
+	{ "Is3DHardwareEnabled", LUA_OPCODE(Lua_Remastered, Is3DHardwareEnabled) },
 	{ "SetMouseSpeedScale", LUA_OPCODE(Lua_Remastered, SetMouseSpeedScale) },
 	{ "SetKeyMappingMode", LUA_OPCODE(Lua_Remastered, SetKeyMappingMode) },
 	{ "ResetKeyMappingToDefault", LUA_OPCODE(Lua_Remastered, ResetKeyMappingToDefault) },
 	{ "GetRemappedKeyName", LUA_OPCODE(Lua_Remastered, GetRemappedKeyName) },
 	{ "GetRemappedKeyHint", LUA_OPCODE(Lua_Remastered, GetRemappedKeyHint) },
-	{ "LoadRemappedKeys", LUA_OPCODE(Lua_Remastered, LoadRemappedKeys) },
-	{ "SaveRemappedKeys", LUA_OPCODE(Lua_Remastered, SaveRemappedKeys) }
+	{ "LoadRemappedKeys", LUA_OPCODE(Lua_V1, LoadRemappedKeys) },
+	{ "SaveRemappedKeys", LUA_OPCODE(Lua_V1, SaveRemappedKeys) }
 };
 
 static struct luaL_reg remasteredCommentaryOpcodes[] = {
@@ -406,8 +408,21 @@ static struct luaL_reg remasteredMouseOpcodes[] = {
 	{ "CursorMovieEnabled", LUA_OPCODE(Lua_V1, CursorMovieEnabled) }
 };
 
+// The functions that are only recognized by their number: the two fallbacks and the default
+// handlers of the system table, which are two different functions
+static struct luaL_reg remasteredExtraOpcodes[] = {
+	{ "  concatfallback", LUA_OPCODE(LuaBase, concatFallback) },
+	{ "  typeoverride", LUA_OPCODE(LuaBase, typeOverride) },
+	{ "  dfltcamera", LUA_OPCODE(Lua_V1, DefaultCamChangeHandler) },
+	{ "  dfltcontrol", LUA_OPCODE(Lua_V1, DefaultControlHandler) }
+};
+
 Lua_Remastered::Lua_Remastered() : Lua_V1(false) {
 	lua_FuncIDsSetRemastered(true);
+}
+
+void Lua_Remastered::recognizeOpcodes() {
+	luaL_addlibtolist(remasteredExtraOpcodes, ARRAYSIZE(remasteredExtraOpcodes));
 }
 
 void Lua_Remastered::registerMainOpcodes() {
@@ -429,6 +444,10 @@ void Lua_Remastered::registerPrimitiveOpcodes() {
 void Lua_Remastered::registerHardwareOpcodes() {
 }
 
+void Lua_Remastered::Is3DHardwareEnabled() {
+	lua_pushnumber(1.0f);
+}
+
 void Lua_Remastered::reportStub(const char *opcode, const char *module) {
 	for (uint i = 0; i < _reportedStubs.size(); i++) {
 		if (_reportedStubs[i] == opcode)
@@ -447,7 +466,9 @@ void Lua_Remastered::Load() {
 	if (!lua_isnumber(slotObj))
 		return;
 
-	g_grim->requestRemasteredLoad(luaFtol(lua_getnumber(slotObj)), !lua_isnil(lastObj));
+	bool loadLast = !lua_isnil(lastObj) && luaFtol(lua_getnumber(lastObj)) != 0;
+
+	g_grim->requestRemasteredLoad(luaFtol(lua_getnumber(slotObj)), loadLast);
 }
 
 // Save(slot, puzzles, set, title): the puzzles are one character each, '1' when solved
@@ -464,8 +485,8 @@ void Lua_Remastered::Save() {
 			lua_getstring(titleObj));
 }
 
+// A debug aid of the Lua library that no script calls
 void Lua_Remastered::PrintStack() {
-	reportStub("PrintStack", "stack printout");
 }
 
 void Lua_Remastered::New() {
@@ -486,8 +507,8 @@ void Lua_Remastered::GetSaveStatus() {
 	lua_pushnumber((float)g_grim->getRemasteredSaveStatus());
 }
 
-// The list is a table with an entry from 0 for each save. The date is left out because the
-// folders have no way to tell it.
+// The list is a table with an entry from 0 for each save. The date of a save is there when it
+// is known.
 void Lua_Remastered::FindSaveGames() {
 	if (_foundSaves.empty()) {
 		lua_pushnil();
@@ -498,7 +519,14 @@ void Lua_Remastered::FindSaveGames() {
 
 	for (uint i = 0; i < _foundSaves.size(); i++) {
 		const SaveStore::SlotInfo &info = _foundSaves[i];
+
+		lua_pushobject(list);
+		lua_pushnumber((float)i);
+
 		lua_Object entry = lua_createtable();
+
+		lua_pushobject(entry);
+		lua_settable();
 
 		lua_pushobject(entry);
 		lua_pushstring("slot");
@@ -510,6 +538,15 @@ void Lua_Remastered::FindSaveGames() {
 		lua_pushstring(info.title.c_str());
 		lua_settable();
 
+		Common::String timeDate;
+
+		if (getSaveSlotTime(info.slot, &timeDate) && !timeDate.empty()) {
+			lua_pushobject(entry);
+			lua_pushstring("timeDateString");
+			lua_pushstring(timeDate.c_str());
+			lua_settable();
+		}
+
 		lua_pushobject(entry);
 		lua_pushstring("mural_info");
 		lua_pushstring(info.mural.c_str());
@@ -518,11 +555,6 @@ void Lua_Remastered::FindSaveGames() {
 		lua_pushobject(entry);
 		lua_pushstring("setIndex");
 		lua_pushnumber((float)info.setIndex);
-		lua_settable();
-
-		lua_pushobject(list);
-		lua_pushnumber((float)i);
-		lua_pushobject(entry);
 		lua_settable();
 	}
 
@@ -539,34 +571,113 @@ void Lua_Remastered::GetFindSaveGameStatus() {
 	lua_pushnumber((float)_findSaveGamesStatus);
 }
 
+// The original works out a scale for the mouse speed that nothing reads
 void Lua_Remastered::SetMouseSpeedScale() {
-	reportStub("SetMouseSpeedScale", "input module");
 }
 
+// The next key pressed is taken for the slot, and NotifyKeyMapped tells the scripts about it
 void Lua_Remastered::SetKeyMappingMode() {
-	reportStub("SetKeyMappingMode", "key remapping");
+	int slot = luaFtol(lua_getnumber(lua_getparam(1)));
+
+	g_grim->getStdControl()->setKeyMappingMode(slot);
 }
 
 void Lua_Remastered::ResetKeyMappingToDefault() {
-	reportStub("ResetKeyMappingToDefault", "key remapping");
+	g_grim->getStdControl()->resetKeyMappingToDefault();
 }
 
 void Lua_Remastered::GetRemappedKeyName() {
-	reportStub("GetRemappedKeyName", "key remapping");
-	lua_pushstring("?");
+	int slot = luaFtol(lua_getnumber(lua_getparam(1)));
+
+	if (slot < 0 || slot >= StdControl::kNumRemappedKeys) {
+		warning("Lua_Remastered::GetRemappedKeyName(): slot %d out of range", slot);
+		lua_pushstring("");
+		return;
+	}
+
+	lua_pushstring(StdControl::getSdlKeyName(g_grim->getStdControl()->getRemappedKey(slot)).c_str());
 }
 
+// Answers the picture of the key and the text for it. Keys without a picture get the empty one
+// and their name as the text.
 void Lua_Remastered::GetRemappedKeyHint() {
-	reportStub("GetRemappedKeyHint", "key remapping");
-	lua_pushstring("key_empty.png");
+	int slot = luaFtol(lua_getnumber(lua_getparam(1)));
+
+	if (slot < 0 || slot >= StdControl::kNumRemappedKeys) {
+		warning("Lua_Remastered::GetRemappedKeyHint(): slot %d out of range", slot);
+		lua_pushstring("key_empty.png");
+		lua_pushstring("");
+		return;
+	}
+
+	int sdlKey = g_grim->getStdControl()->getRemappedKey(slot);
+	const char *glyphFile = nullptr;
+	const char *glyphText = nullptr;
+
+	if (StdControl::getKeyGlyph(sdlKey, &glyphFile, &glyphText)) {
+		lua_pushstring(glyphFile);
+
+		if (glyphText)
+			lua_pushstring(glyphText);
+		else
+			lua_pushnil();
+	} else {
+		lua_pushstring("key_empty.png");
+		lua_pushstring(StdControl::getSdlKeyName(sdlKey).c_str());
+	}
 }
 
-void Lua_Remastered::LoadRemappedKeys() {
-	reportStub("LoadRemappedKeys", "key remapping");
+void Lua_Remastered::NoOpPutActorAtOrigin() {
 }
 
-void Lua_Remastered::SaveRemappedKeys() {
-	reportStub("SaveRemappedKeys", "key remapping");
+void Lua_Remastered::NoOpGetClippedPos() {
+}
+
+void Lua_Remastered::NoOpDriveActorTo() {
+}
+
+void Lua_Remastered::NoOpWalkActorToInterest() {
+}
+
+void Lua_Remastered::NoOpUnLockFont() {
+}
+
+void Lua_Remastered::NoOpLockSound() {
+}
+
+void Lua_Remastered::NoOpUnlockSound() {
+}
+
+void Lua_Remastered::NoOpLockCostume() {
+}
+
+void Lua_Remastered::NoOpUnlockCostume() {
+}
+
+void Lua_Remastered::NoOpPlaySound() {
+}
+
+void Lua_Remastered::NoOpPlaySoundAt() {
+}
+
+void Lua_Remastered::NoOpPlaySoundAttached() {
+}
+
+void Lua_Remastered::NoOpIsSoundPlaying() {
+}
+
+void Lua_Remastered::NoOpGetSectorVertices() {
+}
+
+void Lua_Remastered::NoOpLoadBundle() {
+}
+
+void Lua_Remastered::NoOpUnloadBundle() {
+}
+
+// The remastered tells the scripts about the device in use, see Lua_V1::controlCallbackRemastered
+int Lua_Remastered::controlCallback(float frameTime) {
+	return controlCallbackRemastered(frameTime);
 }
 
 // Answers the handle of the overlay, or -1 when the name is not a string or there is no room for it
@@ -603,7 +714,7 @@ void Lua_Remastered::OverlayCreate() {
 
 		lua_Object clearObj = lua_getfield(propsObj, "clear_buffer");
 
-		if (lua_isnumber(clearObj) && luaFtol(lua_getnumber(clearObj)) != 0)
+		if (lua_isnumber(clearObj) && lua_getnumber(clearObj) != 0.0f)
 			props.clearBuffer = true;
 
 		lua_Object mirrorObj = lua_getfield(propsObj, "mirrormode");
@@ -632,9 +743,6 @@ void Lua_Remastered::OverlayMove() {
 	lua_Object xObj = lua_getparam(2);
 	lua_Object yObj = lua_getparam(3);
 
-	if (!lua_isnumber(handleObj) || !lua_isnumber(xObj) || !lua_isnumber(yObj))
-		return;
-
 	g_grim->getHdCanvas()->getOverlays()->move(luaFtol(lua_getnumber(handleObj)), luaFtol(lua_getnumber(xObj)),
 			luaFtol(lua_getnumber(yObj)));
 }
@@ -643,16 +751,13 @@ void Lua_Remastered::OverlaySetLayer() {
 	lua_Object handleObj = lua_getparam(1);
 	lua_Object layerObj = lua_getparam(2);
 
-	if (!lua_isnumber(handleObj) || !lua_isnumber(layerObj))
-		return;
-
 	g_grim->getHdCanvas()->getOverlays()->setLayer(luaFtol(lua_getnumber(handleObj)), luaFtol(lua_getnumber(layerObj)));
 }
 
 void Lua_Remastered::OverlayDestroy() {
 	lua_Object handleObj = lua_getparam(1);
 
-	if (!lua_isnumber(handleObj))
+	if (lua_isnil(handleObj))
 		return;
 
 	g_grim->getHdCanvas()->getOverlays()->destroy(luaFtol(lua_getnumber(handleObj)));
@@ -664,8 +769,7 @@ void Lua_Remastered::OverlayDimensions() {
 	int width = 0;
 	int height = 0;
 
-	if (lua_isnumber(handleObj))
-		g_grim->getHdCanvas()->getOverlays()->getDimensions(luaFtol(lua_getnumber(handleObj)), &width, &height);
+	g_grim->getHdCanvas()->getOverlays()->getDimensions(luaFtol(lua_getnumber(handleObj)), &width, &height);
 
 	lua_pushnumber((float)width);
 	lua_pushnumber((float)height);
@@ -680,13 +784,8 @@ void Lua_Remastered::OverlayFade() {
 	lua_Object typeObj = lua_getparam(2);
 	lua_Object valueObj = lua_getparam(3);
 
-	if (!lua_isnumber(handleObj) || !lua_isnumber(typeObj))
-		return;
-
-	bool hasValue = lua_isnumber(valueObj) != 0;
-	float value = hasValue ? lua_getnumber(valueObj) : 0.0f;
-
-	g_grim->getHdCanvas()->getOverlays()->fade(luaFtol(lua_getnumber(handleObj)), luaFtol(lua_getnumber(typeObj)), hasValue, value);
+	g_grim->getHdCanvas()->getOverlays()->fade(luaFtol(lua_getnumber(handleObj)), luaFtol(lua_getnumber(typeObj)), true,
+			lua_getnumber(valueObj));
 }
 
 // The overlays and the text use the canvas of the remastered whatever the output is
@@ -707,42 +806,60 @@ void Lua_Remastered::OverlayShowLoadSpinner() {
 	int x = lua_isnumber(xObj) ? luaFtol(lua_getnumber(xObj)) : 0;
 	int y = lua_isnumber(yObj) ? luaFtol(lua_getnumber(yObj)) : 0;
 
-	g_grim->getHdCanvas()->getOverlays()->showLoadSpinner(!lua_isnil(showObj), x, y);
+	g_grim->getHdCanvas()->getOverlays()->showLoadSpinner(luaFtol(lua_getnumber(showObj)) != 0, x, y);
 }
 
-// The widescreen is never stretched, so there is nothing to correct
+// 1 normally, 0.75 when the widescreen option stretches the 4:3 area
 void Lua_Remastered::WidescreenCorrectionFactor() {
-	lua_pushnumber(1.0f);
+	lua_pushnumber(g_grim->getHdCanvas()->getWidescreenCorrection());
 }
 
+// The name of the commentary of the room, an unknown one clears it
 void Lua_Remastered::SetCommentary() {
-	reportStub("SetCommentary", "commentary module");
+	lua_Object nameObj = lua_getparam(1);
+
+	if (!lua_isstring(nameObj))
+		return;
+
+	g_grim->getCommentary()->setCommentary(lua_getstring(nameObj));
 }
 
 void Lua_Remastered::ClearCommentary() {
-	reportStub("ClearCommentary", "commentary module");
+	g_grim->getCommentary()->clearCommentary();
 }
 
+// Starts the commentary that is set, or stops the one that plays
 void Lua_Remastered::PlayCurrentCommentary() {
-	reportStub("PlayCurrentCommentary", "commentary module");
+	g_grim->getCommentary()->playCurrentCommentary();
 }
 
+// Only turning it off has an effect here, the option itself is a registry value
 void Lua_Remastered::EnableCommentary() {
-	reportStub("EnableCommentary", "commentary module");
+	lua_Object enableObj = lua_getparam(1);
+
+	if (lua_isnumber(enableObj) && luaFtol(lua_getnumber(enableObj)) == 0)
+		g_grim->getCommentary()->stopImmediately();
 }
 
 void Lua_Remastered::StopCommentaryImmediately() {
-	reportStub("StopCommentaryImmediately", "commentary module");
+	g_grim->getCommentary()->stopImmediately();
 }
 
+// Answers 1 for a commentary that was started before, nil for the others and for unknown names
 void Lua_Remastered::HasHeardCommentary() {
-	reportStub("HasHeardCommentary", "commentary module");
-	lua_pushnil();
+	lua_Object nameObj = lua_getparam(1);
+
+	if (lua_isstring(nameObj) && g_grim->getCommentary()->hasHeardCommentary(lua_getstring(nameObj)))
+		lua_pushnumber(1.0f);
+	else
+		lua_pushnil();
 }
 
 void Lua_Remastered::IsPlayingCommentary() {
-	reportStub("IsPlayingCommentary", "commentary module");
-	lua_pushnil();
+	if (g_grim->getCommentary()->isPlaying())
+		lua_pushnumber(1.0f);
+	else
+		lua_pushnil();
 }
 
 } // end of namespace Grim

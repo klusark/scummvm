@@ -64,6 +64,11 @@ public:
 	uint queryType(const char *valueName);
 	void saveRegistry();
 
+	// The remastered: when a save slot was written, as the list of saves shows it
+	void saveSlotTime(int slot);
+	bool getSlotTime(int slot, Common::String *time);
+	void removeSlotTime(int slot);
+
 	void unlockCutscene(int index);
 	bool isCutsceneUnlocked(int index);
 	void unlockConcept(int index);

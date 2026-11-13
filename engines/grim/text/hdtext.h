@@ -92,10 +92,10 @@ struct HdTextQuad {
 struct HdTextRow {
 	int firstQuad;
 	int numQuads;
-	int x;
-	int y;
-	int width;
-	int height;
+	float x;
+	float y;
+	float width;
+	float height;
 };
 
 // What the layout needs to know about a text object (all in canvas pixels)
@@ -113,32 +113,40 @@ struct HdTextInfo {
 	int lineCount;
 };
 
-// Layout and bitmap of one text object, kept until the object changes
+// Layout of one text object, kept until the object changes. The last four fields are
+// coordinates, not sizes: the right and bottom edges of the unaligned text, and the
+// top left corner of the aligned one.
 class HdTextCache {
 public:
 	HdTextCache();
-	~HdTextCache();
-
-	void freeBitmap();
 
 	Common::Array<HdTextQuad> quads;
 	Common::Array<HdTextRow> rows;
 	float pixelSize;
-	int originX;
-	int originY;
-	int minX;
-	int minY;
-	int maxWidth;
-	int maxHeight;
+	float minX;
+	float minY;
+	float maxRight;
+	float maxBottom;
+};
 
-	byte *pixels;
-	int bitmapWidth;
-	int bitmapHeight;
-	int bitmapX;
-	int bitmapY;
-	float bitmapAlpha;
-	int bitmapFirstLine;
-	int bitmapLineCount;
+// The state of the text canvas of the renderer
+struct HdTextCanvas {
+	int width;
+	bool boxingHD;
+	bool stretched;
+};
+
+// What the canvas draws for one text object: the boxes in order and the constants of the text shader
+struct HdTextDraw {
+	HdTextDraw();
+
+	Common::Array<HdTextQuad> quads;
+	float originX;
+	float originY;
+	float textRed;
+	float textGreen;
+	float textBlue;
+	float alpha;
 };
 
 class HdText {
@@ -156,8 +164,10 @@ public:
 	const HdFont *getCustomFont();
 
 	void layout(const HdTextInfo &info, HdTextCache *cache);
-	void render(const HdTextInfo &info, HdTextCache *cache);
+	void buildDraw(const HdTextInfo &info, const HdTextCache *cache, const HdTextCanvas &canvas, HdTextDraw *draw) const;
 
+	static void queryText(const HdTextInfo &info, const HdTextCache *cache, const HdTextCanvas &canvas, int *x, int *y,
+			int *width, int *height);
 	static int getFontHeight(const HdFont *font);
 	static int getTextPage(int flags);
 
@@ -174,7 +184,6 @@ private:
 	void measure(HdTextCache *cache) const;
 	void align(HdTextCache *cache, float alignX, float alignY) const;
 	static bool isWordCharacter(int c);
-	static float coverage(const HdFont::Glyph *glyph, int x, int y);
 
 	FT_LibraryRec_ *_library;
 	Common::Array<HdFont *> _fonts;

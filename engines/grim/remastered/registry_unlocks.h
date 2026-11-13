@@ -48,7 +48,7 @@ public:
 	// Merges the unlocks of a registry file of the original game
 	bool importRegistrySav(Common::SeekableReadStream *stream);
 
-	// Writes registry.sav if something changed since it was read
+	// Writes registry.sav, also when nothing changed
 	void saveFile();
 
 private:
@@ -71,7 +71,6 @@ private:
 	static bool testBit(const byte *bits, uint slots, int index);
 
 	bool _loaded;
-	bool _dirty;
 	bool _entriesKept;
 	byte _entries[kEntriesBytes];
 	byte _cutsceneBits[kCutsceneBytes];

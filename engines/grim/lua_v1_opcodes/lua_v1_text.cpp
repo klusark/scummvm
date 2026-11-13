@@ -191,22 +191,21 @@ void Lua_V1::GetTextObjectDimensions() {
 	if (g_grim->isRemastered()) {
 		// The size and the position come from the HD layout, in the units of the coordinates asked
 		lua_Object modeObj = lua_getparam(2);
-		int mode = 0;
+		int mode = luaFtol(lua_getnumber(modeObj));
 		int x = 0;
 		int y = 0;
 		int width = 0;
 		int height = 0;
 
-		if (lua_isnumber(modeObj))
-			mode = luaFtol(lua_getnumber(modeObj));
+		// Anything else than a text object leaves the stack as it is
+		if (!lua_isuserdata(textObj) || lua_tag(textObj) != MKTAG('T', 'X', 'E', 'T'))
+			return;
 
-		if (lua_isuserdata(textObj) && lua_tag(textObj) == MKTAG('T', 'X', 'E', 'T')) {
-			SputTextEvent *event = getTextEvent(textObj);
+		SputTextEvent *event = getTextEvent(textObj);
 
-			if (event && event->text[0] && g_grim->_sputText->queryTextObject(event, &x, &y, &width, &height)) {
-				HdText::convertCoordsNative(&x, &y, mode, false);
-				HdText::convertCoordsNative(&width, &height, mode, true);
-			}
+		if (event && event->text[0] && g_grim->_sputText->queryTextObject(event, &x, &y, &width, &height)) {
+			HdText::convertCoordsNative(&x, &y, mode, false);
+			HdText::convertCoordsNative(&width, &height, mode, true);
 		}
 
 		lua_pushnumber((float)width);
@@ -312,6 +311,10 @@ void Lua_V1::BlastText() {
 	const char *msgId = lua_getstring(textObj);
 	bool remastered = g_grim->isRemastered();
 
+	// The remastered reports the call as unsupported and still draws the text once
+	if (remastered)
+		warning("BlastText is not supported.");
+
 	// The remastered draws the text on the canvas, not on the buffer of the scene
 	if (!remastered)
 		g_grim->_stdDisplay->vBufferLock(g_grim->_sputRender->drawBuffer());
@@ -344,16 +347,17 @@ void Lua_V1::BlastText() {
 
 	sputText->drawTextEvent(event, 0);
 
-	if (remastered) {
-		sputText->queueBlastEvent(event);
-		return;
-	}
+	if (!remastered)
+		g_grim->_stdDisplay->vBufferUnlock(g_grim->_sputRender->drawBuffer());
 
-	g_grim->_stdDisplay->vBufferUnlock(g_grim->_sputRender->drawBuffer());
 	sputText->killEvent(event);
 }
 
 void Lua_V1::SetOffscreenTextPos() {
+	// The remastered stores the position but nothing reads it
+	if (g_grim->isRemastered())
+		return;
+
 	lua_Object xObj = lua_getparam(1);
 	lua_Object yObj = lua_getparam(2);
 	SputText *sputText = g_grim->_sputText;

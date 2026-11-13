@@ -194,8 +194,10 @@ void Lua_V1::MakeSectorActive() {
 	else
 		plane = g_grim->_walkSystem->planeNumbered(luaFtol(lua_getnumber(sectorObj)));
 
-	if (plane)
+	if (plane) {
 		plane->_active = lua_isnil(visibleObj) ? 0 : 1;
+		g_grim->_walkSystem->markPathFinderDirty();
+	}
 }
 
 void Lua_V1::IsSectorActive() {

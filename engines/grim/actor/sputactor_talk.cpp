@@ -293,19 +293,28 @@ void SputActorModule::sayLine(SputActor *actor, const char *msgId, int voiceStre
 
 	voiceFile[0] = 0;
 
-	if (translation[0]) {
+	// The remastered has a voice per language: the prefixed name is looked up first, then the plain
+	// one, and the prefixed name is the one the actor remembers
+	Common::String sayName(translation);
+
+	if (g_grim->isRemastered())
+		sayName = Common::String::format("%s_%s", g_grim->getLanguageCode(), translation);
+
+	{
 		static const char *const extensions[4] = { "wvc", "wav", "imc", "imu" };
 		Common::String baseNames[2];
 		int numBaseNames = 0;
 		bool found = false;
 
-		// The remastered has a voice per language: the prefixed name first, then the plain one
-		if (g_grim->isRemastered())
-			baseNames[numBaseNames++] = Common::String::format("%s_%s", g_grim->getLanguageCode(), translation);
+		baseNames[numBaseNames++] = sayName;
 
-		baseNames[numBaseNames++] = translation;
+		if (g_grim->isRemastered())
+			baseNames[numBaseNames++] = translation;
 
 		for (int n = 0; n < numBaseNames && !found; n++) {
+			if (baseNames[n].empty())
+				continue;
+
 			for (int i = 0; i < 4 && !found; i++) {
 				Common::String fileName = Common::String::format("%s.%s", baseNames[n].c_str(), extensions[i]);
 				Common::SeekableReadStream *file = _hs->openFile(fileName.c_str());
@@ -323,7 +332,17 @@ void SputActorModule::sayLine(SputActor *actor, const char *msgId, int voiceStre
 	}
 
 	if (actor->extra->talking) {
-		if (translation[0]) {
+		if (g_grim->isRemastered()) {
+			// The name is compared as a C string that goes on into the voice name
+			char currentName[29];
+
+			memcpy(currentName, actor->extra->sayLineId, 12);
+			memcpy(currentName + 12, actor->extra->voiceName, 16);
+			currentName[28] = 0;
+
+			if (!strcmp(currentName, sayName.c_str()))
+				return;
+		} else if (translation[0]) {
 			char currentId[13];
 
 			memcpy(currentId, actor->extra->sayLineId, 12);
@@ -338,7 +357,7 @@ void SputActorModule::sayLine(SputActor *actor, const char *msgId, int voiceStre
 
 	actor->extra->talkTimerMs = 0;
 	actor->extra->talking = 1;
-	strncpy(actor->extra->sayLineId, translation, 12);
+	strncpy(actor->extra->sayLineId, sayName.c_str(), 12);
 	_numActorsTalking++;
 
 	for (int i = 0; i < 4; i++) {

@@ -1004,16 +1004,9 @@ static const LuaFuncIdList luaFuncIdListsRemastered[kNumListsRemastered] = {
 	{ "mouse", luaFuncIdNamesMouseRemastered, ARRAYSIZE(luaFuncIdNamesMouseRemastered), 14, true }
 };
 
-// In the remastered PrintError, PrintWarning and PrintDebug are three functions, and the
-// three light manager entries are the only ones that share the do-nothing function
+// In the remastered PrintError, PrintWarning and PrintDebug are three functions, the three
+// light manager entries are three functions too, and only these pairs share a function
 static const LuaFuncIdAlias luaFuncIdAliasesRemastered[] = {
-	{ kListRemState, "stderrorim", kGroupErrorIm },
-	{ kListRemFallback, "  nilFB", kGroupErrorIm },
-
-	{ kListRemMain, "LightMgrStartup", kGroupDoNothing },
-	{ kListRemMain, "LightMgrShutdown", kGroupDoNothing },
-	{ kListRemMain, "LightMgrSetChange", kGroupDoNothing },
-
 	{ kListRemMain, "ImStartSound", kGroupPlay },
 	{ kListRemMain, "play", kGroupPlay },
 

@@ -280,6 +280,272 @@ int SputActorModule::findClosestCandidate(float *from, float *to, ObjectCorners 
 	return closest;
 }
 
+void SputActorModule::transformVectorOrtho34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat) {
+	for (int i = 0; i < 3; i++) {
+		double first = (float)((double)mat[i][0] * vec[0]);
+		double second = (float)((double)mat[i][1] * vec[1]);
+		double third = (float)((double)mat[i][2] * vec[2]);
+
+		out[i] = (float)((first + second) + third);
+	}
+}
+
+void SputActorModule::transformVector34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat) {
+	for (int i = 0; i < 3; i++) {
+		double first = (float)((double)mat[0][i] * vec[0]);
+		double second = (float)((double)mat[1][i] * vec[1]);
+		double third = (float)((double)mat[2][i] * vec[2]);
+
+		out[i] = (float)((first + second) + third);
+	}
+}
+
+void SputActorModule::transformPoint34Remastered(RdVector3 out, RdVector3 vec, RdMatrix34 mat) {
+	for (int i = 0; i < 3; i++) {
+		double first = (float)((double)mat[0][i] * vec[0]);
+		double second = (float)((double)mat[1][i] * vec[1]);
+		double third = (float)((double)mat[2][i] * vec[2]);
+
+		out[i] = (float)(((first + second) + third) + mat[3][i]);
+	}
+}
+
+void SputActorModule::transformPoint34AccRemastered(RdVector3 vec, RdMatrix34 mat) {
+	RdVector3 result;
+
+	transformPoint34Remastered(result, vec, mat);
+
+	vec[0] = result[0];
+	vec[1] = result[1];
+	vec[2] = result[2];
+}
+
+void SputActorModule::getOuttaTheBoxRemastered(float *point, const RdBound3 &box, RdMatrix34 matrix, float *origin) {
+	RdVector3 local;
+	RdVector3 out;
+
+	local[0] = (float)((double)point[0] - origin[0]);
+	local[1] = (float)((double)point[1] - origin[1]);
+	local[2] = (float)((double)point[2] - origin[2]);
+
+	transformVectorOrtho34Remastered(out, local, matrix);
+
+	if (!(box.min[2] < out[2] && box.min[1] < out[1] && box.max[1] > out[1] && box.min[0] < out[0] && box.max[0] > out[0] && box.max[2] > out[2]))
+		return;
+
+	float best = 3.4028235e38f;
+
+	if (box.max[1] > out[1]) {
+		float distance = (float)fabs((double)box.max[1] - out[1]);
+
+		if (distance < 3.4028234663852886e38) {
+			local[0] = out[0];
+			local[1] = (float)((double)box.max[1] + 0.009999999776482582);
+			local[2] = out[2];
+			best = distance;
+		}
+	}
+
+	if (box.min[1] < out[1]) {
+		float distance = (float)fabs((double)box.min[1] - out[1]);
+
+		if ((double)best > distance) {
+			local[0] = out[0];
+			local[1] = (float)((double)box.min[1] - 0.009999999776482582);
+			local[2] = out[2];
+			best = distance;
+		}
+	}
+
+	if (box.max[0] > out[0]) {
+		float distance = (float)fabs((double)box.max[0] - out[0]);
+
+		if ((double)best > distance) {
+			local[0] = (float)((double)box.max[0] + 0.009999999776482582);
+			local[1] = out[1];
+			local[2] = out[2];
+			best = distance;
+		}
+	}
+
+	if (box.min[0] < out[0]) {
+		float distance = (float)fabs((double)box.min[0] - out[0]);
+
+		if ((double)best > distance) {
+			local[0] = (float)((double)box.min[0] - 0.009999999776482582);
+			local[1] = out[1];
+			local[2] = out[2];
+		}
+	}
+
+	transformPoint34Remastered(point, local, matrix);
+}
+
+int SputActorModule::checkCollisionsRemastered(SputActor *actor, float *from, float *to, float *center, const RdBound3 &box, RdMatrix34 matrix, float *offset) {
+	RdVector3 offsetFrom;
+	RdVector3 offsetTo;
+	unsigned int failFlag = 1;
+
+	offsetFrom[0] = (float)((double)from[0] + offset[0]);
+	offsetFrom[1] = (float)((double)from[1] + offset[1]);
+	offsetFrom[2] = (float)((double)from[2] + offset[2]);
+	offsetTo[0] = (float)((double)to[0] + offset[0]);
+	offsetTo[1] = (float)((double)to[1] + offset[1]);
+	offsetTo[2] = (float)((double)to[2] + offset[2]);
+
+	if (testCollisionRemastered(offsetFrom, offsetTo, center, box, matrix))
+		return 0;
+
+	return buildPath(actor, from, to, 0, &failFlag, nullptr);
+}
+
+void SputActorModule::findObjectCornersRemastered(RdModel3 *model, float margin, RdMatrix34 mat, float z, ObjectCorners *out) {
+	if (mat[2][2] < 0.999)
+		return;
+
+	out->corner[0][0] = (float)((double)model->bound.min[0] - margin);
+	out->corner[0][1] = (float)((double)model->bound.min[1] - margin);
+	out->corner[0][2] = model->bound.min[2];
+	out->corner[1][0] = (float)((double)model->bound.max[0] + margin);
+	out->corner[1][1] = (float)((double)model->bound.min[1] - margin);
+	out->corner[1][2] = model->bound.min[2];
+	out->corner[2][0] = (float)((double)model->bound.max[0] + margin);
+	out->corner[2][1] = (float)((double)margin + model->bound.max[1]);
+	out->corner[2][2] = model->bound.min[2];
+	out->corner[3][0] = (float)((double)model->bound.min[0] - margin);
+	out->corner[3][1] = (float)((double)margin + model->bound.max[1]);
+	out->corner[3][2] = model->bound.min[2];
+
+	for (int i = 0; i < 4; i++) {
+		transformPoint34AccRemastered(out->corner[i], mat);
+		out->corner[i][2] = z;
+		out->valid[i] = 1;
+	}
+}
+
+int SputActorModule::testCollisionRemastered(float *from, float *to, float *center, const RdBound3 &box, RdMatrix34 matrix) {
+	RdVector3 local;
+	RdVector3 start;
+	RdVector3 end;
+
+	local[0] = (float)((double)from[0] - center[0]);
+	local[1] = (float)((double)from[1] - center[1]);
+	local[2] = (float)((double)from[2] - center[2]);
+	transformVectorOrtho34Remastered(start, local, matrix);
+
+	local[0] = (float)((double)to[0] - center[0]);
+	local[1] = (float)((double)to[1] - center[1]);
+	local[2] = (float)((double)to[2] - center[2]);
+	transformVectorOrtho34Remastered(end, local, matrix);
+
+	float dirX = (float)((double)end[0] - start[0]);
+	float dirY = (float)((double)end[1] - start[1]);
+	float dirZ = (float)((double)end[2] - start[2]);
+	float best = 1.0f;
+
+	if (box.max[1] < start[1] && end[1] < box.max[1]) {
+		float t = (float)(((double)box.max[1] - start[1]) / dirY);
+
+		if (t < 1.0f) {
+			float x = (float)((double)(float)((double)t * dirX) + start[0]);
+			float y = (float)((double)(float)((double)t * dirY) + start[1]);
+			float z = (float)((double)(float)((double)t * dirZ) + start[2]);
+
+			if (box.min[0] < x && box.max[0] > x) {
+				_collisionImpact[0] = x;
+				_collisionImpact[1] = y;
+				_collisionImpact[2] = z;
+				best = t;
+			}
+		}
+	}
+
+	if (box.min[1] > start[1] && end[1] > box.min[1]) {
+		float t = (float)(((double)box.min[1] - start[1]) / dirY);
+
+		if ((double)best > t) {
+			float x = (float)((double)(float)((double)t * dirX) + start[0]);
+			float y = (float)((double)(float)((double)t * dirY) + start[1]);
+			float z = (float)((double)(float)((double)t * dirZ) + start[2]);
+
+			if (box.min[0] < x && box.max[0] > x) {
+				_collisionImpact[0] = x;
+				_collisionImpact[1] = y;
+				_collisionImpact[2] = z;
+				best = t;
+			}
+		}
+	}
+
+	if (box.max[0] < start[0] && end[0] < box.max[0]) {
+		float t = (float)(((double)box.max[0] - start[0]) / dirX);
+
+		if ((double)best > t) {
+			float x = (float)((double)(float)((double)t * dirX) + start[0]);
+			float y = (float)((double)(float)((double)t * dirY) + start[1]);
+			float z = (float)((double)(float)((double)t * dirZ) + start[2]);
+
+			if (box.min[1] < y && box.max[1] > y) {
+				_collisionImpact[0] = x;
+				_collisionImpact[1] = y;
+				_collisionImpact[2] = z;
+				best = t;
+			}
+		}
+	}
+
+	if (box.min[0] > start[0] && end[0] > box.min[0]) {
+		float t = (float)(((double)box.min[0] - start[0]) / dirX);
+
+		if ((double)best > t) {
+			float x = (float)((double)(float)((double)t * dirX) + start[0]);
+			float y = (float)((double)(float)((double)t * dirY) + start[1]);
+			float z = (float)((double)(float)((double)t * dirZ) + start[2]);
+
+			if (box.min[1] < y && box.max[1] > y) {
+				_collisionImpact[0] = x;
+				_collisionImpact[1] = y;
+				_collisionImpact[2] = z;
+				best = t;
+			}
+		}
+	}
+
+	return best != 1.0f;
+}
+
+int SputActorModule::findClosestCandidateRemastered(float *from, float *to, ObjectCorners *corners) {
+	int closest = -1;
+	float best = 3.4028235e38f;
+
+	for (int i = 0; i < 4; i++) {
+		if (!corners->valid[i])
+			continue;
+
+		float *corner = corners->corner[i];
+		double fromDeltaY = (double)from[1] - corner[1];
+		double fromDeltaX = (double)from[0] - corner[0];
+		double fromDeltaZ = (double)from[2] - corner[2];
+		double toDeltaY = (double)corner[1] - to[1];
+		double toDeltaX = (double)corner[0] - to[0];
+		double toDeltaZ = (double)corner[2] - to[2];
+		float toSquareX = (float)(toDeltaX * toDeltaX);
+		float toSquareY = (float)(toDeltaY * toDeltaY);
+		double toPart = ((double)toSquareX + toSquareY) + (float)(toDeltaZ * toDeltaZ);
+		float fromSquareX = (float)(fromDeltaX * fromDeltaX);
+		float fromSquareY = (float)(fromDeltaY * fromDeltaY);
+		double fromPart = ((double)fromSquareX + fromSquareY) + (float)(fromDeltaZ * fromDeltaZ);
+		float distance = (float)(fromPart + toPart);
+
+		if ((double)best > distance) {
+			best = distance;
+			closest = i;
+		}
+	}
+
+	return closest;
+}
+
 int SputActorModule::sweepIntoBox(float *from, float *to, const RdBound3 &box, float *outPos) {
 	int face = 0;
 	double dx = (double)from[0] - to[0];
@@ -603,7 +869,7 @@ void SputActorModule::updatePosition(SputActor *actor) {
 			if (walking) {
 				actor->mode |= 1;
 
-				if (actor->extra->numPathPoints > 0 && actor->extra->numPathPoints <= 30) {
+				if (actor->extra->numPathPoints > 0 && actor->extra->numPathPoints <= pathCapacity()) {
 					RdVector3 goalPoint;
 					float *lastPathPoint = actor->extra->path[actor->extra->numPathPoints - 1];
 
@@ -614,6 +880,8 @@ void SputActorModule::updatePosition(SputActor *actor) {
 				} else {
 					warning("SputActorModule::updatePosition(): the actor has no path to rebuild");
 				}
+
+				_hadDynamicCollision = true;
 			}
 		}
 

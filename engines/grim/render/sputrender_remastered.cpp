@@ -88,16 +88,16 @@ bool SputRender::updateMovieRemastered() {
 
 	_sputSmush->setTarget(_backBuffer);
 
-	if (_clearedBehindMovie < 2) {
-		clearSceneBuffer();
-		_clearedBehindMovie++;
-	}
-
 	int movieFinished = _sputSmush->periodic();
 
 	if (movieFinished) {
 		_grim->setLibMode(GrimEngine::kLibModeNormal);
+		_movieJustFinished = 1;
+	}
 
+	// The scene buffer is black behind a movie in its first two frames of the whole run and in the frame where a
+	// movie ends. The counter is never reset.
+	if (_clearedBehindMovie < 2 || _movieJustFinished) {
 		StdRect rect;
 
 		rect.x = 0;
@@ -108,9 +108,9 @@ bool SputRender::updateMovieRemastered() {
 		for (int i = 0; i < _numPages; i++)
 			markDirtyRectInternal(&rect, 1, i);
 
-		forceRefresh();
-		_movieJustFinished = 1;
 		clearSceneBuffer();
+		forceRefresh();
+		_clearedBehindMovie++;
 	}
 
 	_sputActor->updateSpeechOnly(_sputTime->getFrameTimeFlex());
@@ -123,12 +123,12 @@ bool SputRender::updateMovieRemastered() {
 
 	if (mouse && mouse->isVisibleInMovie()) {
 		mouse->update();
-		mouse->draw(_grim->getHdCanvas());
+		overlays->render(kOverlayCursor, kBoxingNone);
 	}
 
 	_irisDuration = 0.0f;
 
-	return movieFinished != 0;
+	return _movieJustFinished != 0;
 }
 
 // The layers drawn over the scene in a normal or menu frame, in the order of the original
@@ -170,9 +170,6 @@ void SputRender::drawLastLayers() {
 	overlays->render(kOverlayMotherDuck, kBoxingFull);
 	updateTextPage(1, kTextPageMotherDuck);
 	overlays->render(kOverlayCursor, kBoxingNone);
-
-	if (_grim->getSputMouse())
-		_grim->getSputMouse()->draw(_grim->getHdCanvas());
 }
 
 // The frame when no room is set: the loading screen of the boot
@@ -184,40 +181,24 @@ void SputRender::drawNoRoomRemastered() {
 	updateTextPage(1, kTextPageMotherDuck);
 }
 
-// The rectangles of the menus are drawn on the canvas in its own coordinates
+// The filled rectangles of a pass are also put on the canvas, in its own pixels and in the order of the
+// original. The other rectangles, the lines and the polygons are only drawn in the 640x480 surface.
 void SputRender::drawPrimitivesCanvas(int layerMask) {
 	if (_skipPrimitives)
 		return;
 
 	HdCanvas *canvas = _grim->getHdCanvas();
-	const StdColorFormat *format = &_backBuffer->tex.format;
-	int redMax = (1 << format->redBits) - 1;
-	int greenMax = (1 << format->greenBits) - 1;
-	int blueMax = (1 << format->blueBits) - 1;
 
 	for (SputPrimitiveObject *object = _sputPrimitive->getCurrent()->getHead(); object; object = object->next) {
-		if (!(layerMask & object->layer) || object->shape != kSputPrimitiveRect)
+		if (!(layerMask & object->layer) || object->shape != kSputPrimitiveRect || !object->filled)
 			continue;
 
-		uint color = (uint)object->color;
-		int red = (int)((((color >> format->redShift) & redMax) * 255 + redMax / 2) / redMax);
-		int green = (int)((((color >> format->greenShift) & greenMax) * 255 + greenMax / 2) / greenMax);
-		int blue = (int)((((color >> format->blueShift) & blueMax) * 255 + blueMax / 2) / blueMax);
 		int left = MIN(object->x1, object->x2);
 		int top = MIN(object->y1, object->y2);
 		int right = MAX(object->x1, object->x2);
 		int bottom = MAX(object->y1, object->y2);
-		int width = right - left + 1;
-		int height = bottom - top + 1;
 
-		if (object->filled) {
-			canvas->queueFill(left, top, width, height, red, green, blue, 255);
-		} else {
-			canvas->queueFill(left, top, width, 1, red, green, blue, 255);
-			canvas->queueFill(left, bottom, width, 1, red, green, blue, 255);
-			canvas->queueFill(left, top, 1, height, red, green, blue, 255);
-			canvas->queueFill(right, top, 1, height, red, green, blue, 255);
-		}
+		canvas->queueFilledRectangle(left, top, right, bottom, object->colorRgb, object->alpha);
 	}
 }
 

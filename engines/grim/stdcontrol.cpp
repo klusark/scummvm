@@ -29,9 +29,80 @@
 
 namespace Grim {
 
-StdControl::StdControl(bool remastered) : _remastered(remastered), _startup(0), _open(0), _controlsActive(0), _controlsIdle(0), _disableKeyboard(0),
-		_readMouse(1), _readJoysticks(0), _curReadTime(0), _lastReadTime(0), _readDelta(0), _deltaTime(1.0f),
-		_deltaTimeMs(1.0f), _prevMouseX(0), _prevMouseY(0) {
+// The default keys of the remastered, in the order of the slots that can be remapped, as SDL key codes
+static const int remappableKeyDefaults[StdControl::kNumRemappedKeys] = {
+	0x40000052, 0x40000051, 0x40000050, 0x4000004f, 0x400000e1, 0x65, 0x75, 0x70, 0x69, 0x7f, 0x2e, 8, 0x7a
+};
+
+// The keys that have a picture in the menus, as SDL key codes. The text goes under the picture
+// of the keypad, and the name is the one SDL gives to the key.
+struct StdControlKeyGlyph {
+	int sdlKey;
+	Common::KeyCode keycode;
+	const char *glyphFile;
+	const char *glyphText;
+	const char *name;
+};
+
+static const StdControlKeyGlyph keyGlyphs[] = {
+	{ 8, Common::KEYCODE_BACKSPACE, "key_bs.png", nullptr, "Backspace" },
+	{ 0x40000039, Common::KEYCODE_CAPSLOCK, "key_caps.png", nullptr, "CapsLock" },
+	{ 0x7f, Common::KEYCODE_DELETE, "key_del.png", nullptr, "Delete" },
+	{ 0x40000051, Common::KEYCODE_DOWN, "key_down.png", nullptr, "Down" },
+	{ 0x4000004d, Common::KEYCODE_END, "key_end.png", nullptr, "End" },
+	{ 0x1b, Common::KEYCODE_ESCAPE, "key_esc.png", nullptr, "Escape" },
+	{ 0xd, Common::KEYCODE_RETURN, "key_enter.png", nullptr, "Return" },
+	{ 0x4000004a, Common::KEYCODE_HOME, "key_home.png", nullptr, "Home" },
+	{ 0x40000049, Common::KEYCODE_INSERT, "key_ins.png", nullptr, "Insert" },
+	{ 0x400000e2, Common::KEYCODE_LALT, "key_lalt.png", nullptr, "Left Alt" },
+	{ 0x400000e0, Common::KEYCODE_LCTRL, "key_lctrl.png", nullptr, "Left Ctrl" },
+	{ 0x40000050, Common::KEYCODE_LEFT, "key_left.png", nullptr, "Left" },
+	{ 0x400000e1, Common::KEYCODE_LSHIFT, "key_lshift.png", nullptr, "Left Shift" },
+	{ 0x40000058, Common::KEYCODE_KP_ENTER, "key_numenter.png", nullptr, "Keypad Enter" },
+	{ 0x4000004b, Common::KEYCODE_PAGEUP, "key_pgup.png", nullptr, "PageUp" },
+	{ 0x4000004e, Common::KEYCODE_PAGEDOWN, "key_pgdn.png", nullptr, "PageDown" },
+	{ 0x400000e6, Common::KEYCODE_RALT, "key_ralt.png", nullptr, "Right Alt" },
+	{ 0x400000e4, Common::KEYCODE_RCTRL, "key_rctrl.png", nullptr, "Right Ctrl" },
+	{ 0x4000004f, Common::KEYCODE_RIGHT, "key_right.png", nullptr, "Right" },
+	{ 0x400000e5, Common::KEYCODE_RSHIFT, "key_rshift.png", nullptr, "Right Shift" },
+	{ 0x20, Common::KEYCODE_SPACE, "key_space.png", nullptr, "Space" },
+	{ 9, Common::KEYCODE_TAB, "key_tab.png", nullptr, "Tab" },
+	{ 0x40000052, Common::KEYCODE_UP, "key_up.png", nullptr, "Up" },
+	{ 0x40000062, Common::KEYCODE_KP0, "key_numpad.png", "0", "Keypad 0" },
+	{ 0x40000059, Common::KEYCODE_KP1, "key_numpad.png", "1", "Keypad 1" },
+	{ 0x4000005a, Common::KEYCODE_KP2, "key_numpad.png", "2", "Keypad 2" },
+	{ 0x4000005b, Common::KEYCODE_KP3, "key_numpad.png", "3", "Keypad 3" },
+	{ 0x4000005c, Common::KEYCODE_KP4, "key_numpad.png", "4", "Keypad 4" },
+	{ 0x4000005d, Common::KEYCODE_KP5, "key_numpad.png", "5", "Keypad 5" },
+	{ 0x4000005e, Common::KEYCODE_KP6, "key_numpad.png", "6", "Keypad 6" },
+	{ 0x4000005f, Common::KEYCODE_KP7, "key_numpad.png", "7", "Keypad 7" },
+	{ 0x40000060, Common::KEYCODE_KP8, "key_numpad.png", "8", "Keypad 8" },
+	{ 0x40000061, Common::KEYCODE_KP9, "key_numpad.png", "9", "Keypad 9" },
+	{ 0x40000057, Common::KEYCODE_KP_PLUS, "key_numpad.png", "+", "Keypad +" },
+	{ 0x40000056, Common::KEYCODE_KP_MINUS, "key_numpad.png", "=", "Keypad -" },
+	{ 0x40000054, Common::KEYCODE_KP_DIVIDE, "key_numpad.png", "/", "Keypad /" },
+	{ 0x40000055, Common::KEYCODE_KP_MULTIPLY, "key_numpad.png", "*", "Keypad *" },
+	{ 0x40000063, Common::KEYCODE_KP_PERIOD, "key_numpad.png", ".", "Keypad ." }
+};
+
+enum {
+	kSdlKeyEscape = 0x1b,
+	kSdlKeyReturn = 0xd,
+	kSdlKeyPrintScreen = 0x40000046,
+	kSdlKeyUp = 0x40000052,
+	kSdlKeyDown = 0x40000051,
+	kSdlKeyLeft = 0x40000050,
+	kSdlKeyRight = 0x4000004f,
+	kSdlKeyFirstPrintable = 33,
+	kSdlKeyLastPrintable = 126
+};
+
+StdControl::StdControl(bool remastered) : _remastered(remastered), _keyMappingActive(false), _mappingSlot(-1), _startup(0), _open(0),
+		_controlsActive(0), _controlsIdle(0), _disableKeyboard(0), _readMouse(1), _readJoysticks(0), _curReadTime(0), _lastReadTime(0),
+		_readDelta(0), _deltaTime(1.0f), _deltaTimeMs(1.0f), _prevMouseX(0), _prevMouseY(0) {
+	for (int i = 0; i < kNumRemappedKeys; i++)
+		_remappedKeys[i] = remappableKeyDefaults[i];
+
 	memset(_abReadJoy, 0, sizeof(_abReadJoy));
 	memset(_readJoyFlags, 0, sizeof(_readJoyFlags));
 	memset(_joyPresent, 0, sizeof(_joyPresent));
@@ -50,6 +121,10 @@ int StdControl::startup() {
 	initJoysticks();
 	initMouse();
 	reset();
+
+	// The scripts of the remastered draw their own cursor, the system one is never shown again
+	if (_remastered)
+		CursorMan.showMouse(false);
 
 	_startup = 1;
 
@@ -178,7 +253,7 @@ float StdControl::readAxis(int axis) {
 	return (float)result;
 }
 
-int StdControl::readKey(int key, int *pressCount, int *doubleClick) {
+int StdControl::readKey(int key, int *pressCount, int *doubleClick, int *longPress) {
 	if (!_controlsActive || _disableKeyboard || key < 0 || key >= kNumKeys) {
 		if (key < 0 || key >= kNumKeys)
 			warning("StdControl::readKey(): key %d out of range", key);
@@ -189,10 +264,13 @@ int StdControl::readKey(int key, int *pressCount, int *doubleClick) {
 		if (doubleClick)
 			*doubleClick = 0;
 
+		if (longPress)
+			*longPress = 0;
+
 		return 0;
 	}
 
-	const StdControlKey *keyPointer = &_keyInfo[key];
+	StdControlKey *keyPointer = &_keyInfo[key];
 
 	if (_controlsIdle && keyPointer->state)
 		_controlsIdle = 0;
@@ -203,6 +281,18 @@ int StdControl::readKey(int key, int *pressCount, int *doubleClick) {
 	if (doubleClick)
 		*doubleClick = keyPointer->doubleClick;
 
+	// A press that lasts more than 400 ms is reported once as a long press
+	if (longPress) {
+		*longPress = 0;
+
+		if (keyPointer->longFlag == 0) {
+			*longPress = (uint)(keyPointer->frameTime - keyPointer->changeTime) > 400;
+
+			if (*longPress)
+				keyPointer->longFlag = 1;
+		}
+	}
+
 	return keyPointer->state;
 }
 
@@ -210,14 +300,16 @@ void StdControl::setActivation(int active) {
 	if (!_open)
 		return;
 
+	// The system cursor of the remastered stays hidden, see startup()
 	if (active) {
-		// The remastered scripts draw their own cursor
 		if (_readMouse || _remastered)
 			CursorMan.showMouse(false);
 
 		_controlsActive = 1;
 	} else {
-		CursorMan.showMouse(true);
+		if (!_remastered)
+			CursorMan.showMouse(true);
+
 		_controlsActive = 0;
 	}
 }
@@ -250,20 +342,22 @@ void StdControl::initJoysticks() {
 
 		_joyMaxButtons[joy] = maxButtons;
 
-		enableAxis(axisBase, caps->axisMin[0], caps->axisMax[0], 0.1f);
-		enableAxis(axisBase + 1, caps->axisMin[1], caps->axisMax[1], 0.1f);
+		float deadZone = _remastered ? 0.2f : 0.1f;
+
+		enableAxis(axisBase, caps->axisMin[0], caps->axisMax[0], deadZone);
+		enableAxis(axisBase + 1, caps->axisMin[1], caps->axisMax[1], deadZone);
 
 		if (caps->flags & 1)
-			enableAxis(axisBase + 2, caps->axisMin[2], caps->axisMax[2], 0.1f);
+			enableAxis(axisBase + 2, caps->axisMin[2], caps->axisMax[2], deadZone);
 
 		if (caps->flags & 2)
-			enableAxis(axisBase + 3, caps->axisMin[3], caps->axisMax[3], 0.1f);
+			enableAxis(axisBase + 3, caps->axisMin[3], caps->axisMax[3], deadZone);
 
 		if (caps->flags & 4)
-			enableAxis(axisBase + 4, caps->axisMin[4], caps->axisMax[4], 0.1f);
+			enableAxis(axisBase + 4, caps->axisMin[4], caps->axisMax[4], deadZone);
 
 		if (caps->flags & 8)
-			enableAxis(axisBase + 5, caps->axisMin[5], caps->axisMax[5], 0.1f);
+			enableAxis(axisBase + 5, caps->axisMin[5], caps->axisMax[5], deadZone);
 
 		if (caps->flags & 0x10)
 			_joyHasPOV[joy] = 1;
@@ -275,11 +369,12 @@ void StdControl::initMouse() {
 		// Absolute position over the 640x480 play area
 		enableAxis(12, 0, 640, 0.0f);
 		enableAxis(13, 0, 480, 0.0f);
-	} else {
-		enableAxis(12, -250, 250, 0.0f);
-		enableAxis(13, -200, 200, 0.0f);
+
+		return;
 	}
 
+	enableAxis(12, -250, 250, 0.0f);
+	enableAxis(13, -200, 200, 0.0f);
 	enableAxis(14, -20, 20, 0.0f);
 }
 
@@ -322,6 +417,10 @@ void StdControl::readKeyboard() {
 	if (_disableKeyboard)
 		return;
 
+	// The remastered takes the keyboard events as they come, before the update of the frame
+	if (_remastered)
+		applyKeyboardEvents();
+
 	int now = _curReadTime;
 
 	for (int i = 0; i < kNumKeys; i++) {
@@ -333,10 +432,15 @@ void StdControl::readKeyboard() {
 		key->doubleClick = 0;
 	}
 
+	if (!_remastered)
+		applyKeyboardEvents();
+}
+
+void StdControl::applyKeyboardEvents() {
 	int numEvents = _input.numKeyboardEvents;
 
 	if (numEvents > 32) {
-		warning("StdControl::readKeyboard(): too many keyboard events");
+		warning("StdControl::applyKeyboardEvents(): too many keyboard events");
 		numEvents = 32;
 	}
 
@@ -344,11 +448,11 @@ void StdControl::readKeyboard() {
 		const StdControlDeviceEvent *event = &_input.keyboardEvents[i];
 
 		if (event->offset >= 256) {
-			warning("StdControl::readKeyboard(): key %u out of range", event->offset);
+			warning("StdControl::applyKeyboardEvents(): key %u out of range", event->offset);
 			continue;
 		}
 
-		updateKey(&_keyInfo[event->offset], event->data, event->timeStamp);
+		updateKey(&_keyInfo[event->offset], event->data, event->timeStamp, false);
 	}
 
 	int overflow = _input.keyboardOverflow;
@@ -357,10 +461,10 @@ void StdControl::readKeyboard() {
 	_input.keyboardOverflow = 0;
 
 	if (overflow) {
-		now = _curReadTime;
+		int now = _curReadTime;
 
 		for (int i = 0; i < 256; i++)
-			updateKey(&_keyInfo[i], _input.keyboardState[i], now);
+			updateKey(&_keyInfo[i], _input.keyboardState[i], now, false);
 	}
 }
 
@@ -416,7 +520,7 @@ void StdControl::readJoysticks() {
 		int numButtons = _remastered ? 12 : 10;
 
 		for (int button = 0; button < numButtons; button++) {
-			updateKey(&_keyInfo[keyBase + button], buttonMask & state->buttons, now);
+			updateKey(&_keyInfo[keyBase + button], buttonMask & state->buttons, now, false);
 			buttonMask *= 2;
 		}
 
@@ -428,10 +532,10 @@ void StdControl::readJoysticks() {
 			int povC = pov >= 4500 && pov <= 13500;
 			int povD = pov >= 13500 && pov <= 22500;
 
-			updateKey(&_keyInfo[keyBase + 10], povA, now);
-			updateKey(&_keyInfo[keyBase + 11], povB, now);
-			updateKey(&_keyInfo[keyBase + 12], povC, now);
-			updateKey(&_keyInfo[keyBase + 13], povD, now);
+			updateKey(&_keyInfo[keyBase + 10], povA, now, false);
+			updateKey(&_keyInfo[keyBase + 11], povB, now, false);
+			updateKey(&_keyInfo[keyBase + 12], povC, now, false);
+			updateKey(&_keyInfo[keyBase + 13], povD, now, false);
 		}
 	}
 }
@@ -441,14 +545,11 @@ void StdControl::readMouse() {
 		return;
 
 	if (_remastered) {
-		int canvasX;
-		int canvasY;
-
-		getMouseCanvasPosition(false, &canvasX, &canvasY);
+		Common::Point mouse = g_system->getEventManager()->getMousePos();
 
 		_axisPos[14] = 0;
-		_axisPos[12] = 640 * (canvasX - kCanvasPlayOffset) / kCanvasPlayWidth;
-		_axisPos[13] = 480 * canvasY / kCanvasHeight;
+		_axisPos[12] = 640 * (mouse.x - kCanvasPlayOffset) / kCanvasPlayWidth;
+		_axisPos[13] = 480 * mouse.y / kCanvasHeight;
 	} else {
 		_axisPos[14] = _input.mouse.z;
 		_axisPos[12] = _input.mouse.x;
@@ -466,6 +567,22 @@ void StdControl::readMouse() {
 	_input.mouse.y = 0;
 	_input.mouse.z = 0;
 
+	// The remastered looks at the state of the buttons once for each update, the long tap key
+	// follows the first button
+	if (_remastered) {
+		int now = _curReadTime;
+
+		_input.numMouseEvents = 0;
+		_input.mouseOverflow = 0;
+
+		for (int i = 0; i < 4; i++)
+			updateKey(&_keyInfo[284 + i], _input.mouse.buttons[i], now, true);
+
+		updateKey(&_keyInfo[kKeyMouseLong], _input.mouse.buttons[0], now, true);
+
+		return;
+	}
+
 	int numEvents = _input.numMouseEvents;
 
 	if (numEvents > 32) {
@@ -479,11 +596,7 @@ void StdControl::readMouse() {
 		if (event->offset < 12 || event->offset > 15)
 			continue;
 
-		updateKey(&_keyInfo[event->offset + 272], event->data, event->timeStamp);
-
-		// The long tap key follows the first button
-		if (_remastered && event->offset == 12)
-			updateKey(&_keyInfo[kKeyMouseLong], event->data, event->timeStamp);
+		updateKey(&_keyInfo[event->offset + 272], event->data, event->timeStamp, false);
 	}
 
 	int overflow = _input.mouseOverflow;
@@ -495,10 +608,7 @@ void StdControl::readMouse() {
 		int now = _curReadTime;
 
 		for (int i = 0; i < 4; i++)
-			updateKey(&_keyInfo[284 + i], _input.mouse.buttons[i], now);
-
-		if (_remastered)
-			updateKey(&_keyInfo[kKeyMouseLong], _input.mouse.buttons[0], now);
+			updateKey(&_keyInfo[284 + i], _input.mouse.buttons[i], now, false);
 	}
 }
 
@@ -515,10 +625,10 @@ void StdControl::flushMouse() {
 	int now = _curReadTime;
 
 	for (int i = 0; i < 4; i++)
-		updateKey(&_keyInfo[284 + i], _input.mouse.buttons[i], now);
+		updateKey(&_keyInfo[284 + i], _input.mouse.buttons[i], now, _remastered);
 
 	if (_remastered)
-		updateKey(&_keyInfo[kKeyMouseLong], _input.mouse.buttons[0], now);
+		updateKey(&_keyInfo[kKeyMouseLong], _input.mouse.buttons[0], now, true);
 }
 
 void StdControl::getMouseCanvasPosition(bool menuMode, int *x, int *y) const {
@@ -565,7 +675,7 @@ void StdControl::enableAxis(int axis, int minVal, int maxVal, float deadZone) {
 		axisPointer->deadZone = (int)((double)deadZone * halfRange);
 }
 
-void StdControl::updateKey(StdControlKey *key, int down, int time) {
+void StdControl::updateKey(StdControlKey *key, int down, int time, bool canLongPress) {
 	if (down != key->rawState) {
 		if (down && (uint)time - (uint)key->lastPressTime < 200)
 			key->doubleClick = 1;
@@ -578,11 +688,189 @@ void StdControl::updateKey(StdControlKey *key, int down, int time) {
 
 		key->pressCount++;
 		key->state = down;
+		key->longFlag = canLongPress ? 0 : 1;
 	} else if (!down) {
 		return;
 	}
 
 	key->lastPressTime = time;
+}
+
+// The next key pressed becomes the key of the slot
+void StdControl::setKeyMappingMode(int slot) {
+	_mappingSlot = slot;
+	_keyMappingActive = true;
+}
+
+void StdControl::resetKeyMappingToDefault() {
+	for (int i = 0; i < kNumRemappedKeys; i++)
+		_remappedKeys[i] = remappableKeyDefaults[i];
+}
+
+int StdControl::getRemappedKey(int slot) const {
+	if (slot < 0 || slot >= kNumRemappedKeys) {
+		warning("StdControl::getRemappedKey(): slot %d out of range", slot);
+		return 0;
+	}
+
+	return _remappedKeys[slot];
+}
+
+void StdControl::setRemappedKey(int slot, int sdlKey) {
+	if (slot < 0 || slot >= kNumRemappedKeys) {
+		warning("StdControl::setRemappedKey(): slot %d out of range", slot);
+		return;
+	}
+
+	_remappedKeys[slot] = sdlKey;
+}
+
+// A key that is the remapped key of a slot acts as the default key of that slot
+Common::KeyCode StdControl::translateKey(Common::KeyCode keycode) const {
+	if (_keyMappingActive)
+		return keycode;
+
+	int sdlKey = getSdlKey(keycode);
+
+	if (!sdlKey)
+		return keycode;
+
+	for (int i = 0; i < kNumRemappedKeys; i++) {
+		if (_remappedKeys[i] == sdlKey) {
+			Common::KeyCode defaultKeycode = getKeyCode(remappableKeyDefaults[i]);
+
+			return defaultKeycode == Common::KEYCODE_INVALID ? keycode : defaultKeycode;
+		}
+	}
+
+	return keycode;
+}
+
+// Answers 0 when the key was taken, 1 for a key that cannot be used, 2 for a slot that does not
+// exist, 3 for a key that is already used and 4 when the player cancels with Escape
+int StdControl::endKeyMapping(Common::KeyCode keycode) {
+	int sdlKey = getSdlKey(keycode);
+
+	_keyMappingActive = false;
+
+	int result = validateMappedKey(_mappingSlot, sdlKey);
+
+	if (result == 0)
+		_remappedKeys[_mappingSlot] = sdlKey;
+
+	return result;
+}
+
+int StdControl::validateMappedKey(int slot, int sdlKey) const {
+	if (slot < 0 || slot >= kNumRemappedKeys)
+		return 2;
+
+	if (sdlKey == kSdlKeyEscape)
+		return 4;
+
+	if ((isReservedKey(sdlKey) && sdlKey != remappableKeyDefaults[slot]) || !isNameableKey(sdlKey))
+		return 1;
+
+	for (int i = 0; i < kNumRemappedKeys; i++) {
+		if (i != slot && _remappedKeys[i] == sdlKey)
+			return 3;
+	}
+
+	return 0;
+}
+
+bool StdControl::isReservedKey(int sdlKey) {
+	switch (sdlKey) {
+	case kSdlKeyEscape:
+	case kSdlKeyUp:
+	case kSdlKeyDown:
+	case kSdlKeyLeft:
+	case kSdlKeyRight:
+	case kSdlKeyReturn:
+	case kSdlKeyPrintScreen:
+	case '-':
+	case '=':
+		return true;
+	default:
+		return sdlKey >= '0' && sdlKey <= '9';
+	}
+}
+
+bool StdControl::isNameableKey(int sdlKey) {
+	if (sdlKey >= kSdlKeyFirstPrintable && sdlKey <= kSdlKeyLastPrintable)
+		return true;
+
+	return getKeyGlyph(sdlKey, nullptr, nullptr);
+}
+
+int StdControl::getSdlKey(Common::KeyCode keycode) {
+	for (uint i = 0; i < ARRAYSIZE(keyGlyphs); i++) {
+		if (keyGlyphs[i].keycode == keycode)
+			return keyGlyphs[i].sdlKey;
+	}
+
+	if (keycode == Common::KEYCODE_PRINT)
+		return kSdlKeyPrintScreen;
+
+	if ((int)keycode >= kSdlKeyFirstPrintable && (int)keycode <= kSdlKeyLastPrintable)
+		return (int)keycode;
+
+	return 0;
+}
+
+Common::KeyCode StdControl::getKeyCode(int sdlKey) {
+	for (uint i = 0; i < ARRAYSIZE(keyGlyphs); i++) {
+		if (keyGlyphs[i].sdlKey == sdlKey)
+			return keyGlyphs[i].keycode;
+	}
+
+	if (sdlKey == kSdlKeyPrintScreen)
+		return Common::KEYCODE_PRINT;
+
+	if (sdlKey >= kSdlKeyFirstPrintable && sdlKey <= kSdlKeyLastPrintable)
+		return (Common::KeyCode)sdlKey;
+
+	return Common::KEYCODE_INVALID;
+}
+
+// The name SDL gives to the key
+Common::String StdControl::getSdlKeyName(int sdlKey) {
+	for (uint i = 0; i < ARRAYSIZE(keyGlyphs); i++) {
+		if (keyGlyphs[i].sdlKey == sdlKey)
+			return keyGlyphs[i].name;
+	}
+
+	if (sdlKey == kSdlKeyPrintScreen)
+		return "PrintScreen";
+
+	if (sdlKey >= kSdlKeyFirstPrintable && sdlKey <= kSdlKeyLastPrintable) {
+		int character = sdlKey;
+
+		// The letter keys are named by their capital
+		if (character >= 'a' && character <= 'z')
+			character -= 'a' - 'A';
+
+		return Common::String::format("%c", character);
+	}
+
+	return Common::String();
+}
+
+// The picture and the text under it of a key that has one, either of them can be missing
+bool StdControl::getKeyGlyph(int sdlKey, const char **glyphFile, const char **glyphText) {
+	for (uint i = 0; i < ARRAYSIZE(keyGlyphs); i++) {
+		if (keyGlyphs[i].sdlKey == sdlKey) {
+			if (glyphFile)
+				*glyphFile = keyGlyphs[i].glyphFile;
+
+			if (glyphText)
+				*glyphText = keyGlyphs[i].glyphText;
+
+			return true;
+		}
+	}
+
+	return false;
 }
 
 } // End of namespace Grim

@@ -25,6 +25,9 @@
 #include "common/array.h"
 #include "common/scummsys.h"
 
+#include "engines/grim/std/std_display.h"
+#include "engines/grim/text/hdtext.h"
+
 namespace Grim {
 
 class OverlayManager;
@@ -33,14 +36,16 @@ struct StdVBuffer;
 /**
  * The 1920x1080 output of the remastered in classic mode. The software surface of the
  * scene is scaled into the middle of it, then the 2D items of the frame (fills, overlays,
- * text) are blended in the order they were queued. The frame lives in system memory and is
- * handed to the backend with copyRectToScreen, so no GPU is needed.
+ * text, movie) are blended in the order they were queued, with the arithmetic of the
+ * shaders of the original. The frame lives in system memory and is handed to the backend
+ * with copyRectToScreen, so no GPU is needed.
  */
 class HdCanvas {
 public:
 	enum {
 		kWidth = 1920,
-		kHeight = 1080
+		kHeight = 1080,
+		kAreaWidth = 1440
 	};
 
 	HdCanvas();
@@ -52,89 +57,242 @@ public:
 	bool isActive() const { return _active; }
 	void present(const StdVBuffer *scene, float gamma);
 
-	// A 2D item put in the queue of the current frame. Pixels are straight (not premultiplied) RGBA8,
-	// width * height * 4 bytes, owned by the caller and valid until the end of the frame.
-	// "layer" is the original 2D layer/page number (text pages and overlay layers share the numbering of the original).
+	// A straight RGBA8 bitmap, width * height * 4 bytes owned by the caller and valid until the
+	// end of the frame. "layer" is only the key of clearLayer.
 	void queueBitmap(int layer, const byte *rgba, int width, int height, int x, int y, byte alpha);
 
-	// Removes the items queued with queueBitmap on a layer (the text pages are redone by their owner)
+	// Removes the items queued with queueBitmap on a layer
 	void clearLayer(int layer);
 
 	// Queue of the frame
 	void beginFrame();
-	void queueOverlay(int layer, const byte *premultipliedRgba, int srcWidth, int srcHeight, int x, int y, int width, int height,
+
+	// A premultiplied RGBA8 image drawn in the rectangle (x, y, width, height) of the output (pixels, fractions
+	// allowed). The image is filtered bilinearly.
+	void queueOverlay(const byte *premultipliedRgba, int srcWidth, int srcHeight, float x, float y, float width, float height,
 			int mirror, float alpha, float desaturate);
-	void queueFill(int x, int y, int width, int height, int red, int green, int blue, int alpha);
+
+	// The color is packed red | green << 8 | blue << 16, the rectangle is in the pixels of the text canvas
+	void queueFilledRectangle(int left, int top, int right, int bottom, uint colour, float alpha);
+	void queueText(const HdTextDraw &draw);
+
+	// A frame of a movie, straight RGBA8, valid until the end of the frame. The serial changes whenever the pixels
+	// change; a negative one tells that they may change at any time.
+	void queueMovie(const byte *rgba, int width, int height, int contentSerial = -1);
 	void clearBuffer();
 	void dropPixels(const byte *pixels);
 
+	// The gamma the quads queued from now on use
+	void setGamma(float gamma);
+
 	OverlayManager *getOverlays() const { return _overlays; }
+
+	// The widescreen option 2 stretches the 4:3 area (kAreaWidth x kHeight) over the whole output.
+	// The option is sampled at the end of every present, so a frame uses the value of the one before.
+	bool isStretched() const { return _stretched; }
+	float getAreaScaleX() const;
+	float getWidescreenCorrection() const;
+
+	// The canvas of the text: its width is the one of the engine, a width of the menus has the boxing
+	HdTextCanvas getTextCanvas() const;
+
+	void computeScaling(bool stretch, int referenceWidth, int referenceHeight, float *scaleX, float *scaleY,
+			float *offsetX, float *offsetY) const;
 
 private:
 	enum ItemKind {
 		kItemBitmap,
 		kItemOverlay,
-		kItemFill
+		kItemFill,
+		kItemText,
+		kItemMovie
+	};
+
+	enum {
+		kPowCells = 4096,
+		kSceneCacheEntries = 2
 	};
 
 	struct Item {
+		Item();
+
 		int kind;
-		int layer;
 		const byte *pixels;
-		bool premultiplied;
 		int srcWidth;
 		int srcHeight;
-		int x;
-		int y;
-		int width;
-		int height;
+
+		// Bitmap
+		int layer;
+		int bitmapX;
+		int bitmapY;
+		int bitmapAlpha;
+
+		// Overlay and movie
+		float x;
+		float y;
+		float width;
+		float height;
 		int mirror;
-		int alpha;
-		int desaturate;
-		bool useGamma;
-		int fillRed;
-		int fillGreen;
-		int fillBlue;
+		float alpha;
+		float desaturate;
+		float gamma;
+
+		// Fill: the constant color of the shader
+		float fillRed;
+		float fillGreen;
+		float fillBlue;
+
+		// Movie: the serial of the pixels. An item whose pixels may change without a new serial is "changing".
+		int serial;
+		bool changing;
+
+		HdTextDraw text;
 	};
 
-	void buildSceneTables(int srcWidth, int srcHeight, int dstWidth, int dstHeight);
-	void drawScene(const StdVBuffer *scene, float gamma);
-	void drawItem(const Item &item);
-	void drawFill(const Item &item);
-	void drawImage(const Item &item);
-	void buildGammaTable(byte *table, int size, double exponent);
-	void freeSceneTables();
+	// The scene scaled into the output, kept while the surface of the scene and everything the scaling depends on stay
+	// the same. The result is stored only when the same scene comes a second time.
+	struct SceneCache {
+		SceneCache();
+		~SceneCache();
 
+		bool valid;
+		bool hasFrame;
+		int serial;
+		uint32 lastUse;
+		int width;
+		int height;
+		int pitch;
+		int bpp;
+		int redBits;
+		int greenBits;
+		int blueBits;
+		int redShift;
+		int greenShift;
+		int blueShift;
+		bool stretched;
+		float gamma;
+		float alpha;
+		size_t sourceSize;
+		byte *source;
+		uint32 *frame;
+
+	private:
+		SceneCache(const SceneCache &);
+		SceneCache &operator=(const SceneCache &);
+	};
+
+	// The output byte of an exponent for every float between 0 and 1: the thresholds of the 255
+	// values, and for every cell of the float range the number of thresholds below it
+	struct PowTable {
+		PowTable();
+
+		bool valid;
+		float exponent;
+		double threshold[255];
+		byte cell[kPowCells + 1];
+	};
+
+	void updateSoftwareAlpha();
+	void swapScene(const StdVBuffer *scene);
+	void buildPowTable(PowTable *table, float exponent);
+	byte lookupPow(const PowTable &table, float value) const;
+	const float *getHorizontalRow(int row, int keepRow);
+	const float *getItemRow(const byte *pixels, int srcWidth, int row, int keepRow, int channels, int columns);
+
+	void releaseSceneCaches();
+	bool isSceneSupported() const;
+	bool sceneCacheMatches(const SceneCache &entry) const;
+	SceneCache *findSceneCache(bool *matched);
+	void storeSceneFrame(SceneCache *entry);
+	int findCoveringItem() const;
+	bool coversFrame(const Item &item) const;
+	bool hasChangingItem() const;
+	void composeFrame(int firstItem, SceneCache *entry, bool matched);
+	void fillFrame();
+
+	static bool sameFloat(float first, float second);
+	static bool sameItem(const Item &first, const Item &second);
+	static bool sameQueue(const Common::Array<Item> &first, const Common::Array<Item> &second);
+
+	void drawScene();
+	void drawItem(const Item &item);
+	void drawBitmap(const Item &item);
+	void drawOverlay(const Item &item);
+	void drawFill(const Item &item);
+	void drawText(const Item &item);
+	void drawMovie(const Item &item);
+
+	void blendPixel(int x, int y, float red, float green, float blue, float alpha);
+	void writePixel(int x, int y, int red, int green, int blue);
 	uint32 packPixel(int red, int green, int blue) const;
 
+	static int toByte(float value);
+	static int clampPixel(float value, int limit);
+
 	bool _active;
+	bool _stretched;
 	uint32 *_frame;
 	int _redShift;
 	int _greenShift;
 	int _blueShift;
 	uint32 _opaqueMask;
+	float _gamma;
 
 	Common::Array<Item> _items;
 
-	// Tables of the scaled scene
-	int _sceneSrcWidth;
-	int _sceneSrcHeight;
-	int _sceneDstWidth;
-	int _sceneDstHeight;
-	int _sceneOffsetX;
-	int _sceneOffsetY;
-	int *_columnIndex;
-	int *_columnWeight;
-	int *_rowIndex;
-	int *_rowWeight;
-	byte *_sceneRgb;
-	int _sceneRgbSize;
+	// The surface of the scene that is presented: the one of the previous flip
+	byte *_frontScene;
+	StdColorFormat _sceneFormat;
+	int _sceneWidth;
+	int _sceneHeight;
+	int _scenePitch;
+	float _redLevels[256];
+	float _greenLevels[256];
+	float _blueLevels[256];
 
-	// Gamma tables: the scene has one entry per 16-bit interpolated value, the overlays one per byte
-	float _sceneGamma;
-	byte *_sceneGammaTable;
-	float _overlayGamma;
-	byte _overlayGammaTable[256];
+	// Opacity of the scene, it grows from 0 after the start
+	float _softwareAlpha;
+	float _softwareAlphaEnd;
+	float _softwareAlphaStart;
+	float _softwareAlphaBlendTime;
+	double _previousFrameTime;
+	bool _hasPreviousFrame;
+
+	// The columns of the output that show the scene: the two texels each one blends and the weight of the second
+	int _redMax;
+	int _greenMax;
+	int _blueMax;
+	Common::Array<int> _columnFirst;
+	Common::Array<int> _columnSecond;
+	Common::Array<float> _columnFraction;
+
+	// Two rows of the scene already filtered horizontally
+	Common::Array<float> _horizontalRows[2];
+	int _horizontalRowIndex[2];
+
+	PowTable _scenePow;
+	PowTable _moviePow;
+	float _byteToFloat[256];
+
+	Common::Array<float> _textScratch;
+	Common::Array<float> _textRowFirst;
+	Common::Array<float> _textRowSecond;
+
+	// The columns and the two filtered source rows of the overlay or movie that is being drawn
+	Common::Array<int> _itemColumnFirst;
+	Common::Array<int> _itemColumnSecond;
+	Common::Array<float> _itemColumnFraction;
+	Common::Array<float> _itemRows[2];
+	int _itemRowIndex[2];
+
+	SceneCache _sceneCache[kSceneCacheEntries];
+	uint32 _sceneUseCounter;
+	int _sceneSerial;
+
+	// What the last composed frame was made of, to skip a frame that would come out the same
+	Common::Array<Item> _composedItems;
+	int _composedSceneToken;
+	bool _composedValid;
 
 	OverlayManager *_overlays;
 };

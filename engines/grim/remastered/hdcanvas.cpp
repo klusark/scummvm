@@ -28,25 +28,53 @@
 
 #include "graphics/pixelformat.h"
 
+#include "engines/grim/grim.h"
 #include "engines/grim/remastered/hdcanvas.h"
 #include "engines/grim/remastered/overlay.h"
 #include "engines/grim/std/std_display.h"
 
 #include <math.h>
+#include <string.h>
 
 namespace Grim {
 
-enum {
-	// One entry per value of an interpolated 8-bit channel with 8 fraction bits
-	kSceneGammaEntries = 255 * 256 + 1
-};
+HdCanvas::Item::Item() : kind(kItemBitmap), pixels(nullptr), srcWidth(0), srcHeight(0), layer(0), bitmapX(0), bitmapY(0),
+		bitmapAlpha(255), x(0.0f), y(0.0f), width(0.0f), height(0.0f), mirror(0), alpha(1.0f), desaturate(0.0f), gamma(1.0f),
+		fillRed(0.0f), fillGreen(0.0f), fillBlue(0.0f), serial(0), changing(false) {
+}
 
-HdCanvas::HdCanvas() : _active(false), _frame(nullptr), _redShift(16), _greenShift(8), _blueShift(0), _opaqueMask(0xFF000000),
-		_sceneSrcWidth(0), _sceneSrcHeight(0), _sceneDstWidth(0), _sceneDstHeight(0), _sceneOffsetX(0), _sceneOffsetY(0),
-		_columnIndex(nullptr), _columnWeight(nullptr), _rowIndex(nullptr), _rowWeight(nullptr), _sceneRgb(nullptr), _sceneRgbSize(0),
-		_sceneGamma(-1.0f), _sceneGammaTable(nullptr), _overlayGamma(1.0f), _overlays(nullptr) {
+HdCanvas::PowTable::PowTable() : valid(false), exponent(1.0f) {
+	memset(threshold, 0, sizeof(threshold));
+	memset(cell, 0, sizeof(cell));
+}
+
+HdCanvas::SceneCache::SceneCache() : valid(false), hasFrame(false), serial(0), lastUse(0), width(0), height(0), pitch(0), bpp(0),
+		redBits(0), greenBits(0), blueBits(0), redShift(0), greenShift(0), blueShift(0), stretched(false), gamma(1.0f),
+		alpha(0.0f), sourceSize(0), source(nullptr), frame(nullptr) {
+}
+
+HdCanvas::SceneCache::~SceneCache() {
+	delete[] source;
+	delete[] frame;
+}
+
+HdCanvas::HdCanvas() : _active(false), _stretched(false), _frame(nullptr), _redShift(16), _greenShift(8), _blueShift(0), _opaqueMask(0xFF000000),
+		_gamma(1.0f), _frontScene(nullptr), _sceneWidth(0), _sceneHeight(0), _scenePitch(0), _softwareAlpha(0.0f),
+		_softwareAlphaEnd(0.0f), _softwareAlphaStart(0.0f), _softwareAlphaBlendTime(0.75f), _previousFrameTime(0.0),
+		_hasPreviousFrame(false), _redMax(0), _greenMax(0), _blueMax(0), _sceneUseCounter(0), _sceneSerial(0),
+		_composedSceneToken(0), _composedValid(false), _overlays(nullptr) {
+	memset(&_sceneFormat, 0, sizeof(_sceneFormat));
+	memset(_redLevels, 0, sizeof(_redLevels));
+	memset(_greenLevels, 0, sizeof(_greenLevels));
+	memset(_blueLevels, 0, sizeof(_blueLevels));
+
+	_horizontalRowIndex[0] = -1;
+	_horizontalRowIndex[1] = -1;
+	_itemRowIndex[0] = -1;
+	_itemRowIndex[1] = -1;
+
 	for (int i = 0; i < 256; i++)
-		_overlayGammaTable[i] = (byte)i;
+		_byteToFloat[i] = (float)i / 255.0f;
 
 	_overlays = new OverlayManager(this);
 }
@@ -55,8 +83,6 @@ HdCanvas::~HdCanvas() {
 	close();
 	delete _overlays;
 	_overlays = nullptr;
-	delete[] _sceneGammaTable;
-	_sceneGammaTable = nullptr;
 }
 
 void HdCanvas::open() {
@@ -88,56 +114,70 @@ void HdCanvas::open() {
 	if (!_frame)
 		_frame = new uint32[kWidth * kHeight]();
 
+	// The pixel format may be another one, and the screen was just set up
+	releaseSceneCaches();
+	_composedItems.clear();
+	_composedValid = false;
+
 	_active = true;
 }
 
 void HdCanvas::close() {
 	_active = false;
 	_items.clear();
+	_composedItems.clear();
+	_composedValid = false;
+	releaseSceneCaches();
 	delete[] _frame;
 	_frame = nullptr;
-	freeSceneTables();
+	delete[] _frontScene;
+	_frontScene = nullptr;
+	_sceneWidth = 0;
+	_sceneHeight = 0;
+	_scenePitch = 0;
 }
 
-void HdCanvas::freeSceneTables() {
-	delete[] _columnIndex;
-	_columnIndex = nullptr;
-	delete[] _columnWeight;
-	_columnWeight = nullptr;
-	delete[] _rowIndex;
-	_rowIndex = nullptr;
-	delete[] _rowWeight;
-	_rowWeight = nullptr;
-	delete[] _sceneRgb;
-	_sceneRgb = nullptr;
-	_sceneRgbSize = 0;
-	_sceneSrcWidth = 0;
-	_sceneSrcHeight = 0;
-	_sceneDstWidth = 0;
-	_sceneDstHeight = 0;
-}
-
+// The storage of the queue is kept from one frame to the next
 void HdCanvas::beginFrame() {
-	_items.clear();
+	_items.resize(0);
+}
+
+void HdCanvas::releaseSceneCaches() {
+	for (int i = 0; i < kSceneCacheEntries; i++) {
+		SceneCache &entry = _sceneCache[i];
+
+		delete[] entry.source;
+		delete[] entry.frame;
+		entry.source = nullptr;
+		entry.frame = nullptr;
+		entry.sourceSize = 0;
+		entry.valid = false;
+		entry.hasFrame = false;
+		entry.lastUse = 0;
+	}
+}
+
+void HdCanvas::setGamma(float gamma) {
+	_gamma = gamma;
 }
 
 void HdCanvas::queueBitmap(int layer, const byte *rgba, int width, int height, int x, int y, byte alpha) {
 	if (!rgba || width <= 0 || height <= 0)
 		return;
 
-	Item item = Item();
+	Item item;
 
 	item.kind = kItemBitmap;
 	item.layer = layer;
 	item.pixels = rgba;
-	item.premultiplied = false;
 	item.srcWidth = width;
 	item.srcHeight = height;
-	item.x = x;
-	item.y = y;
-	item.width = width;
-	item.height = height;
-	item.alpha = alpha;
+	item.bitmapX = x;
+	item.bitmapY = y;
+	item.bitmapAlpha = alpha;
+
+	// The owner of the pixels may change them without telling
+	item.changing = true;
 	_items.push_back(item);
 }
 
@@ -148,17 +188,15 @@ void HdCanvas::clearLayer(int layer) {
 	}
 }
 
-void HdCanvas::queueOverlay(int layer, const byte *premultipliedRgba, int srcWidth, int srcHeight, int x, int y, int width, int height,
+void HdCanvas::queueOverlay(const byte *premultipliedRgba, int srcWidth, int srcHeight, float x, float y, float width, float height,
 		int mirror, float alpha, float desaturate) {
-	if (!premultipliedRgba || srcWidth <= 0 || srcHeight <= 0 || width <= 0 || height <= 0)
+	if (!premultipliedRgba || srcWidth <= 0 || srcHeight <= 0)
 		return;
 
-	Item item = Item();
+	Item item;
 
 	item.kind = kItemOverlay;
-	item.layer = layer;
 	item.pixels = premultipliedRgba;
-	item.premultiplied = true;
 	item.srcWidth = srcWidth;
 	item.srcHeight = srcHeight;
 	item.x = x;
@@ -166,30 +204,112 @@ void HdCanvas::queueOverlay(int layer, const byte *premultipliedRgba, int srcWid
 	item.width = width;
 	item.height = height;
 	item.mirror = mirror;
-	item.alpha = (int)(CLIP(alpha, 0.0f, 1.0f) * 255.0f + 0.5f);
-	item.desaturate = (int)(CLIP(desaturate, 0.0f, 1.0f) * 256.0f + 0.5f);
-	item.useGamma = true;
+
+	// A value that is not below 1 (or is not a number) is 1
+	item.alpha = 1.0f;
+
+	if (alpha <= 1.0f)
+		item.alpha = alpha < 0.0f ? 0.0f : alpha;
+
+	item.desaturate = 1.0f;
+
+	if (desaturate <= 1.0f)
+		item.desaturate = desaturate < 0.0f ? 0.0f : desaturate;
+
+	item.gamma = _gamma;
 	_items.push_back(item);
 }
 
-void HdCanvas::queueFill(int x, int y, int width, int height, int red, int green, int blue, int alpha) {
-	Item item = Item();
+// The rectangle of the primitives: the scale is the same on both axes and the text canvas is centered
+void HdCanvas::queueFilledRectangle(int left, int top, int right, int bottom, uint colour, float alpha) {
+	float backWidth = (float)kWidth;
+	float backHeight = (float)kHeight;
+	float canvasWidth = (float)g_grim->getTextCanvasWidth();
+	float canvasHeight = 1080.0f;
+	float scaleX = backWidth / canvasWidth;
+	float scaleY = backHeight / canvasHeight;
+	float scale = scaleY < scaleX ? scaleY : scaleX;
+	float offsetY = (backHeight - canvasHeight * scale) * 0.5f;
+	float offsetX = (backWidth - canvasWidth * scale) * 0.5f - (((float)(kWidth - g_grim->getTextCanvasWidth()) * scale) * 0.5f);
+
+	Item item;
 
 	item.kind = kItemFill;
-	item.x = x;
-	item.y = y;
-	item.width = width;
-	item.height = height;
-	item.alpha = CLIP(alpha, 0, 255);
-	item.fillRed = CLIP(red, 0, 255);
-	item.fillGreen = CLIP(green, 0, 255);
-	item.fillBlue = CLIP(blue, 0, 255);
+	item.x = (float)left * scale + offsetX;
+	item.y = (float)top * scale + offsetY;
+	item.width = (float)(right - left) * scale;
+	item.height = (float)(bottom - top) * scale;
+	item.alpha = alpha;
+	item.fillRed = ((float)(colour & 0xFF) / 255.0f) * alpha;
+	item.fillGreen = ((float)((colour >> 8) & 0xFF) / 255.0f) * alpha;
+	item.fillBlue = ((float)((colour >> 16) & 0xFF) / 255.0f) * alpha;
 	_items.push_back(item);
 }
 
-// Hides everything queued so far in the frame
+// Hides everything queued so far in the frame: a black quad over the whole output
 void HdCanvas::clearBuffer() {
-	queueFill(0, 0, kWidth, kHeight, 0, 0, 0, 255);
+	Item item;
+
+	item.kind = kItemFill;
+	item.x = 0.0f;
+	item.y = 0.0f;
+	item.width = (float)kWidth;
+	item.height = (float)kHeight;
+	item.alpha = 1.0f;
+	_items.push_back(item);
+}
+
+void HdCanvas::queueText(const HdTextDraw &draw) {
+	if (draw.quads.empty())
+		return;
+
+	_items.push_back(Item());
+
+	Item &item = _items.back();
+
+	item.kind = kItemText;
+	item.text = draw;
+}
+
+// The movie covers a rectangle of the output that depends on its shape
+void HdCanvas::queueMovie(const byte *rgba, int width, int height, int contentSerial) {
+	if (!rgba || width <= 0 || height <= 0)
+		return;
+
+	float backWidth = (float)kWidth;
+	float backHeight = (float)kHeight;
+	float limitX = 640.0f / backWidth;
+	float limitY = 480.0f / backHeight;
+	float halfWidth;
+	float halfHeight;
+
+	if (limitY <= limitX) {
+		halfWidth = (float)(480 * width) / (float)(640 * height);
+		halfHeight = limitY / limitX;
+	} else {
+		halfWidth = ((float)width / backWidth) / ((float)height / backHeight);
+		halfHeight = 1.0f;
+	}
+
+	if (_stretched) {
+		halfWidth = (float)(480 * width) / (float)(640 * height);
+		halfHeight = 1.0f;
+	}
+
+	Item item;
+
+	item.kind = kItemMovie;
+	item.pixels = rgba;
+	item.srcWidth = width;
+	item.srcHeight = height;
+	item.x = (-halfWidth + 1.0f) * (backWidth * 0.5f);
+	item.y = (-halfHeight + 1.0f) * (backHeight * 0.5f);
+	item.width = (halfWidth + halfWidth) * (backWidth * 0.5f);
+	item.height = (halfHeight + halfHeight) * (backHeight * 0.5f);
+	item.gamma = _gamma;
+	item.serial = contentSerial;
+	item.changing = contentSerial < 0;
+	_items.push_back(item);
 }
 
 void HdCanvas::dropPixels(const byte *pixels) {
@@ -197,307 +317,658 @@ void HdCanvas::dropPixels(const byte *pixels) {
 		if (_items[i].pixels == pixels)
 			_items[i].pixels = nullptr;
 	}
+
+	// A new buffer may take the address of the freed one
+	_composedValid = false;
+}
+
+float HdCanvas::getAreaScaleX() const {
+	return _stretched ? (float)kWidth / (float)kAreaWidth : 1.0f;
+}
+
+// The scripts shrink some horizontal offsets by it: the smaller scale over the horizontal one
+float HdCanvas::getWidescreenCorrection() const {
+	float scaleX = getAreaScaleX();
+
+	return MIN(scaleX, 1.0f) / scaleX;
 }
 
 uint32 HdCanvas::packPixel(int red, int green, int blue) const {
 	return ((uint32)red << _redShift) | ((uint32)green << _greenShift) | ((uint32)blue << _blueShift) | _opaqueMask;
 }
 
-void HdCanvas::buildGammaTable(byte *table, int size, double exponent) {
-	if (!(exponent > 0.0)) {
-		warning("HdCanvas::buildGammaTable(): invalid gamma exponent, using 1.0");
-		exponent = 1.0;
+HdTextCanvas HdCanvas::getTextCanvas() const {
+	HdTextCanvas canvas;
+
+	canvas.width = g_grim->getTextCanvasWidth();
+
+	// The menus have the 16:9 canvas (aspect above 1.7), the game the 4:3 one
+	canvas.boxingHD = (double)canvas.width / 1080.0 > 1.7;
+	canvas.stretched = _stretched;
+
+	return canvas;
+}
+
+// The scale of an area of the given size over the output: one scale on both axes, centered, or one per axis
+void HdCanvas::computeScaling(bool stretch, int referenceWidth, int referenceHeight, float *scaleX, float *scaleY,
+		float *offsetX, float *offsetY) const {
+	float width = (float)referenceWidth;
+	float height = (float)referenceHeight;
+	float xScale = (float)kWidth / width;
+	float yScale = (float)kHeight / height;
+
+	if (stretch) {
+		*scaleX = xScale;
+		*scaleY = yScale;
+		*offsetX = 0.0f;
+		*offsetY = 0.0f;
+	} else {
+		float scale = yScale < xScale ? yScale : xScale;
+
+		*scaleX = scale;
+		*scaleY = scale;
+		*offsetX = ((float)kWidth - width * scale) * 0.5f;
+		*offsetY = ((float)kHeight - height * scale) * 0.5f;
+	}
+}
+
+int HdCanvas::toByte(float value) {
+	if (!(value > 0.0f))
+		return 0;
+
+	if (value >= 1.0f)
+		return 255;
+
+	return (int)(value * 255.0f + 0.5f);
+}
+
+// The first pixel whose center is not before the edge, kept inside 0..limit
+int HdCanvas::clampPixel(float value, int limit) {
+	float pixel = ceilf(value - 0.5f);
+
+	if (!(pixel > 0.0f))
+		return 0;
+
+	if (pixel > (float)limit)
+		return limit;
+
+	return (int)pixel;
+}
+
+// The opacity of the scene: at the start of the run it is 0 and goes up to 1 in 0.75 seconds
+void HdCanvas::updateSoftwareAlpha() {
+	double now = (double)g_system->getMillis();
+
+	if (!_hasPreviousFrame) {
+		_previousFrameTime = now;
+		_hasPreviousFrame = true;
 	}
 
-	for (int i = 0; i < size; i++) {
-		double value = pow((double)i / (double)(size - 1), exponent) * 255.0 + 0.5;
+	double previous = _previousFrameTime;
 
-		table[i] = (byte)CLIP((int)value, 0, 255);
+	_previousFrameTime = now;
+
+	float previousEnd = _softwareAlphaEnd;
+
+	_softwareAlphaEnd = g_grim->getRenderingMode() == GrimEngine::kRenderingModeHd ? 0.0f : 1.0f;
+
+	if (fabsf(_softwareAlphaEnd - previousEnd) > 0.001f) {
+		_softwareAlphaStart = _softwareAlpha;
+		_softwareAlphaBlendTime = 0.0f;
 	}
+
+	if (fabsf(_softwareAlphaEnd - _softwareAlpha) > 0.001f) {
+		float step = (float)((now - previous) / 1000.0);
+		float blend = step + _softwareAlphaBlendTime;
+
+		_softwareAlphaBlendTime = blend < 0.75f ? blend : 0.75f;
+
+		float t = _softwareAlphaBlendTime / 0.75f;
+		float value = t * _softwareAlphaEnd + (1.0f - t) * _softwareAlphaStart;
+		float clamped = 0.0f;
+
+		if (!(0.0f > value))
+			clamped = 1.0f < value ? 1.0f : value;
+
+		_softwareAlpha = (clamped * -2.0f + 3.0f) * (clamped * clamped);
+	} else {
+		_softwareAlpha = _softwareAlphaEnd;
+	}
+}
+
+// The surface the engine drew is shown by the next flip, and it gets the one that was shown
+void HdCanvas::swapScene(const StdVBuffer *scene) {
+	if (!scene || !scene->pixels)
+		return;
+
+	int pitch = scene->tex.pitchInBytes;
+	int height = scene->tex.height;
+	size_t size = (size_t)pitch * (size_t)height;
+
+	if (!_frontScene || _scenePitch != pitch || _sceneHeight != height) {
+		delete[] _frontScene;
+		_frontScene = new byte[size]();
+	}
+
+	_scenePitch = pitch;
+	_sceneWidth = scene->tex.width;
+	_sceneHeight = height;
+	_sceneFormat = scene->tex.format;
+
+	byte block[4096];
+
+	for (size_t offset = 0; offset < size; offset += sizeof(block)) {
+		size_t count = MIN<size_t>(sizeof(block), size - offset);
+
+		memcpy(block, _frontScene + offset, count);
+		memcpy(_frontScene + offset, scene->pixels + offset, count);
+		memcpy(scene->pixels + offset, block, count);
+	}
+}
+
+void HdCanvas::buildPowTable(PowTable *table, float exponent) {
+	if (table->valid && table->exponent == exponent)
+		return;
+
+	if (!(exponent > 0.0f)) {
+		warning("HdCanvas::buildPowTable(): invalid gamma exponent, using 1.0");
+		exponent = 1.0f;
+	}
+
+	double inverse = 1.0 / (double)exponent;
+
+	for (int i = 0; i < 255; i++)
+		table->threshold[i] = pow(((double)i + 0.5) / 255.0, inverse);
+
+	int level = 0;
+
+	for (int i = 0; i <= kPowCells; i++) {
+		double value = (double)i / (double)kPowCells;
+
+		while (level < 255 && value >= table->threshold[level])
+			level++;
+
+		table->cell[i] = (byte)level;
+	}
+
+	table->exponent = exponent;
+	table->valid = true;
+}
+
+// The byte that the power of the value is written as: the number of thresholds that are not above the value
+byte HdCanvas::lookupPow(const PowTable &table, float value) const {
+	if (!(value > 0.0f))
+		return 0;
+
+	if (value >= 1.0f)
+		return 255;
+
+	int level = table.cell[(int)(value * (float)kPowCells)];
+
+	while (level < 255 && (double)value >= table.threshold[level])
+		level++;
+
+	return (byte)level;
 }
 
 void HdCanvas::present(const StdVBuffer *scene, float gamma) {
 	if (!_active || !_frame)
 		return;
 
+	_gamma = gamma;
+	updateSoftwareAlpha();
+
+	// An item that replaces every pixel hides the scene and the items before it
+	int firstItem = findCoveringItem();
+	SceneCache *entry = nullptr;
+	bool matched = false;
+	int sceneToken = 0;
+	bool reusable = true;
+
+	if (firstItem < 0 && _frontScene && _softwareAlpha > 0.000001f) {
+		if (isSceneSupported()) {
+			entry = findSceneCache(&matched);
+			sceneToken = entry->serial;
+		} else {
+			reusable = false;
+		}
+	}
+
+	bool changing = hasChangingItem();
+
+	if (reusable && !changing && _composedValid && sceneToken == _composedSceneToken && sameQueue(_items, _composedItems)) {
+		// The frame would come out as the one on the screen
+		g_system->updateScreen();
+	} else {
+		composeFrame(firstItem, entry, matched);
+
+		_composedValid = false;
+
+		if (reusable && !changing) {
+			_composedItems = _items;
+			_composedSceneToken = sceneToken;
+			_composedValid = true;
+		}
+
+		g_system->copyRectToScreen(_frame, kWidth * 4, 0, 0, kWidth, kHeight);
+		g_system->updateScreen();
+	}
+
+	swapScene(scene);
+
+	// The option is read after the frame is done
+	_stretched = g_grim->isWidescreenStretched();
+}
+
+void HdCanvas::fillFrame() {
 	for (int i = 0; i < kWidth * kHeight; i++)
 		_frame[i] = _opaqueMask;
+}
 
-	drawScene(scene, gamma);
+// The scene is the first thing of the frame, then the items in the order they were queued
+void HdCanvas::composeFrame(int firstItem, SceneCache *entry, bool matched) {
+	uint start = 0;
 
-	if (gamma != _overlayGamma) {
-		buildGammaTable(_overlayGammaTable, 256, gamma);
-		_overlayGamma = gamma;
+	if (firstItem >= 0) {
+		start = (uint)firstItem;
+	} else if (entry && entry->hasFrame) {
+		memcpy(_frame, entry->frame, (size_t)kWidth * (size_t)kHeight * sizeof(uint32));
+	} else {
+		fillFrame();
+		drawScene();
+
+		if (entry && matched)
+			storeSceneFrame(entry);
 	}
 
-	for (uint i = 0; i < _items.size(); i++)
+	for (uint i = start; i < _items.size(); i++)
 		drawItem(_items[i]);
-
-	g_system->copyRectToScreen(_frame, kWidth * 4, 0, 0, kWidth, kHeight);
-	g_system->updateScreen();
 }
 
-void HdCanvas::buildSceneTables(int srcWidth, int srcHeight, int dstWidth, int dstHeight) {
-	if (_columnIndex && _sceneSrcWidth == srcWidth && _sceneSrcHeight == srcHeight)
-		return;
+bool HdCanvas::isSceneSupported() const {
+	const StdColorFormat *format = &_sceneFormat;
 
-	freeSceneTables();
+	return _sceneWidth >= 1 && _sceneHeight >= 1 && format->bpp == 16 && format->redBits >= 1 && format->redBits <= 8 &&
+			format->greenBits >= 1 && format->greenBits <= 8 && format->blueBits >= 1 && format->blueBits <= 8;
+}
 
-	_sceneSrcWidth = srcWidth;
-	_sceneSrcHeight = srcHeight;
-	_sceneDstWidth = dstWidth;
-	_sceneDstHeight = dstHeight;
-	_sceneOffsetX = (kWidth - dstWidth) / 2;
-	_sceneOffsetY = (kHeight - dstHeight) / 2;
-	_columnIndex = new int[dstWidth];
-	_columnWeight = new int[dstWidth];
-	_rowIndex = new int[dstHeight];
-	_rowWeight = new int[dstHeight];
-	_sceneRgbSize = srcWidth * srcHeight * 3;
-	_sceneRgb = new byte[_sceneRgbSize];
+bool HdCanvas::sceneCacheMatches(const SceneCache &entry) const {
+	size_t size = (size_t)_scenePitch * (size_t)_sceneHeight;
 
-	// The sample positions are the centers of the destination pixels, in texel space
-	for (int x = 0; x < dstWidth; x++) {
-		double position = ((double)x + 0.5) * (double)srcWidth / (double)dstWidth - 0.5;
-		int base = (int)floor(position);
+	if (!entry.valid || entry.sourceSize != size || entry.width != _sceneWidth || entry.height != _sceneHeight ||
+			entry.pitch != _scenePitch || entry.bpp != _sceneFormat.bpp || entry.redBits != _sceneFormat.redBits ||
+			entry.greenBits != _sceneFormat.greenBits || entry.blueBits != _sceneFormat.blueBits ||
+			entry.redShift != _sceneFormat.redShift || entry.greenShift != _sceneFormat.greenShift ||
+			entry.blueShift != _sceneFormat.blueShift || entry.stretched != _stretched || !sameFloat(entry.gamma, _gamma) ||
+			!sameFloat(entry.alpha, _softwareAlpha))
+		return false;
 
-		if (base < 0) {
-			_columnIndex[x] = 0;
-			_columnWeight[x] = 0;
-		} else if (base >= srcWidth - 1) {
-			_columnIndex[x] = srcWidth - 1;
-			_columnWeight[x] = 0;
-		} else {
-			_columnIndex[x] = base;
-			_columnWeight[x] = (int)((position - (double)base) * 256.0);
+	return memcmp(entry.source, _frontScene, size) == 0;
+}
+
+// The entry of the scene that is going to be drawn: the one that has the same surface and parameters, or the
+// least recently used one, taken over for it
+HdCanvas::SceneCache *HdCanvas::findSceneCache(bool *matched) {
+	_sceneUseCounter++;
+
+	for (int i = 0; i < kSceneCacheEntries; i++) {
+		if (sceneCacheMatches(_sceneCache[i])) {
+			_sceneCache[i].lastUse = _sceneUseCounter;
+			*matched = true;
+
+			return &_sceneCache[i];
 		}
 	}
 
-	for (int y = 0; y < dstHeight; y++) {
-		double position = ((double)y + 0.5) * (double)srcHeight / (double)dstHeight - 0.5;
-		int base = (int)floor(position);
+	int victim = 0;
 
-		if (base < 0) {
-			_rowIndex[y] = 0;
-			_rowWeight[y] = 0;
-		} else if (base >= srcHeight - 1) {
-			_rowIndex[y] = srcHeight - 1;
-			_rowWeight[y] = 0;
-		} else {
-			_rowIndex[y] = base;
-			_rowWeight[y] = (int)((position - (double)base) * 256.0);
-		}
+	for (int i = 1; i < kSceneCacheEntries; i++) {
+		if (_sceneCache[i].lastUse < _sceneCache[victim].lastUse)
+			victim = i;
 	}
+
+	SceneCache &entry = _sceneCache[victim];
+	size_t size = (size_t)_scenePitch * (size_t)_sceneHeight;
+
+	if (!entry.source || entry.sourceSize != size) {
+		delete[] entry.source;
+		entry.source = new byte[size];
+		entry.sourceSize = size;
+	}
+
+	memcpy(entry.source, _frontScene, size);
+
+	entry.valid = true;
+	entry.hasFrame = false;
+	entry.serial = ++_sceneSerial;
+	entry.lastUse = _sceneUseCounter;
+	entry.width = _sceneWidth;
+	entry.height = _sceneHeight;
+	entry.pitch = _scenePitch;
+	entry.bpp = _sceneFormat.bpp;
+	entry.redBits = _sceneFormat.redBits;
+	entry.greenBits = _sceneFormat.greenBits;
+	entry.blueBits = _sceneFormat.blueBits;
+	entry.redShift = _sceneFormat.redShift;
+	entry.greenShift = _sceneFormat.greenShift;
+	entry.blueShift = _sceneFormat.blueShift;
+	entry.stretched = _stretched;
+	entry.gamma = _gamma;
+	entry.alpha = _softwareAlpha;
+	*matched = false;
+
+	return &entry;
 }
 
-// The software surface is presented bilinear, with the gamma of the present shader
-void HdCanvas::drawScene(const StdVBuffer *scene, float gamma) {
-	if (!scene || !scene->pixels)
+// The frame as it is after the scene: the scene again, not the items
+void HdCanvas::storeSceneFrame(SceneCache *entry) {
+	if (!entry->frame)
+		entry->frame = new uint32[kWidth * kHeight];
+
+	memcpy(entry->frame, _frame, (size_t)kWidth * (size_t)kHeight * sizeof(uint32));
+	entry->hasFrame = true;
+}
+
+bool HdCanvas::sameFloat(float first, float second) {
+	return memcmp(&first, &second, sizeof(float)) == 0;
+}
+
+bool HdCanvas::sameItem(const Item &first, const Item &second) {
+	if (first.changing || second.changing)
+		return false;
+
+	if (first.kind != second.kind || first.pixels != second.pixels || first.srcWidth != second.srcWidth ||
+			first.srcHeight != second.srcHeight || first.layer != second.layer || first.bitmapX != second.bitmapX ||
+			first.bitmapY != second.bitmapY || first.bitmapAlpha != second.bitmapAlpha || first.mirror != second.mirror ||
+			first.serial != second.serial)
+		return false;
+
+	if (!sameFloat(first.x, second.x) || !sameFloat(first.y, second.y) || !sameFloat(first.width, second.width) ||
+			!sameFloat(first.height, second.height) || !sameFloat(first.alpha, second.alpha) ||
+			!sameFloat(first.desaturate, second.desaturate) || !sameFloat(first.gamma, second.gamma) ||
+			!sameFloat(first.fillRed, second.fillRed) || !sameFloat(first.fillGreen, second.fillGreen) ||
+			!sameFloat(first.fillBlue, second.fillBlue))
+		return false;
+
+	if (first.kind != kItemText)
+		return true;
+
+	const HdTextDraw &firstText = first.text;
+	const HdTextDraw &secondText = second.text;
+
+	if (firstText.quads.size() != secondText.quads.size() || !sameFloat(firstText.originX, secondText.originX) ||
+			!sameFloat(firstText.originY, secondText.originY) || !sameFloat(firstText.textRed, secondText.textRed) ||
+			!sameFloat(firstText.textGreen, secondText.textGreen) || !sameFloat(firstText.textBlue, secondText.textBlue) ||
+			!sameFloat(firstText.alpha, secondText.alpha))
+		return false;
+
+	for (uint i = 0; i < firstText.quads.size(); i++) {
+		const HdTextQuad &a = firstText.quads[i];
+		const HdTextQuad &b = secondText.quads[i];
+
+		if (!sameFloat(a.x, b.x) || !sameFloat(a.y, b.y) || a.width != b.width || a.height != b.height ||
+				a.character != b.character || a.glyph != b.glyph)
+			return false;
+	}
+
+	return true;
+}
+
+bool HdCanvas::sameQueue(const Common::Array<Item> &first, const Common::Array<Item> &second) {
+	if (first.size() != second.size())
+		return false;
+
+	for (uint i = 0; i < first.size(); i++) {
+		if (!sameItem(first[i], second[i]))
+			return false;
+	}
+
+	return true;
+}
+
+bool HdCanvas::hasChangingItem() const {
+	for (uint i = 0; i < _items.size(); i++) {
+		if (_items[i].changing)
+			return true;
+	}
+
+	return false;
+}
+
+// True for the items that write every pixel of the output without reading it: a movie or a solid fill over everything
+bool HdCanvas::coversFrame(const Item &item) const {
+	if (item.kind == kItemMovie) {
+		if (!item.pixels || !(item.width > 0.0f) || !(item.height > 0.0f))
+			return false;
+	} else if (item.kind == kItemFill) {
+		if (item.alpha != 1.0f)
+			return false;
+	} else {
+		return false;
+	}
+
+	return clampPixel(item.x, kWidth) == 0 && clampPixel(item.x + item.width, kWidth) == kWidth &&
+			clampPixel(item.y, kHeight) == 0 && clampPixel(item.y + item.height, kHeight) == kHeight;
+}
+
+int HdCanvas::findCoveringItem() const {
+	for (int i = (int)_items.size() - 1; i >= 0; i--) {
+		if (coversFrame(_items[i]))
+			return i;
+	}
+
+	return -1;
+}
+
+// One row of the scene: the texels are filtered along the row for the columns of the output, with the
+// current column tables of drawScene. Two rows are kept; the one named by keepRow is not replaced.
+const float *HdCanvas::getHorizontalRow(int row, int keepRow) {
+	for (int i = 0; i < 2; i++) {
+		if (_horizontalRowIndex[i] == row)
+			return &_horizontalRows[i][0];
+	}
+
+	int slot = _horizontalRowIndex[0] == keepRow ? 1 : 0;
+	int count = (int)_columnFirst.size();
+
+	_horizontalRowIndex[slot] = row;
+	_horizontalRows[slot].resize(count * 3);
+
+	const uint16 *source = (const uint16 *)(_frontScene + (size_t)row * (size_t)_scenePitch);
+	float *destination = &_horizontalRows[slot][0];
+
+	for (int i = 0; i < count; i++) {
+		uint first = source[_columnFirst[i]];
+		uint second = source[_columnSecond[i]];
+		float fraction = _columnFraction[i];
+		float inverse = 1.0f - fraction;
+
+		float redFirst = _redLevels[(first >> _sceneFormat.redShift) & _redMax];
+		float redSecond = _redLevels[(second >> _sceneFormat.redShift) & _redMax];
+		float greenFirst = _greenLevels[(first >> _sceneFormat.greenShift) & _greenMax];
+		float greenSecond = _greenLevels[(second >> _sceneFormat.greenShift) & _greenMax];
+		float blueFirst = _blueLevels[(first >> _sceneFormat.blueShift) & _blueMax];
+		float blueSecond = _blueLevels[(second >> _sceneFormat.blueShift) & _blueMax];
+
+		destination[i * 3] = redFirst * inverse + redSecond * fraction;
+		destination[i * 3 + 1] = greenFirst * inverse + greenSecond * fraction;
+		destination[i * 3 + 2] = blueFirst * inverse + blueSecond * fraction;
+	}
+
+	return destination;
+}
+
+// The surface of the scene is a 16-bit texture with a bilinear filter, shown with the gamma 0.8 * g
+void HdCanvas::drawScene() {
+	if (!_frontScene || !(_softwareAlpha > 0.000001f))
 		return;
 
-	const StdColorFormat *format = &scene->tex.format;
-	int srcWidth = scene->tex.width;
-	int srcHeight = scene->tex.height;
+	const StdColorFormat *format = &_sceneFormat;
+	int srcWidth = _sceneWidth;
+	int srcHeight = _sceneHeight;
 
-	if (srcWidth < 2 || srcHeight < 2 || format->bpp != 16) {
+	if (srcWidth < 1 || srcHeight < 1 || format->bpp != 16 || format->redBits < 1 || format->redBits > 8 ||
+			format->greenBits < 1 || format->greenBits > 8 || format->blueBits < 1 || format->blueBits > 8) {
 		warning("HdCanvas::drawScene(): unsupported scene surface");
 		return;
 	}
 
-	double scale = MIN((double)kWidth / (double)srcWidth, (double)kHeight / (double)srcHeight);
-	int dstWidth = MIN((int)((double)srcWidth * scale + 0.5), (int)kWidth);
-	int dstHeight = MIN((int)((double)srcHeight * scale + 0.5), (int)kHeight);
+	_redMax = (1 << format->redBits) - 1;
+	_greenMax = (1 << format->greenBits) - 1;
+	_blueMax = (1 << format->blueBits) - 1;
 
-	buildSceneTables(srcWidth, srcHeight, dstWidth, dstHeight);
+	// A texel is stored in 8 bits, the value of a 5 or 6 bits channel rounded
+	for (int i = 0; i <= _redMax; i++)
+		_redLevels[i] = _byteToFloat[(i * 255 + _redMax / 2) / _redMax];
 
-	if (!_sceneGammaTable)
-		_sceneGammaTable = new byte[kSceneGammaEntries];
+	for (int i = 0; i <= _greenMax; i++)
+		_greenLevels[i] = _byteToFloat[(i * 255 + _greenMax / 2) / _greenMax];
 
-	if (gamma != _sceneGamma) {
-		buildGammaTable(_sceneGammaTable, kSceneGammaEntries, 0.8 * (double)gamma);
-		_sceneGamma = gamma;
-	}
+	for (int i = 0; i <= _blueMax; i++)
+		_blueLevels[i] = _byteToFloat[(i * 255 + _blueMax / 2) / _blueMax];
 
-	// Expand every texel to 8 bits per channel once
-	byte redTable[256];
-	byte greenTable[256];
-	byte blueTable[256];
-	int redMax = (1 << format->redBits) - 1;
-	int greenMax = (1 << format->greenBits) - 1;
-	int blueMax = (1 << format->blueBits) - 1;
+	float scaleX;
+	float scaleY;
+	float offsetX;
+	float offsetY;
 
-	if (format->redBits < 1 || format->redBits > 8 || format->greenBits < 1 || format->greenBits > 8 ||
-			format->blueBits < 1 || format->blueBits > 8) {
-		warning("HdCanvas::drawScene(): unsupported scene color format");
+	computeScaling(_stretched, srcWidth, srcHeight, &scaleX, &scaleY, &offsetX, &offsetY);
+
+	float quadWidth = scaleX * (float)srcWidth;
+	float quadHeight = scaleY * (float)srcHeight;
+	int left = clampPixel(offsetX, kWidth);
+	int right = clampPixel(offsetX + quadWidth, kWidth);
+	int top = clampPixel(offsetY, kHeight);
+	int bottom = clampPixel(offsetY + quadHeight, kHeight);
+
+	if (left >= right || top >= bottom)
 		return;
+
+	// The texel position of the center of every pixel, in texel centers
+	int columns = right - left;
+
+	_columnFirst.resize(columns);
+	_columnSecond.resize(columns);
+	_columnFraction.resize(columns);
+
+	for (int i = 0; i < columns; i++) {
+		double position = (((double)(left + i) + 0.5 - (double)offsetX) * (double)srcWidth) / (double)quadWidth - 0.5;
+		int base = (int)floor(position);
+
+		_columnFraction[i] = (float)(position - (double)base);
+		_columnFirst[i] = CLIP(base, 0, srcWidth - 1);
+		_columnSecond[i] = CLIP(base + 1, 0, srcWidth - 1);
 	}
 
-	for (int i = 0; i <= redMax; i++)
-		redTable[i] = (byte)((i * 255 + redMax / 2) / redMax);
+	_horizontalRowIndex[0] = -1;
+	_horizontalRowIndex[1] = -1;
 
-	for (int i = 0; i <= greenMax; i++)
-		greenTable[i] = (byte)((i * 255 + greenMax / 2) / greenMax);
+	float exponent = 0.8f * _gamma;
+	bool opaque = _softwareAlpha >= 1.0f;
 
-	for (int i = 0; i <= blueMax; i++)
-		blueTable[i] = (byte)((i * 255 + blueMax / 2) / blueMax);
+	if (opaque)
+		buildPowTable(&_scenePow, exponent);
 
-	for (int y = 0; y < srcHeight; y++) {
-		const uint16 *source = (const uint16 *)(scene->pixels + y * scene->tex.pitchInBytes);
-		byte *destination = _sceneRgb + y * srcWidth * 3;
+	for (int y = top; y < bottom; y++) {
+		double position = (((double)y + 0.5 - (double)offsetY) * (double)srcHeight) / (double)quadHeight - 0.5;
+		int base = (int)floor(position);
+		float fraction = (float)(position - (double)base);
+		int first = CLIP(base, 0, srcHeight - 1);
+		int second = CLIP(base + 1, 0, srcHeight - 1);
+		const float *upper = getHorizontalRow(first, -1);
+		const float *lower = getHorizontalRow(second, first);
+		float inverse = 1.0f - fraction;
+		uint32 *destination = _frame + y * kWidth + left;
 
-		for (int x = 0; x < srcWidth; x++) {
-			uint value = source[x];
+		for (int i = 0; i < columns; i++) {
+			float red = upper[i * 3] * inverse + lower[i * 3] * fraction;
+			float green = upper[i * 3 + 1] * inverse + lower[i * 3 + 1] * fraction;
+			float blue = upper[i * 3 + 2] * inverse + lower[i * 3 + 2] * fraction;
 
-			destination[0] = redTable[(value >> format->redShift) & redMax];
-			destination[1] = greenTable[(value >> format->greenShift) & greenMax];
-			destination[2] = blueTable[(value >> format->blueShift) & blueMax];
-			destination += 3;
-		}
-	}
+			if (opaque) {
+				destination[i] = packPixel(lookupPow(_scenePow, red), lookupPow(_scenePow, green), lookupPow(_scenePow, blue));
+			} else {
+				float redOut = powf(red, exponent) * _softwareAlpha;
+				float greenOut = powf(green, exponent) * _softwareAlpha;
+				float blueOut = powf(blue, exponent) * _softwareAlpha;
 
-	int rowBytes = srcWidth * 3;
-
-	for (int y = 0; y < dstHeight; y++) {
-		int rowTop = _rowIndex[y];
-		int rowBottom = MIN(rowTop + 1, srcHeight - 1);
-		int weightY = _rowWeight[y];
-		const byte *top = _sceneRgb + rowTop * rowBytes;
-		const byte *bottom = _sceneRgb + rowBottom * rowBytes;
-		uint32 *destination = _frame + (_sceneOffsetY + y) * kWidth + _sceneOffsetX;
-
-		for (int x = 0; x < dstWidth; x++) {
-			int left = _columnIndex[x] * 3;
-			int right = MIN(_columnIndex[x] + 1, srcWidth - 1) * 3;
-			int weightX = _columnWeight[x];
-			int channel[3];
-
-			for (int c = 0; c < 3; c++) {
-				int upper = top[left + c] * (256 - weightX) + top[right + c] * weightX;
-				int lower = bottom[left + c] * (256 - weightX) + bottom[right + c] * weightX;
-
-				channel[c] = _sceneGammaTable[(upper * (256 - weightY) + lower * weightY) >> 8];
+				if (_softwareAlpha < 0.99999899f)
+					blendPixel(left + i, y, redOut, greenOut, blueOut, _softwareAlpha);
+				else
+					writePixel(left + i, y, toByte(redOut), toByte(greenOut), toByte(blueOut));
 			}
-
-			destination[x] = packPixel(channel[0], channel[1], channel[2]);
 		}
 	}
 }
 
 void HdCanvas::drawItem(const Item &item) {
-	if (item.kind == kItemFill)
+	switch (item.kind) {
+	case kItemBitmap:
+		drawBitmap(item);
+		break;
+	case kItemOverlay:
+		drawOverlay(item);
+		break;
+	case kItemFill:
 		drawFill(item);
-	else
-		drawImage(item);
-}
-
-void HdCanvas::drawFill(const Item &item) {
-	int left = MAX(item.x, 0);
-	int top = MAX(item.y, 0);
-	int right = MIN(item.x + item.width, (int)kWidth);
-	int bottom = MIN(item.y + item.height, (int)kHeight);
-
-	if (left >= right || top >= bottom || item.alpha <= 0)
-		return;
-
-	int alpha = item.alpha;
-	int red = (item.fillRed * alpha + 127) / 255;
-	int green = (item.fillGreen * alpha + 127) / 255;
-	int blue = (item.fillBlue * alpha + 127) / 255;
-	uint32 solid = packPixel(item.fillRed, item.fillGreen, item.fillBlue);
-	int inverse = 255 - alpha;
-
-	for (int y = top; y < bottom; y++) {
-		uint32 *destination = _frame + y * kWidth;
-
-		for (int x = left; x < right; x++) {
-			if (alpha == 255) {
-				destination[x] = solid;
-				continue;
-			}
-
-			uint32 value = destination[x];
-			int destRed = red + ((int)((value >> _redShift) & 0xFF) * inverse + 127) / 255;
-			int destGreen = green + ((int)((value >> _greenShift) & 0xFF) * inverse + 127) / 255;
-			int destBlue = blue + ((int)((value >> _blueShift) & 0xFF) * inverse + 127) / 255;
-
-			destination[x] = packPixel(MIN(destRed, 255), MIN(destGreen, 255), MIN(destBlue, 255));
-		}
+		break;
+	case kItemText:
+		drawText(item);
+		break;
+	case kItemMovie:
+		drawMovie(item);
+		break;
+	default:
+		break;
 	}
 }
 
-// Blends an RGBA image with premultiplied alpha, sampled with the nearest texel
-void HdCanvas::drawImage(const Item &item) {
-	if (!item.pixels || item.alpha <= 0)
+void HdCanvas::writePixel(int x, int y, int red, int green, int blue) {
+	_frame[y * kWidth + x] = packPixel(red, green, blue);
+}
+
+// The blend of the shaders: premultiplied color over the pixel, written back as bytes
+void HdCanvas::blendPixel(int x, int y, float red, float green, float blue, float alpha) {
+	uint32 *destination = &_frame[y * kWidth + x];
+	uint32 value = *destination;
+	float inverse = 1.0f - alpha;
+	float destRed = _byteToFloat[(value >> _redShift) & 0xFF];
+	float destGreen = _byteToFloat[(value >> _greenShift) & 0xFF];
+	float destBlue = _byteToFloat[(value >> _blueShift) & 0xFF];
+
+	*destination = packPixel(toByte(red + destRed * inverse), toByte(green + destGreen * inverse), toByte(blue + destBlue * inverse));
+}
+
+// A straight bitmap with a global alpha, for the items that are not drawn by the shaders of the original
+void HdCanvas::drawBitmap(const Item &item) {
+	if (!item.pixels || item.bitmapAlpha <= 0)
 		return;
 
-	int left = MAX(item.x, 0);
-	int top = MAX(item.y, 0);
-	int right = MIN(item.x + item.width, (int)kWidth);
-	int bottom = MIN(item.y + item.height, (int)kHeight);
-
-	if (left >= right || top >= bottom)
-		return;
-
-	bool scaled = item.width != item.srcWidth || item.height != item.srcHeight;
-	bool useGamma = item.useGamma && _overlayGamma != 1.0f;
+	int left = MAX(item.bitmapX, 0);
+	int top = MAX(item.bitmapY, 0);
+	int right = MIN(item.bitmapX + item.srcWidth, (int)kWidth);
+	int bottom = MIN(item.bitmapY + item.srcHeight, (int)kHeight);
 
 	for (int y = top; y < bottom; y++) {
-		int row = y - item.y;
-		int sourceY = row;
-
-		if (scaled)
-			sourceY = (int)(((int64)(2 * row + 1) * item.srcHeight) / (int64)(2 * item.height));
-
-		if (item.mirror & 2)
-			sourceY = item.srcHeight - 1 - sourceY;
-
-		const byte *sourceRow = item.pixels + (int64)sourceY * item.srcWidth * 4;
+		const byte *sourceRow = item.pixels + (int64)(y - item.bitmapY) * item.srcWidth * 4;
 		uint32 *destination = _frame + y * kWidth;
 
 		for (int x = left; x < right; x++) {
-			int sourceX = x - item.x;
-
-			if (scaled)
-				sourceX = (int)(((int64)(2 * sourceX + 1) * item.srcWidth) / (int64)(2 * item.width));
-
-			if (item.mirror & 1)
-				sourceX = item.srcWidth - 1 - sourceX;
-
-			const byte *pixel = sourceRow + sourceX * 4;
+			const byte *pixel = sourceRow + (x - item.bitmapX) * 4;
 			int alpha = pixel[3];
 
 			if (alpha == 0)
 				continue;
 
-			int red = pixel[0];
-			int green = pixel[1];
-			int blue = pixel[2];
+			int red = (pixel[0] * alpha + 127) / 255;
+			int green = (pixel[1] * alpha + 127) / 255;
+			int blue = (pixel[2] * alpha + 127) / 255;
 
-			if (!item.premultiplied) {
-				red = (red * alpha + 127) / 255;
-				green = (green * alpha + 127) / 255;
-				blue = (blue * alpha + 127) / 255;
-			}
-
-			if (item.desaturate > 0) {
-				int luma = (red * 54 + green * 183 + blue * 18 + 128) >> 8;
-
-				red += ((luma - red) * item.desaturate) >> 8;
-				green += ((luma - green) * item.desaturate) >> 8;
-				blue += ((luma - blue) * item.desaturate) >> 8;
-			}
-
-			if (useGamma) {
-				red = _overlayGammaTable[CLIP(red, 0, 255)];
-				green = _overlayGammaTable[CLIP(green, 0, 255)];
-				blue = _overlayGammaTable[CLIP(blue, 0, 255)];
-			}
-
-			if (item.alpha != 255) {
-				red = (red * item.alpha + 127) / 255;
-				green = (green * item.alpha + 127) / 255;
-				blue = (blue * item.alpha + 127) / 255;
-				alpha = (alpha * item.alpha + 127) / 255;
+			if (item.bitmapAlpha != 255) {
+				red = (red * item.bitmapAlpha + 127) / 255;
+				green = (green * item.bitmapAlpha + 127) / 255;
+				blue = (blue * item.bitmapAlpha + 127) / 255;
+				alpha = (alpha * item.bitmapAlpha + 127) / 255;
 			}
 
 			if (alpha == 255) {
@@ -514,6 +985,470 @@ void HdCanvas::drawImage(const Item &item) {
 			destination[x] = packPixel(MIN(destRed, 255), MIN(destGreen, 255), MIN(destBlue, 255));
 		}
 	}
+}
+
+// The color quad: a constant premultiplied color over the pixels whose centers are inside
+void HdCanvas::drawFill(const Item &item) {
+	int left = clampPixel(item.x, kWidth);
+	int right = clampPixel(item.x + item.width, kWidth);
+	int top = clampPixel(item.y, kHeight);
+	int bottom = clampPixel(item.y + item.height, kHeight);
+
+	if (left >= right || top >= bottom)
+		return;
+
+	if (item.alpha == 1.0f) {
+		uint32 value = packPixel(toByte(item.fillRed), toByte(item.fillGreen), toByte(item.fillBlue));
+
+		for (int y = top; y < bottom; y++) {
+			uint32 *destination = _frame + y * kWidth;
+
+			for (int x = left; x < right; x++)
+				destination[x] = value;
+		}
+
+		return;
+	}
+
+	if ((right - left) * (bottom - top) < 1024) {
+		for (int y = top; y < bottom; y++) {
+			for (int x = left; x < right; x++)
+				blendPixel(x, y, item.fillRed, item.fillGreen, item.fillBlue, item.alpha);
+		}
+
+		return;
+	}
+
+	// The result of the blend only depends on the byte that is under the pixel
+	float inverse = 1.0f - item.alpha;
+	byte redLevels[256];
+	byte greenLevels[256];
+	byte blueLevels[256];
+
+	for (int i = 0; i < 256; i++) {
+		redLevels[i] = (byte)toByte(item.fillRed + _byteToFloat[i] * inverse);
+		greenLevels[i] = (byte)toByte(item.fillGreen + _byteToFloat[i] * inverse);
+		blueLevels[i] = (byte)toByte(item.fillBlue + _byteToFloat[i] * inverse);
+	}
+
+	for (int y = top; y < bottom; y++) {
+		uint32 *destination = _frame + y * kWidth;
+
+		for (int x = left; x < right; x++) {
+			uint32 value = destination[x];
+
+			destination[x] = packPixel(redLevels[(value >> _redShift) & 0xFF], greenLevels[(value >> _greenShift) & 0xFF],
+					blueLevels[(value >> _blueShift) & 0xFF]);
+		}
+	}
+}
+
+// The textured quad shader: filtered texel, desaturation, power of the gamma, times the opacity, over the pixel
+void HdCanvas::drawOverlay(const Item &item) {
+	if (!item.pixels || !(item.width > 0.0f) || !(item.height > 0.0f))
+		return;
+
+	int left = clampPixel(item.x, kWidth);
+	int right = clampPixel(item.x + item.width, kWidth);
+	int top = clampPixel(item.y, kHeight);
+	int bottom = clampPixel(item.y + item.height, kHeight);
+
+	if (left >= right || top >= bottom)
+		return;
+
+	int srcWidth = item.srcWidth;
+	int srcHeight = item.srcHeight;
+	int columns = right - left;
+	double columnStart = (item.mirror & 1) ? (double)srcWidth : 0.0;
+	double columnEnd = (item.mirror & 1) ? 0.0 : (double)srcWidth;
+	double rowStart = (item.mirror & 2) ? (double)srcHeight : 0.0;
+	double rowEnd = (item.mirror & 2) ? 0.0 : (double)srcHeight;
+
+	bool aligned = true;
+
+	_itemColumnFirst.resize(columns);
+	_itemColumnSecond.resize(columns);
+	_itemColumnFraction.resize(columns);
+
+	for (int i = 0; i < columns; i++) {
+		double position = columnStart + ((double)(left + i) + 0.5 - (double)item.x) * (columnEnd - columnStart) / (double)item.width - 0.5;
+		int base = (int)floor(position);
+
+		_itemColumnFraction[i] = (float)(position - (double)base);
+		_itemColumnFirst[i] = CLIP(base, 0, srcWidth - 1);
+		_itemColumnSecond[i] = CLIP(base + 1, 0, srcWidth - 1);
+
+		if (_itemColumnFraction[i] != 0.0f)
+			aligned = false;
+	}
+
+	float gamma = item.gamma;
+	bool usePow = gamma != 1.0f;
+	bool plain = item.desaturate == 0.0f;
+	float opacity = item.alpha;
+	float levelPow[256];
+	float scaledLevel[256];
+	float scaledAlpha[256];
+	byte scaledByte[256];
+
+	if (usePow && plain) {
+		for (int i = 0; i < 256; i++)
+			levelPow[i] = powf(_byteToFloat[i], gamma);
+	}
+
+	// For the texels that are not filtered: what a byte of the image becomes, with the same operations as below
+	if (plain) {
+		for (int i = 0; i < 256; i++) {
+			float level = usePow ? levelPow[i] : _byteToFloat[i];
+
+			scaledLevel[i] = level * opacity;
+			scaledByte[i] = (byte)toByte(scaledLevel[i]);
+			scaledAlpha[i] = _byteToFloat[i] * opacity;
+		}
+	}
+
+	_itemRowIndex[0] = -1;
+	_itemRowIndex[1] = -1;
+
+	for (int y = top; y < bottom; y++) {
+		double position = rowStart + ((double)y + 0.5 - (double)item.y) * (rowEnd - rowStart) / (double)item.height - 0.5;
+		int base = (int)floor(position);
+		float fractionY = (float)(position - (double)base);
+		int firstRow = CLIP(base, 0, srcHeight - 1);
+		int secondRow = CLIP(base + 1, 0, srcHeight - 1);
+		bool exact = aligned && fractionY == 0.0f;
+
+		if (exact && plain) {
+			const byte *row = item.pixels + (size_t)firstRow * (size_t)srcWidth * 4;
+			uint32 *destination = _frame + y * kWidth + left;
+
+			for (int i = 0; i < columns; i++) {
+				const byte *a = row + _itemColumnFirst[i] * 4;
+
+				if (a[0] == 0 && a[1] == 0 && a[2] == 0 && a[3] == 0)
+					continue;
+
+				float alpha = scaledAlpha[a[3]];
+
+				if (alpha == 1.0f)
+					destination[i] = packPixel(scaledByte[a[0]], scaledByte[a[1]], scaledByte[a[2]]);
+				else
+					blendPixel(left + i, y, scaledLevel[a[0]], scaledLevel[a[1]], scaledLevel[a[2]], alpha);
+			}
+
+			continue;
+		}
+
+		const byte *exactRow = nullptr;
+		const float *upperTexels = nullptr;
+		const float *lowerTexels = nullptr;
+		float inverseY = 1.0f - fractionY;
+
+		if (exact) {
+			exactRow = item.pixels + (size_t)firstRow * (size_t)srcWidth * 4;
+		} else {
+			upperTexels = getItemRow(item.pixels, srcWidth, firstRow, -1, 4, columns);
+			lowerTexels = getItemRow(item.pixels, srcWidth, secondRow, firstRow, 4, columns);
+		}
+
+		for (int i = 0; i < columns; i++) {
+			const byte *a = nullptr;
+			float texel[4];
+			bool levels = exact;
+
+			if (exact) {
+				a = exactRow + _itemColumnFirst[i] * 4;
+
+				for (int c = 0; c < 4; c++)
+					texel[c] = _byteToFloat[a[c]];
+			} else {
+				for (int c = 0; c < 4; c++)
+					texel[c] = upperTexels[i * 4 + c] * inverseY + lowerTexels[i * 4 + c] * fractionY;
+			}
+
+			if (texel[3] == 0.0f && texel[0] == 0.0f && texel[1] == 0.0f && texel[2] == 0.0f)
+				continue;
+
+			float red = texel[0];
+			float green = texel[1];
+			float blue = texel[2];
+
+			if (item.desaturate != 0.0f) {
+				float luma = red * 0.2125f + green * 0.7154f + blue * 0.0721f;
+				float inverse = 1.0f - item.desaturate;
+
+				red = red * inverse + luma * item.desaturate;
+				green = green * inverse + luma * item.desaturate;
+				blue = blue * inverse + luma * item.desaturate;
+				levels = false;
+			}
+
+			if (usePow) {
+				if (levels) {
+					red = levelPow[a[0]];
+					green = levelPow[a[1]];
+					blue = levelPow[a[2]];
+				} else {
+					red = powf(red, gamma);
+					green = powf(green, gamma);
+					blue = powf(blue, gamma);
+				}
+			}
+
+			float alpha = texel[3] * opacity;
+
+			if (alpha == 1.0f)
+				writePixel(left + i, y, toByte(red * opacity), toByte(green * opacity), toByte(blue * opacity));
+			else
+				blendPixel(left + i, y, red * opacity, green * opacity, blue * opacity, alpha);
+		}
+	}
+}
+
+// The text shader, one box after the other: the glyph and a shadow made of its neighbours, over the pixels
+void HdCanvas::drawText(const Item &item) {
+	static const int tapOffsets[11][2] = {
+		{ -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 }, { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 },
+		{ -2, -2 }, { -2, -1 }, { -1, -2 }
+	};
+
+	const HdTextDraw &draw = item.text;
+
+	for (uint q = 0; q < draw.quads.size(); q++) {
+		const HdTextQuad &quad = draw.quads[q];
+		const HdFont::Glyph *glyph = quad.glyph;
+
+		if (!glyph || !glyph->alpha)
+			continue;
+
+		float quadLeft = quad.x + draw.originX;
+		float quadTop = quad.y + draw.originY;
+		int quadWidth = quad.width;
+		int quadHeight = quad.height;
+		int left = clampPixel(quadLeft, kWidth);
+		int right = clampPixel(quadLeft + (float)quadWidth, kWidth);
+		int top = clampPixel(quadTop, kHeight);
+		int bottom = clampPixel(quadTop + (float)quadHeight, kHeight);
+
+		if (left >= right || top >= bottom)
+			continue;
+
+		// The atlas is sampled at the corner of the texels: every sample is a mix of a block of four, and the
+		// fractions are the same for the whole box
+		float positionX = ((float)left + 0.5f) - quadLeft;
+		float positionY = ((float)top + 0.5f) - quadTop;
+		int startX = (int)floorf(positionX);
+		int startY = (int)floorf(positionY);
+		float fractionX = positionX - (float)startX;
+		float fractionY = positionY - (float)startY;
+		float inverseX = 1.0f - fractionX;
+		float inverseY = 1.0f - fractionY;
+
+		// The filtered values for the offsets -2 .. size of the box, the glyph is at 2 in them
+		int gridWidth = quadWidth + 3;
+		int gridHeight = quadHeight + 3;
+
+		_textScratch.resize(gridWidth * gridHeight);
+		_textRowFirst.resize(gridWidth);
+		_textRowSecond.resize(gridWidth);
+
+		// Every row of the grid mixes two rows of the glyph, so the horizontal mix of a glyph row is done once
+		float *upperRow = &_textRowFirst[0];
+		float *lowerRow = &_textRowSecond[0];
+
+		for (int n = -1; n < gridHeight; n++) {
+			int gy = (n - 4) + 1;
+			float *row = n < 0 ? upperRow : lowerRow;
+
+			for (int m = 0; m < gridWidth; m++) {
+				float first = 0.0f;
+				float second = 0.0f;
+				int gx = m - 4;
+
+				if (gy >= 0 && gy < glyph->height) {
+					const byte *line = glyph->alpha + gy * glyph->width;
+
+					if (gx >= 0 && gx < glyph->width)
+						first = _byteToFloat[line[gx]];
+
+					if (gx + 1 >= 0 && gx + 1 < glyph->width)
+						second = _byteToFloat[line[gx + 1]];
+				}
+
+				row[m] = first * inverseX + second * fractionX;
+			}
+
+			if (n >= 0) {
+				for (int m = 0; m < gridWidth; m++)
+					_textScratch[n * gridWidth + m] = upperRow[m] * inverseY + lowerRow[m] * fractionY;
+
+				float *swapRow = upperRow;
+
+				upperRow = lowerRow;
+				lowerRow = swapRow;
+			}
+		}
+
+		int tapDelta[11];
+
+		for (int k = 0; k < 11; k++)
+			tapDelta[k] = tapOffsets[k][1] * gridWidth + tapOffsets[k][0];
+
+		for (int y = top; y < bottom; y++) {
+			int j = startY + (y - top);
+
+			for (int x = left; x < right; x++) {
+				int i = startX + (x - left);
+				int center = (j + 2) * gridWidth + (i + 2);
+				float cover = _textScratch[center];
+				float sum = _textScratch[center + tapDelta[0]];
+
+				for (int k = 1; k < 11; k++)
+					sum += _textScratch[center + tapDelta[k]];
+
+				if (!(sum > 0.0f))
+					sum = 0.0f;
+
+				if (sum > 1.0f)
+					sum = 1.0f;
+
+				float shadow = sum * draw.alpha;
+				float alpha = shadow * (1.0f - cover) + draw.alpha * cover;
+				float red = (0.0f * (1.0f - cover)) + draw.textRed * cover;
+				float green = (0.0f * (1.0f - cover)) + draw.textGreen * cover;
+				float blue = (0.0f * (1.0f - cover)) + draw.textBlue * cover;
+
+				if (alpha == 0.0f && red == 0.0f && green == 0.0f && blue == 0.0f)
+					continue;
+
+				blendPixel(x, y, red, green, blue, alpha);
+			}
+		}
+	}
+}
+
+// The movie: a bilinear filtered frame that replaces the pixels, with the gamma as the exponent
+void HdCanvas::drawMovie(const Item &item) {
+	if (!item.pixels || !(item.width > 0.0f) || !(item.height > 0.0f))
+		return;
+
+	int left = clampPixel(item.x, kWidth);
+	int right = clampPixel(item.x + item.width, kWidth);
+	int top = clampPixel(item.y, kHeight);
+	int bottom = clampPixel(item.y + item.height, kHeight);
+
+	if (left >= right || top >= bottom)
+		return;
+
+	int srcWidth = item.srcWidth;
+	int srcHeight = item.srcHeight;
+	int columns = right - left;
+	bool usePow = item.gamma != 1.0f;
+
+	if (usePow)
+		buildPowTable(&_moviePow, item.gamma);
+
+	bool aligned = true;
+
+	_itemColumnFirst.resize(columns);
+	_itemColumnSecond.resize(columns);
+	_itemColumnFraction.resize(columns);
+
+	for (int i = 0; i < columns; i++) {
+		double position = ((double)(left + i) + 0.5 - (double)item.x) * (double)srcWidth / (double)item.width - 0.5;
+		int base = (int)floor(position);
+
+		_itemColumnFraction[i] = (float)(position - (double)base);
+		_itemColumnFirst[i] = CLIP(base, 0, srcWidth - 1);
+		_itemColumnSecond[i] = CLIP(base + 1, 0, srcWidth - 1);
+
+		if (_itemColumnFraction[i] != 0.0f)
+			aligned = false;
+	}
+
+	// When no texel is filtered, a channel only depends on its byte. The value of a byte is what the filter below
+	// gives for it: a weight of 1 and a weight of 0 leave the value as it is.
+	uint32 redPixels[256];
+	uint32 greenPixels[256];
+	uint32 bluePixels[256];
+
+	if (aligned) {
+		for (int i = 0; i < 256; i++) {
+			uint32 level = usePow ? lookupPow(_moviePow, _byteToFloat[i]) : (uint32)toByte(_byteToFloat[i]);
+
+			redPixels[i] = level << _redShift;
+			greenPixels[i] = level << _greenShift;
+			bluePixels[i] = level << _blueShift;
+		}
+	}
+
+	_itemRowIndex[0] = -1;
+	_itemRowIndex[1] = -1;
+
+	for (int y = top; y < bottom; y++) {
+		double position = ((double)y + 0.5 - (double)item.y) * (double)srcHeight / (double)item.height - 0.5;
+		int base = (int)floor(position);
+		float fractionY = (float)(position - (double)base);
+		float inverseY = 1.0f - fractionY;
+		int firstRow = CLIP(base, 0, srcHeight - 1);
+		int secondRow = CLIP(base + 1, 0, srcHeight - 1);
+		uint32 *destination = _frame + y * kWidth + left;
+
+		if (aligned && fractionY == 0.0f) {
+			const byte *row = item.pixels + (size_t)firstRow * (size_t)srcWidth * 4;
+
+			for (int i = 0; i < columns; i++) {
+				const byte *a = row + _itemColumnFirst[i] * 4;
+
+				destination[i] = redPixels[a[0]] | greenPixels[a[1]] | bluePixels[a[2]] | _opaqueMask;
+			}
+
+			continue;
+		}
+
+		const float *upper = getItemRow(item.pixels, srcWidth, firstRow, -1, 3, columns);
+		const float *lower = getItemRow(item.pixels, srcWidth, secondRow, firstRow, 3, columns);
+
+		for (int i = 0; i < columns; i++) {
+			float red = upper[i * 3] * inverseY + lower[i * 3] * fractionY;
+			float green = upper[i * 3 + 1] * inverseY + lower[i * 3 + 1] * fractionY;
+			float blue = upper[i * 3 + 2] * inverseY + lower[i * 3 + 2] * fractionY;
+
+			if (usePow)
+				destination[i] = packPixel(lookupPow(_moviePow, red), lookupPow(_moviePow, green), lookupPow(_moviePow, blue));
+			else
+				destination[i] = packPixel(toByte(red), toByte(green), toByte(blue));
+		}
+	}
+}
+
+// One row of an image filtered along the row for the current columns: the texels of a column mixed with the weight
+// of its second texel. Two rows are kept; the one named by keepRow is not replaced.
+const float *HdCanvas::getItemRow(const byte *pixels, int srcWidth, int row, int keepRow, int channels, int columns) {
+	for (int i = 0; i < 2; i++) {
+		if (_itemRowIndex[i] == row)
+			return &_itemRows[i][0];
+	}
+
+	int slot = _itemRowIndex[0] == keepRow ? 1 : 0;
+
+	_itemRowIndex[slot] = row;
+	_itemRows[slot].resize(columns * channels);
+
+	const byte *source = pixels + (size_t)row * (size_t)srcWidth * 4;
+	float *destination = &_itemRows[slot][0];
+
+	for (int i = 0; i < columns; i++) {
+		const byte *first = source + _itemColumnFirst[i] * 4;
+		const byte *second = source + _itemColumnSecond[i] * 4;
+		float fraction = _itemColumnFraction[i];
+		float inverse = 1.0f - fraction;
+
+		for (int c = 0; c < channels; c++)
+			destination[i * channels + c] = _byteToFloat[first[c]] * inverse + _byteToFloat[second[c]] * fraction;
+	}
+
+	return destination;
 }
 
 } // End of namespace Grim

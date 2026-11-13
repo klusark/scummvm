@@ -537,6 +537,7 @@ public:
 		explicit CameraModule(RenderDroid *rd) : Module(rd), _curCamera(nullptr) {}
 		RdCamera *getCurrent() const { return _curCamera; }
 		void getPosition(RdVector3 out) const { out[0] = _camMatrix[3][0]; out[1] = _camMatrix[3][1]; out[2] = _camMatrix[3][2]; }
+		void getMatrix(RdMatrix34 out) const { memcpy(out, _camMatrix, sizeof(RdMatrix34)); }
 		RdCamera *create(float fov, int clipFar, float zNear, float zFar, float aspectRatio);
 		int newEntry(RdCamera *camera, float fov, int clipFar, float zNear, float zFar, float aspectRatio);
 		void destroy(RdCamera *&camera);

@@ -100,7 +100,11 @@ bool Lua_V1::findCostumeInStack(lua_Object obj, CostumeNode *stack, CostumeNode 
 }
 
 void Lua_V1::LoadActor() {
-	int handle = g_grim->_sputActor->allocateActor();
+	lua_Object flag20Obj = lua_getparam(2);
+	lua_Object flag80Obj = lua_getparam(3);
+	int flag20 = lua_isnumber(flag20Obj) && lua_getnumber(flag20Obj) != 0.0f;
+	int flag80 = lua_isnumber(flag80Obj) && lua_getnumber(flag80Obj) != 0.0f;
+	int handle = g_grim->_sputActor->allocateActor(flag20, flag80);
 
 	if (handle < 0)
 		lua_pushnil();

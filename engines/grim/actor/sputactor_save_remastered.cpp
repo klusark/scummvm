@@ -35,11 +35,6 @@
 
 namespace Grim {
 
-enum {
-	// The path of an actor has room for 30 points, the savegames of the remastered have 128
-	kRemasteredPathPoints = 128
-};
-
 // The actors in the savegames of the remastered: the serials, the handles, the pointers and the
 // sound id take 8 bytes and the path has 128 points
 int SputActorModule::saveRemastered(Common::WriteStream *stream) {
@@ -206,14 +201,9 @@ int SputActorModule::saveRemastered(Common::WriteStream *stream) {
 
 			stream->writeSint32LE(extra->numPathPoints);
 
-			for (int i = 0; i < 30; i++) {
+			for (int i = 0; i < kExtraPathPoints; i++) {
 				for (int j = 0; j < 3; j++)
 					stream->writeFloatLE(extra->path[i][j]);
-			}
-
-			for (int i = 30; i < kRemasteredPathPoints; i++) {
-				for (int j = 0; j < 3; j++)
-					stream->writeFloatLE(0.0f);
 			}
 
 			stream->writeSint32LE(extra->pathIndex);
@@ -560,20 +550,14 @@ int SputActorModule::restoreRemastered(Common::ReadStream *stream) {
 
 			extra->numPathPoints = stream->readSint32LE();
 
-			for (int i = 0; i < 30; i++) {
+			for (int i = 0; i < kExtraPathPoints; i++) {
 				for (int j = 0; j < 3; j++)
 					extra->path[i][j] = stream->readFloatLE();
 			}
 
-			// The points after the 30 that fit are dropped
-			for (int i = 30; i < kRemasteredPathPoints; i++) {
-				for (int j = 0; j < 3; j++)
-					stream->readFloatLE();
-			}
-
-			if (extra->numPathPoints > 30) {
-				warning("SputActorModule::restoreRemastered(): the path of the actor %d has %d points, only 30 are kept", actorIndex, extra->numPathPoints);
-				extra->numPathPoints = 30;
+			if (extra->numPathPoints < 0 || extra->numPathPoints > kExtraPathPoints) {
+				warning("SputActorModule::restoreRemastered(): the path of the actor %d has %d points", actorIndex, extra->numPathPoints);
+				extra->numPathPoints = kExtraPathPoints;
 			}
 
 			extra->pathIndex = stream->readSint32LE();
@@ -632,12 +616,8 @@ int SputActorModule::restoreRemastered(Common::ReadStream *stream) {
 				}
 			}
 
-			if (sayTextSerial) {
+			if (sayTextSerial)
 				actor->extra->sayText = _sputText->findSerialNumber(sayTextSerial);
-
-				if (actor->extra->sayText)
-					actor->extra->sayText->actor = actor;
-			}
 
 			resetShadows(actor);
 

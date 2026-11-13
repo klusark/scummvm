@@ -35,6 +35,7 @@ class OverlayManager;
 class RenderDroid;
 class SputActorModule;
 class SputRoom;
+class StdConffile;
 class SysStruct;
 
 struct Hotspot {
@@ -116,53 +117,50 @@ public:
 
 	// The overlays that show an image when the pointer is on a hotspot
 	void setOverlays(OverlayManager *overlays) { _overlays = overlays; }
+	OverlayManager *getOverlays() const { return _overlays; }
 
 	// The 1920x1080 canvas and the coordinate spaces of the scripts
 	static void convertCoords1080(int *x, int *y, int mode, bool isSize);
 	static void convertCoordsNative(int *x, int *y, int mode, bool isSize);
 
-	// Loads the hotspots of the set unless it is the one already loaded. The
-	// hotspots added by the scripts stay.
+	// Reads the .hot file of a set (the name of the .set file) unless it is the loaded one. The
+	// hotspots added by the scripts stay. Called when the current set changes and when a room is restored.
 	void load(const char *setName);
-	void loadCurrentRoom();
+
+	// Forgets every hotspot, the overlays of the hotspots stay
+	void clear();
 
 	// Hotspots under a point of the canvas, the ones with priority come first
 	int getActiveHotspots(int canvasX, int canvasY, const Hotspot **out, int max, int mode);
 
+	// Returns the handle, or -1 when the table is full
 	int addHotspot(const char *id, int x, int y, int width, int height, int cursor, int boost, int menuType,
 			const char *hoverImage, int hoverLayer, int coords);
 	void removeHotspot(int handle);
 	void updateHotspot(const char *id, int x, int y, int coords);
-	void linkHotspot(const char *id, int actorIndex);
+	void linkHotspot(const char *id, int actorHandle);
 
 	// Block of the save game after the two cursor handles
 	int serialize(Common::WriteStream *stream) const;
 	int deserialize(Common::ReadStream *stream);
 
 private:
-	struct TextBuffer {
-		char *data;
-		int size;
-		int pos;
+	enum {
+		kArgumentSize = 1024
 	};
 
 	static bool isCompatible(int mode, int type, int cursor);
 	static bool isPriorityCompatible(int mode, int type);
 	static bool isInside(int (*poly)[2], int numPoints, int x, int y);
 
-	void clear();
-	void removeFileHotspots();
-	void removeAt(int index);
 	int newHandle();
-	bool isInCurrentSetup(const Hotspot *hotspot) const;
-	bool getPolygon(const Hotspot *hotspot, int (*poly)[2]) const;
+	void discardLastHotspot();
+	bool updateDynamicPolygon(Hotspot *hotspot);
 	void getCentroid(int (*poly)[2], int numPoints, int *x, int *y) const;
 	void setHoverHidden(const Hotspot *hotspot, int hidden);
 
-	bool parseSet(TextBuffer *text);
-	int parseSetup(TextBuffer *text, int setup);
-	bool parseHotspot(TextBuffer *text, int setup, Hotspot *hotspot);
-	const char *parseLine(TextBuffer *text, const char *key);
+	void parseSetup(StdConffile *conffile, int setup);
+	const char *parseLine(StdConffile *conffile, const char *key);
 
 	SysStruct *_hs;
 	SputRoom *_sputRoom;
@@ -172,8 +170,9 @@ private:
 
 	Hotspot *_hotspots[kMaxHotspots];
 	int _numHotspots;
-	int _nextHandle;
+	int _serial;
 	char _setName[kSetNameSize];
+	char _argument[kArgumentSize];
 };
 
 } // End of namespace Grim

@@ -23,6 +23,7 @@
 #include "common/textconsole.h"
 
 #include "engines/grim/puck.h"
+#include "engines/grim/remastered/pathfinder.h"
 #include "engines/grim/renderdroid/rd.h"
 #include "engines/grim/walkplane.h"
 
@@ -42,6 +43,9 @@ WalkPlane::WalkPlane(WalkSystem *system, float (*verts)[3], int numPoints, const
 	_type = 0;
 	_hitEdge = -1;
 	_quadAxis = 0;
+	_alwaysMerge = 0;
+	_numTriangles = 0;
+	memset(_triangles, 0, sizeof(_triangles));
 	_numVerts = numPoints;
 	_name[0] = 0;
 	_tolerance = _system->_demo ? 0.1f : 0.005f;
@@ -271,7 +275,69 @@ int WalkPlane::within(float *point, uint flags) {
 	return 1;
 }
 
+int WalkPlane::closestPointRemastered(float *point) {
+	project(point);
+
+	if (_numVerts <= 0)
+		return _numVerts;
+
+	float *prevVert = &_verts[_numVerts - 1]->x;
+
+	for (int i = 0; i < _numVerts; i++) {
+		float *vert = &_verts[i]->x;
+		float edgeY = (float)(-((double)vert[1] - prevVert[1]));
+		float edgeX = (float)((double)vert[0] - prevVert[0]);
+		float side = (float)(((double)point[0] - prevVert[0]) * edgeY + ((double)point[1] - prevVert[1]) * edgeX);
+
+		if (side < 0.0f) {
+			float denominator = (float)(-((double)edgeY * edgeY) - (double)edgeX * edgeX);
+			float absDenominator = denominator < 0.0f ? -denominator : denominator;
+
+			if (0.00001f < absDenominator && denominator != 0.0f) {
+				float t = (float)((double)side / denominator);
+				float newX = (float)((double)edgeY * t + point[0]);
+
+				point[0] = newX;
+
+				float newY = (float)((double)edgeX * t + point[1]);
+
+				point[1] = newY;
+
+				float deltaX = (float)((double)vert[0] - prevVert[0]);
+				float deltaY = (float)((double)vert[1] - prevVert[1]);
+				float absDeltaX = deltaX < 0.0f ? -deltaX : deltaX;
+				float absDeltaY = deltaY < 0.0f ? -deltaY : deltaY;
+				float param;
+
+				if (absDeltaY < absDeltaX)
+					param = (float)(((double)newX - prevVert[0]) / deltaX);
+				else
+					param = (float)(((double)newY - prevVert[1]) / deltaY);
+
+				if (i == _numVerts - 1 && 1.0f < param) {
+					point[0] = vert[0];
+					point[1] = vert[1];
+					point[2] = vert[2];
+				} else if (param < 0.0f) {
+					point[0] = prevVert[0];
+					point[1] = prevVert[1];
+					point[2] = prevVert[2];
+				} else {
+					project(point);
+				}
+			}
+		}
+
+		prevVert = vert;
+	}
+
+	return _numVerts;
+}
+
 int WalkPlane::closestPoint(float *point) {
+	if (_system->_remastered)
+		return closestPointRemastered(point);
+
 	project(point);
 
 	if (_numVerts > 0) {
@@ -327,6 +393,12 @@ int WalkPlane::closestPoint(float *point) {
 }
 
 double WalkPlane::intersection(float *a, float *b, float *out) {
+	RdVector3 edge;
+
+	return intersection(a, b, out, edge);
+}
+
+double WalkPlane::intersection(float *a, float *b, float *out, float *edge) {
 	float *hitVert = nullptr;
 	RdVector3 hitVec = { 0.0f, 0.0f, 0.0f };
 
@@ -335,6 +407,9 @@ double WalkPlane::intersection(float *a, float *b, float *out) {
 	if (within(b, 1))
 		return 0.0;
 
+	edge[0] = 0.0f;
+	edge[1] = 0.0f;
+	edge[2] = 0.0f;
 	out[0] = b[0];
 	out[1] = b[1];
 	out[2] = b[2];
@@ -367,6 +442,9 @@ double WalkPlane::intersection(float *a, float *b, float *out) {
 					hitVec[0] = (float)((double)prevVert[0] - vert[0]);
 					hitVec[1] = (float)((double)prevVert[1] - vert[1]);
 					hitVec[2] = (float)((double)prevVert[2] - vert[2]);
+					edge[0] = (float)((double)vert[0] - prevVert[0]);
+					edge[1] = (float)((double)vert[1] - prevVert[1]);
+					edge[2] = (float)((double)vert[2] - prevVert[2]);
 					_hitEdge = i;
 				}
 			}
@@ -425,9 +503,16 @@ void WalkPlane::project(float *point) {
 		return;
 	}
 
+	if (_system->_remastered) {
+		float negatedDistance = (float)-(((double)_verts[0]->y * _normal[1] + (double)_verts[0]->x * _normal[0]) + (double)_verts[0]->z * _normal[2]);
+
+		point[axisW] = (float)((((double)_normal[_axisU] * point[_axisU] + (double)_normal[_axisV] * point[_axisV]) + negatedDistance) / -(double)_normal[axisW]);
+		return;
+	}
+
 	double planeDistance = (double)_normal[0] * _verts[0]->x + (double)_normal[1] * _verts[0]->y + (double)_normal[2] * _verts[0]->z;
 
-	point[axisW] = (float)((((double)_normal[_axisV] * point[_axisV] + (double)_normal[_axisU] * point[_axisU]) - planeDistance) / -(double)_normal[axisW]);
+	point[axisW] =(float)((((double)_normal[_axisV] * point[_axisV] + (double)_normal[_axisU] * point[_axisU]) - planeDistance) / -(double)_normal[axisW]);
 }
 
 void WalkPlane::draw(uint16 color) {
@@ -831,7 +916,7 @@ int WalkPlane::removeShortEdge() {
 	return 1;
 }
 
-WalkSystem::WalkSystem(RenderDroid *rd, StdMath *stdMath, StdConffile *stdConffile, bool isDemo) {
+WalkSystem::WalkSystem(RenderDroid *rd, StdMath *stdMath, StdConffile *stdConffile, bool isDemo, bool isRemastered) {
 	_rd = rd;
 	_stdMath = stdMath;
 	_stdConffile = stdConffile;
@@ -845,9 +930,14 @@ WalkSystem::WalkSystem(RenderDroid *rd, StdMath *stdMath, StdConffile *stdConffi
 	_forwardCounter = 0;
 	_demo = isDemo;
 	_numDemoVerts = 0;
+	_remastered = isRemastered;
 
 	memset(_path, 0, sizeof(_path));
 	_numPathPoints = 0;
+	memset(_workingPath, 0, sizeof(_workingPath));
+	_numWorkingPathPoints = 0;
+	_totIterations = 0;
+	_pathFindFail = 0;
 	memset(_constraintVector, 0, sizeof(_constraintVector));
 	_sectionName[0] = 0;
 
@@ -856,9 +946,12 @@ WalkSystem::WalkSystem(RenderDroid *rd, StdMath *stdMath, StdConffile *stdConffi
 	_numPlanes = 0;
 	_numCacheVerts = 0;
 	_cacheBuilt = 0;
+	_pathFinder = nullptr;
 }
 
 WalkSystem::~WalkSystem() {
+	delete _pathFinder;
+	_pathFinder = nullptr;
 	destroyCache();
 
 	for (int i = 0; i < 140; i++) {
@@ -867,6 +960,18 @@ WalkSystem::~WalkSystem() {
 			delete plane;
 		}
 	}
+}
+
+PathFinder *WalkSystem::getPathFinder() {
+	if (!_pathFinder)
+		_pathFinder = new PathFinder(this);
+
+	return _pathFinder;
+}
+
+void WalkSystem::markPathFinderDirty() {
+	if (_pathFinder)
+		_pathFinder->markDirty();
 }
 
 void WalkSystem::buildCache() {
@@ -958,6 +1063,8 @@ void WalkSystem::restoreCache() {
 			if (_vertDb[i].refCount > 0)
 				_totVerts++;
 		}
+
+		markPathFinderDirty();
 	}
 }
 
@@ -1032,6 +1139,34 @@ WalkPlane *WalkSystem::planeClosest(float *point, int flags) {
 	WalkPlane *found = planeAt(point, flags);
 	if (found)
 		return found;
+
+	if (_remastered) {
+		for (WalkPlane *plane = _wpHead; plane; plane = plane->_next) {
+			if ((flags & plane->_type) != 0 && plane->_enabled && plane->_active) {
+				float pointArray[3];
+
+				pointArray[0] = point[0];
+				pointArray[1] = point[1];
+				pointArray[2] = point[2];
+
+				plane->closestPoint(pointArray);
+
+				double deltaY = (double)pointArray[1] - point[1];
+				float squareX = (float)(((double)pointArray[0] - point[0]) * ((double)pointArray[0] - point[0]));
+				float squareY = (float)(deltaY * deltaY);
+				double deltaZ = (double)pointArray[2] - point[2];
+				float squareZ = (float)(deltaZ * deltaZ);
+				double distance = ((double)squareY + squareX) + squareZ;
+
+				if ((double)minDistance > distance) {
+					minDistance = (float)(((double)squareX + squareY) + squareZ);
+					closest = plane;
+				}
+			}
+		}
+
+		return closest;
+	}
 
 	for (WalkPlane *plane = _wpHead; plane; plane = plane->_next) {
 		if ((flags & plane->_type) != 0 && plane->_enabled && plane->_active) {
@@ -1169,14 +1304,20 @@ const char *WalkSystem::parseCollection(const char *collection) {
 	int numVertsRead = 0;
 	int vertsParsed = 0;
 	float height = 12345.0f;
+	int alwaysMerge = 0;
+	int numTriangles = 0;
+	int trianglesParsed = 0;
 	char sectorName[48];
 	char word[48];
 	char line[256];
 	float verts[10][3];
 	float overflow[3];
+	int triangles[WalkPlane::kMaxTriangles][3];
+	int overflowTriangle[3];
 	int value;
 
 	memset(verts, 0, sizeof(verts));
+	memset(triangles, 0, sizeof(triangles));
 	sectorName[0] = 0;
 	_sectionName[0] = 0;
 
@@ -1185,7 +1326,7 @@ const char *WalkSystem::parseCollection(const char *collection) {
 
 		if (sscanf(line, " section: %47s", _sectionName) == 1) {
 			if (numVerts > 2)
-				newPlane(verts, numVerts, collection, sectorName, id, visible, type);
+				newPlane(verts, numVerts, collection, sectorName, id, visible, type, alwaysMerge, numTriangles, triangles);
 
 			return _sectionName;
 		}
@@ -1193,7 +1334,7 @@ const char *WalkSystem::parseCollection(const char *collection) {
 		if (!strstr(line, " numsectors ")) {
 			if (sscanf(line, " sector %47s", word) == 1) {
 				if (numVerts > 2) {
-					WalkPlane *plane = newPlane(verts, numVerts, collection, sectorName, id, visible, type);
+					WalkPlane *plane = newPlane(verts, numVerts, collection, sectorName, id, visible, type, alwaysMerge, numTriangles, triangles);
 
 					if (height != 12345.0f) {
 						if (type == 4096 && !_demo)
@@ -1214,6 +1355,8 @@ const char *WalkSystem::parseCollection(const char *collection) {
 				visible = 0;
 				numVertsRead = 0;
 				vertsParsed = 0;
+				numTriangles = 0;
+				trianglesParsed = 0;
 			} else if (sscanf(line, " id %i", &value) == 1) {
 				id = value;
 			} else if (sscanf(line, " type %47s", word) == 1) {
@@ -1229,19 +1372,35 @@ const char *WalkSystem::parseCollection(const char *collection) {
 					type = 0x8000;
 			} else if (sscanf(line, " default visibility %47s", word) == 1) {
 				visible = strcmp(word, "invisible") != 0;
-			} else if (sscanf(line, " height %f", &height) != 1) {
+			} else if (sscanf(line, " always_merge %d", &alwaysMerge) != 1 && sscanf(line, " height %f", &height) != 1) {
 				if (sscanf(line, " numvertices %d", &value) == 1) {
 					numVertsRead = value;
+				} else if (sscanf(line, " numtris %d", &value) == 1) {
+					numTriangles = value;
 				} else if (sscanf(line, " numgates %47s", word) != 1) {
 					float *vert = overflow;
 					if (vertsParsed < 10)
 						vert = verts[vertsParsed];
+
+					int *triangle = overflowTriangle;
+					if (trianglesParsed < WalkPlane::kMaxTriangles)
+						triangle = triangles[trianglesParsed];
 
 					if (sscanf(line, " vertices: %f %f %f", &vert[0], &vert[1], &vert[2]) == 3 || (vertsParsed < numVertsRead && sscanf(line, " %f %f %f", &vert[0], &vert[1], &vert[2]) == 3)) {
 						if (vertsParsed >= 10)
 							warning("WalkSystem::parseCollection(): sector %s has more than 10 vertices", sectorName);
 
 						vertsParsed++;
+					} else if (sscanf(line, " triangles: %d %d %d", &triangle[0], &triangle[1], &triangle[2]) == 3) {
+						if (trianglesParsed >= WalkPlane::kMaxTriangles)
+							warning("WalkSystem::parseCollection(): sector %s has more than %d triangles", sectorName, (int)WalkPlane::kMaxTriangles);
+
+						trianglesParsed++;
+					} else if (trianglesParsed < numTriangles && sscanf(line, " %d %d %d", &triangle[0], &triangle[1], &triangle[2]) == 3) {
+						if (trianglesParsed >= WalkPlane::kMaxTriangles)
+							warning("WalkSystem::parseCollection(): sector %s has more than %d triangles", sectorName, (int)WalkPlane::kMaxTriangles);
+
+						trianglesParsed++;
 					}
 				}
 			}
@@ -1251,18 +1410,31 @@ const char *WalkSystem::parseCollection(const char *collection) {
 	}
 
 	if (numVerts > 2)
-		newPlane(verts, numVerts, collection, sectorName, id, visible, type);
+		newPlane(verts, numVerts, collection, sectorName, id, visible, type, alwaysMerge, numTriangles, triangles);
 
 	return nullptr;
 }
 
-WalkPlane *WalkSystem::newPlane(float (*verts)[3], int numPoints, const char *collection, const char *sectorName, int id, int visible, int type) {
+WalkPlane *WalkSystem::newPlane(float (*verts)[3], int numPoints, const char *collection, const char *sectorName, int id, int visible, int type, int alwaysMerge,
+		int numTriangles, int (*triangles)[3]) {
 	WalkPlane *plane = new WalkPlane(this, verts, numPoints, collection);
 
+	if (numTriangles > WalkPlane::kMaxTriangles) {
+		warning("WalkSystem::newPlane(): sector %s has %d triangles, only %d are supported", sectorName, numTriangles, (int)WalkPlane::kMaxTriangles);
+		numTriangles = WalkPlane::kMaxTriangles;
+	}
+
+	if (numTriangles < 0)
+		numTriangles = 0;
+
+	plane->_numTriangles = numTriangles;
+	memcpy(plane->_triangles, triangles, numTriangles * sizeof(plane->_triangles[0]));
 	plane->setName(sectorName);
 	plane->_active = visible;
 	plane->_number = id;
+	markPathFinderDirty();
 	plane->setType(type);
+	plane->_alwaysMerge = alwaysMerge;
 
 	return plane;
 }
@@ -1583,6 +1755,298 @@ void WalkSystem::tightenPath() {
 		tightenPath();
 }
 
+int WalkSystem::getPathRemastered(float **path) {
+	*path = &_workingPath[0][0];
+
+	return _numWorkingPathPoints;
+}
+
+int WalkSystem::findPathRemastered(float *from, float *to, WalkPlane *plane, unsigned int mode) {
+	if (!plane) {
+		allActive();
+		_pathFindFail = 0;
+		_numWorkingPathPoints = 0;
+		_totIterations = 0;
+		plane = planeAt(from, 4096);
+	}
+
+	_totIterations++;
+
+	if (_numWorkingPathPoints + 1 >= 128 || _totIterations > 2000) {
+		if (plane)
+			plane->_enabled = 0;
+		else
+			warning("WalkSystem::findPathRemastered(): no walk plane when the path is too long");
+
+		_pathFindFail = 1;
+
+		return 0;
+	}
+
+	if (!plane)
+		return 0;
+
+	_workingPath[_numWorkingPathPoints][0] = from[0];
+	_workingPath[_numWorkingPathPoints][1] = from[1];
+	_workingPath[_numWorkingPathPoints][2] = from[2];
+	_numWorkingPathPoints++;
+
+	if (plane->within(to, 1))
+		return 1;
+
+	int savedPathPoints = _numWorkingPathPoints;
+	float hit[3];
+	float edge[3];
+
+	plane->intersection(from, to, hit, edge);
+	plane->_enabled = 0;
+
+	double deltaY = (double)hit[1] - from[1];
+	double deltaX = (double)hit[0] - from[0];
+	double deltaZ = (double)hit[2] - from[2];
+	float squareX = (float)(deltaX * deltaX);
+	float squareY = (float)(deltaY * deltaY);
+	float squareZ = (float)(deltaZ * deltaZ);
+	WalkPlane *nextPlane = nullptr;
+
+	if (((double)squareX + squareY) + squareZ > 0.00009999999747378752) {
+		nextPlane = planeAt(hit, 4096);
+
+		if (nextPlane && findPathRemastered(hit, to, nextPlane, mode))
+			return 1;
+	}
+
+	if (_pathFindFail)
+		return 0;
+
+	if (nextPlane)
+		nextPlane->_enabled = 0;
+	else if (mode)
+		return 1;
+
+	float exits[128 * 4];
+	int numExits = findExitPointsRemastered(plane, to, exits);
+
+	for (int i = 0; i < numExits; i++) {
+		WalkPlane *exit = planeAt(&exits[4 * i], 4096);
+
+		if (exit) {
+			_numWorkingPathPoints = savedPathPoints;
+
+			if (closestVertWithinRemastered(plane, exit, to, hit) && findPathRemastered(hit, to, exit, mode))
+				return 1;
+
+			if (_pathFindFail)
+				return 0;
+		}
+	}
+
+	plane->_enabled = 1;
+
+	if (nextPlane)
+		nextPlane->_enabled = 1;
+
+	return 0;
+}
+
+int WalkSystem::findExitPointsRemastered(WalkPlane *plane, float *to, float *out) {
+	float exits[128][4];
+	int count = 0;
+
+	for (WalkPlane *other = _wpHead; other; other = other->_next) {
+		if (other == plane || !other->_enabled || (other->_type & 0x1000) == 0 || other->_numVerts <= 0)
+			continue;
+
+		for (int i = 0; i < other->_numVerts; i++) {
+			WpVertex *vert = other->_verts[i];
+
+			if (!plane->within(&vert->x, 0))
+				continue;
+
+			int j;
+
+			for (j = 0; j < count; j++) {
+				if (!memcmp(exits[j], &vert->x, 12))
+					break;
+			}
+
+			if (j != count)
+				continue;
+
+			if (count >= 128) {
+				warning("WalkSystem::findExitPointsRemastered(): more than 128 exit points");
+				continue;
+			}
+
+			exits[count][0] = vert->x;
+			exits[count][1] = vert->y;
+			exits[count][2] = vert->z;
+
+			double deltaY = (double)to[1] - exits[count][1];
+			double deltaX = (double)to[0] - exits[count][0];
+			double deltaZ = (double)to[2] - exits[count][2];
+			float squareX = (float)(deltaX * deltaX);
+			float squareY = (float)(deltaY * deltaY);
+			float squareZ = (float)(deltaZ * deltaZ);
+
+			exits[count][3] = (float)(((double)squareX + squareY) + squareZ);
+			count++;
+		}
+	}
+
+	if (count > 0) {
+		memcpy(&out[0], exits[0], sizeof(float) * 4);
+
+		for (int i = 1; i < count; i++) {
+			float distance = exits[i][3];
+			int j = i - 1;
+
+			while (j > -1) {
+				if (!(out[4 * j + 3] > distance))
+					break;
+
+				memcpy(&out[4 * (j + 1)], &out[4 * j], sizeof(float) * 4);
+				j--;
+			}
+
+			memcpy(&out[4 * (j + 1)], exits[i], sizeof(float) * 4);
+		}
+	}
+
+	return count;
+}
+
+int WalkSystem::closestVertWithinRemastered(WalkPlane *a, WalkPlane *b, float *target, float *out) {
+	float minDistance = 3.4028235e38f;
+
+	for (int i = 0; i < a->_numVerts; i++) {
+		WpVertex *vert = a->_verts[i];
+
+		if (b->within(&vert->x, 0)) {
+			double deltaX = (double)vert->x - target[0];
+			double deltaZ = (double)vert->z - target[2];
+			float squareX = (float)(deltaX * deltaX);
+			double deltaY = (double)vert->y - target[1];
+			float squareY = (float)(deltaY * deltaY);
+			float squareZ = (float)(deltaZ * deltaZ);
+			float distance = (float)(((double)squareX + squareY) + squareZ);
+
+			if ((double)minDistance > distance) {
+				minDistance = distance;
+				out[0] = vert->x;
+				out[1] = vert->y;
+				out[2] = vert->z;
+			}
+		}
+	}
+
+	for (int i = 0; i < b->_numVerts; i++) {
+		WpVertex *vert = b->_verts[i];
+
+		if (a->within(&vert->x, 0)) {
+			double deltaX = (double)vert->x - target[0];
+			double deltaZ = (double)vert->z - target[2];
+			float squareX = (float)(deltaX * deltaX);
+			double deltaY = (double)vert->y - target[1];
+			float squareY = (float)(deltaY * deltaY);
+			float squareZ = (float)(deltaZ * deltaZ);
+			float distance = (float)(((double)squareX + squareY) + squareZ);
+
+			if ((double)minDistance > distance) {
+				minDistance = distance;
+				out[0] = vert->x;
+				out[1] = vert->y;
+				out[2] = vert->z;
+			}
+		}
+	}
+
+	return minDistance != 3.4028235e38f;
+}
+
+void WalkSystem::tightenPathRemastered() {
+	int changed = 0;
+
+	if (_numWorkingPathPoints - 3 > 0) {
+		int last = 2;
+		int i = 0;
+
+		do {
+			float *first = _workingPath[last - 2];
+			float *mid = _workingPath[last - 1];
+			float *lastPointer = _workingPath[last];
+
+			WalkPlane *planeA = planeContaining(first, mid);
+			WalkPlane *planeB = planeContaining(mid, lastPointer);
+
+			if (!planeA || !planeB)
+				return;
+
+			float point[3];
+			float edge[3];
+
+			planeA->intersection(first, lastPointer, point, edge);
+
+			WalkPlane *planeC = planeContaining(point, first);
+			WalkPlane *planeD = planeContaining(point, lastPointer);
+
+			if (planeD && planeC) {
+				double deltaY = (double)point[1] - mid[1];
+				double deltaX = (double)point[0] - mid[0];
+				double deltaZ = (double)point[2] - mid[2];
+				float squareX = (float)(deltaX * deltaX);
+				float squareY = (float)(deltaY * deltaY);
+				float squareZ = (float)(deltaZ * deltaZ);
+
+				if (((double)squareX + squareY) + squareZ > 0.002500000176951289) {
+					mid[0] = point[0];
+					mid[1] = point[1];
+					mid[2] = point[2];
+					changed = 1;
+				}
+			}
+
+			last++;
+			i++;
+		} while (i < _numWorkingPathPoints - 3);
+	}
+
+	if (_numWorkingPathPoints - 2 > 0) {
+		int j = 1;
+		int limit = _numWorkingPathPoints - 2;
+
+		do {
+			float *prevPoint = _workingPath[j - 1];
+			float *point = _workingPath[j];
+			double deltaY = (double)prevPoint[1] - point[1];
+			double deltaX = (double)prevPoint[0] - point[0];
+			double deltaZ = (double)prevPoint[2] - point[2];
+			float squareY = (float)(deltaY * deltaY);
+			float squareX = (float)(deltaX * deltaX);
+			float squareZ = (float)(deltaZ * deltaZ);
+
+			if (((double)squareY + squareX) + squareZ < 0.00009999999747378752) {
+				if (planeContaining(prevPoint, point)) {
+					changed = 1;
+					limit--;
+					_numWorkingPathPoints--;
+
+					for (int k = j; k < _numWorkingPathPoints; k++) {
+						_workingPath[k][0] = _workingPath[k + 1][0];
+						_workingPath[k][1] = _workingPath[k + 1][1];
+						_workingPath[k][2] = _workingPath[k + 1][2];
+					}
+				}
+			}
+
+			j++;
+		} while (j - 1 < limit);
+	}
+
+	if (changed)
+		tightenPathRemastered();
+}
+
 void WalkSystem::shrinkBoxes(float amount) {
 	int vertexUseCount[1024];
 	float vertexOffsetSum[3072];
@@ -1682,6 +2146,7 @@ void WalkSystem::shrinkBoxes(float amount) {
 				restart = true;
 			} else {
 				plane->_active = 0;
+				markPathFinderDirty();
 			}
 		} while (restart);
 	}
@@ -1695,6 +2160,8 @@ void WalkSystem::shrinkBoxes(float amount) {
 			_vertDb[i].z = (float)(vertexOffsetSum[3 * i + 2] * inverse + _vertDb[i].z);
 		}
 	}
+
+	markPathFinderDirty();
 }
 
 } // End of namespace Grim

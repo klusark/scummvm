@@ -28,6 +28,7 @@
 #include "engines/grim/remastered/overlay.h"
 #include "engines/grim/renderdroid/rd.h"
 #include "engines/grim/sputroom.h"
+#include "engines/grim/std/std_conffile.h"
 #include "engines/grim/std/std_sys.h"
 
 namespace Grim {
@@ -42,9 +43,10 @@ enum {
 };
 
 HotspotManager::HotspotManager(SysStruct *hs, SputRoom *sputRoom, SputActorModule *sputActor, RenderDroid *rd) :
-		_hs(hs), _sputRoom(sputRoom), _sputActor(sputActor), _rd(rd), _overlays(nullptr), _numHotspots(0), _nextHandle(0) {
+		_hs(hs), _sputRoom(sputRoom), _sputActor(sputActor), _rd(rd), _overlays(nullptr), _numHotspots(0), _serial(0) {
 	memset(_hotspots, 0, sizeof(_hotspots));
 	memset(_setName, 0, sizeof(_setName));
+	memset(_argument, 0, sizeof(_argument));
 }
 
 HotspotManager::~HotspotManager() {
@@ -116,69 +118,38 @@ bool HotspotManager::isInside(int (*poly)[2], int numPoints, int x, int y) {
 
 void HotspotManager::clear() {
 	for (int i = 0; i < _numHotspots; i++) {
-		if (_hotspots[i]->overlayHandle >= 0 && _overlays)
-			_overlays->destroy(_hotspots[i]->overlayHandle);
-
 		delete _hotspots[i];
 		_hotspots[i] = nullptr;
 	}
 
 	_numHotspots = 0;
+	_setName[0] = 0;
 }
 
-void HotspotManager::removeAt(int index) {
-	Hotspot *hotspot = _hotspots[index];
-
-	if (hotspot->overlayHandle >= 0 && _overlays)
-		_overlays->destroy(hotspot->overlayHandle);
-
-	delete hotspot;
-
-	for (int i = index; i < _numHotspots - 1; i++)
-		_hotspots[i] = _hotspots[i + 1];
-
-	_numHotspots--;
-	_hotspots[_numHotspots] = nullptr;
-}
-
-// The hotspots of the previous set go, the ones that the scripts added stay
-void HotspotManager::removeFileHotspots() {
-	int i = 0;
-
-	while (i < _numHotspots) {
-		if (_hotspots[i]->added)
-			i++;
-		else
-			removeAt(i);
-	}
-}
-
+// The next handle that no hotspot has. The handle 0 is a valid one.
 int HotspotManager::newHandle() {
 	for (;;) {
-		_nextHandle = (_nextHandle + 1) % kNumHandles;
-
-		if (_nextHandle == 0)
-			continue;
+		_serial = (_serial + 1) % kNumHandles;
 
 		bool used = false;
 
 		for (int i = 0; i < _numHotspots; i++) {
-			if (_hotspots[i]->handle == _nextHandle)
+			if (_hotspots[i]->handle == _serial)
 				used = true;
 		}
 
 		if (!used)
-			return _nextHandle;
+			return _serial;
 	}
 }
 
-bool HotspotManager::isInCurrentSetup(const Hotspot *hotspot) const {
-	if (hotspot->setup == -1)
-		return true;
+// The file ended in the middle of a hotspot: the half read hotspot goes
+void HotspotManager::discardLastHotspot() {
+	warning("HotspotManager::parseSetup(): incomplete hotspot, the rest of the file is ignored");
 
-	Room *room = _sputRoom->getCurrentRoom();
-
-	return room && hotspot->setup == room->curSetup;
+	_numHotspots--;
+	delete _hotspots[_numHotspots];
+	_hotspots[_numHotspots] = nullptr;
 }
 
 void HotspotManager::setHoverHidden(const Hotspot *hotspot, int hidden) {
@@ -199,19 +170,15 @@ void HotspotManager::getCentroid(int (*poly)[2], int numPoints, int *x, int *y) 
 	*y = numPoints > 0 ? sumY / numPoints : 0;
 }
 
-// The polygon of a hotspot linked to an actor follows the projected offset point
-bool HotspotManager::getPolygon(const Hotspot *hotspot, int (*poly)[2]) const {
-	for (int i = 0; i < hotspot->polyNum; i++) {
-		poly[i][0] = hotspot->poly[i][0];
-		poly[i][1] = hotspot->poly[i][1];
-	}
-
-	if (hotspot->type != kTypeDynamic || hotspot->actorIndex < 0)
-		return true;
+// The polygon of a hotspot linked to an actor moves to the projected offset point and stays there.
+// False when the hotspot has no actor or the point is not on the screen.
+bool HotspotManager::updateDynamicPolygon(Hotspot *hotspot) {
+	if (hotspot->actorIndex == -1)
+		return false;
 
 	SputActor *actor = _sputActor->actorDeref(hotspot->actorIndex);
 
-	if (!actor || !actor->inUse)
+	if (!actor)
 		return false;
 
 	RdVector3 offset;
@@ -222,7 +189,7 @@ bool HotspotManager::getPolygon(const Hotspot *hotspot, int (*poly)[2]) const {
 	offset[1] = hotspot->offset[1];
 	offset[2] = hotspot->offset[2];
 
-	_rd->transformPoint34(world, offset, _sputActor->getOrientMatrix(actor));
+	_rd->transformPoint34(world, offset, actor->orientMatrix);
 
 	if (!_rd->_primit3.getScreenCoord(world, screen))
 		return false;
@@ -234,319 +201,362 @@ bool HotspotManager::getPolygon(const Hotspot *hotspot, int (*poly)[2]) const {
 
 	convertCoords1080(&pointX, &pointY, kCoordsLegacy, false);
 	convertCoordsNative(&pointX, &pointY, hotspot->coordMode, false);
-	getCentroid(poly, hotspot->polyNum, &centerX, &centerY);
+	getCentroid(hotspot->poly, hotspot->polyNum, &centerX, &centerY);
 
 	for (int i = 0; i < hotspot->polyNum; i++) {
-		poly[i][0] += pointX - centerX;
-		poly[i][1] += pointY - centerY;
+		hotspot->poly[i][0] += pointX - centerX;
+		hotspot->poly[i][1] += pointY - centerY;
 	}
 
 	return true;
 }
 
-void HotspotManager::loadCurrentRoom() {
-	Room *room = _sputRoom->getCurrentRoom();
-
-	if (room)
-		load(room->name);
-}
-
+// The file of a set has the name of the set with .hot instead of .set. When the file can not be
+// opened nothing changes. The hotspots of the previous set go, the ones that the scripts added stay.
 void HotspotManager::load(const char *setName) {
-	if (!setName || !setName[0] || !scumm_stricmp(_setName, setName))
-		return;
-
-	removeFileHotspots();
-	Common::strlcpy(_setName, setName, sizeof(_setName));
-
-	Common::String fileName(setName);
-	uint dot = fileName.findLastOf('.');
-
-	if (dot != Common::String::npos)
-		fileName.erase(dot);
-
-	fileName += ".hot";
-
-	Common::SeekableReadStream *stream = _hs->openFile(fileName.c_str());
-
-	if (!stream) {
-		warning("HotspotManager::load(): can't open %s", fileName.c_str());
+	if (!setName) {
+		warning("HotspotManager::load(): no set name");
 		return;
 	}
 
-	TextBuffer text;
+	if (strcmp(_setName, setName) == 0)
+		return;
 
-	text.size = (int)stream->size();
-	text.data = new char[text.size + 1];
-	text.pos = 0;
-	text.size = (int)stream->read(text.data, text.size);
-	text.data[text.size] = 0;
-	delete stream;
+	char fileName[144];
 
-	if (!parseSet(&text))
-		warning("HotspotManager::load(): %s is not complete", fileName.c_str());
+	Common::strlcpy(fileName, setName, sizeof(fileName));
 
-	delete[] text.data;
-}
+	char *extension = strstr(fileName, ".set");
 
-// Finds the next line that starts with the key and returns the rest of it
-const char *HotspotManager::parseLine(TextBuffer *text, const char *key) {
-	int keyLength = (int)strlen(key);
+	if (!extension)
+		extension = strstr(fileName, ".SET");
 
-	while (text->pos < text->size) {
-		char *line = text->data + text->pos;
-		char *end = line;
+	if (!extension)
+		return;
 
-		while (*end && *end != '\n')
-			end++;
+	extension[1] = 'h';
+	extension[2] = 'o';
+	extension[3] = 't';
 
-		text->pos = (int)(end - text->data);
+	StdConffile *conffile = new StdConffile(_hs);
 
-		if (*end) {
-			*end = 0;
-			text->pos++;
+	if (conffile->open(fileName)) {
+		Common::strlcpy(_setName, setName, sizeof(_setName));
+
+		int i = 0;
+
+		while (i < _numHotspots) {
+			if (_hotspots[i]->added == 0) {
+				delete _hotspots[i];
+				_numHotspots--;
+				_hotspots[i] = _hotspots[_numHotspots];
+				_hotspots[_numHotspots] = nullptr;
+			} else {
+				i++;
+			}
 		}
 
-		while (*line == ' ' || *line == '\t')
-			line++;
+		int total = 0;
+		const char *argument = parseLine(conffile, "hotspots_total:");
 
-		if (strncmp(line, key, keyLength) != 0)
-			continue;
+		if (!argument || sscanf(argument, "%d", &total) <= 0)
+			warning("HotspotManager::load(): invalid hotspot file %s", fileName);
 
-		char next = line[keyLength];
+		if (total >= kMaxHotspots)
+			warning("HotspotManager::load(): too many hotspots in %s", fileName);
 
-		if (next != ' ' && next != '\t' && next != '\r' && next != 0)
-			continue;
+		while (conffile->readLine()) {
+			int setup = 0;
 
-		char *rest = line + keyLength;
+			if (sscanf(conffile->getLine(), "setup %d:", &setup) > 0)
+				parseSetup(conffile, setup);
+		}
 
-		while (*rest == ' ' || *rest == '\t')
-			rest++;
-
-		int length = (int)strlen(rest);
-
-		while (length > 0 && (rest[length - 1] == '\r' || rest[length - 1] == ' ' || rest[length - 1] == '\t'))
-			rest[--length] = 0;
-
-		return rest;
+		conffile->close();
 	}
 
-	return nullptr;
+	delete conffile;
 }
 
-bool HotspotManager::parseSet(TextBuffer *text) {
-	const char *totalLine = parseLine(text, "hotspots_total:");
-	int total = 0;
+// Finds the next line that starts with the key followed by a space or a tab and returns the rest of it
+const char *HotspotManager::parseLine(StdConffile *conffile, const char *key) {
+	if (!conffile->readLine())
+		return nullptr;
 
-	if (!totalLine || sscanf(totalLine, "%d", &total) != 1)
-		return false;
+	int keyLength = (int)strlen(key);
 
-	if (total < 0 || total >= kMaxHotspots) {
-		warning("HotspotManager::parseSet(): invalid hotspot count %d", total);
-		return false;
+	for (;;) {
+		const char *text = conffile->getLine();
+
+		while (*text == '\t' || *text == ' ')
+			text++;
+
+		if (strncmp(text, key, keyLength) == 0 && (int)strlen(text) > keyLength) {
+			const char *after = text + keyLength;
+			int blanks = 0;
+
+			while (after[blanks] == '\t' || after[blanks] == ' ')
+				blanks++;
+
+			if (blanks != 0) {
+				Common::strlcpy(_argument, after + blanks, sizeof(_argument));
+
+				int length = (int)strlen(_argument);
+
+				while (length > 0 && (_argument[length - 1] == '\t' || _argument[length - 1] == '\n' ||
+						_argument[length - 1] == '\r' || _argument[length - 1] == ' '))
+					_argument[--length] = 0;
+
+				return _argument;
+			}
+		}
+
+		if (!conffile->readLine())
+			return nullptr;
 	}
-
-	int loaded = 0;
-
-	while (loaded < total) {
-		const char *setupLine = parseLine(text, "setup");
-		int setup = 0;
-
-		if (!setupLine || sscanf(setupLine, "%d", &setup) != 1)
-			return false;
-
-		int num = parseSetup(text, setup);
-
-		if (num < 0)
-			return false;
-
-		loaded += num;
-	}
-
-	return true;
 }
 
-// Returns the number of hotspots read, or -1
-int HotspotManager::parseSetup(TextBuffer *text, int setup) {
-	const char *numLine = parseLine(text, "num_hotspots:");
+// The hotspots of one camera setup. The fields that a line does not give keep the values they have.
+void HotspotManager::parseSetup(StdConffile *conffile, int setup) {
 	int num = 0;
+	const char *argument = parseLine(conffile, "num_hotspots:");
 
-	if (!numLine || sscanf(numLine, "%d", &num) != 1 || num < 0)
-		return -1;
+	if (!argument || sscanf(argument, "%d", &num) <= 0) {
+		warning("HotspotManager::parseSetup(): invalid hotspot file, no number of hotspots");
+		return;
+	}
 
-	for (int i = 0; i < num; i++) {
+	// The results of the point and region scans are not checked: a failed scan leaves the previous values
+	float offsetX = 0.0f;
+	float offsetY = 0.0f;
+	float offsetZ = 0.0f;
+	float pointX = 0.0f;
+	float pointY = 0.0f;
+	float pointZ = 0.0f;
+	int numRead = 0;
+
+	for (int k = 0; k < num; k++) {
 		if (_numHotspots >= kMaxHotspots) {
 			warning("HotspotManager::parseSetup(): more than %d hotspots", (int)kMaxHotspots);
-			return -1;
+			return;
 		}
 
 		Hotspot *hotspot = new Hotspot;
 
 		memset(hotspot, 0, sizeof(Hotspot));
+		hotspot->setup = setup;
+		hotspot->handle = newHandle();
+		_hotspots[_numHotspots++] = hotspot;
+		hotspot->overlayHandle = -1;
+		hotspot->added = 0;
+		hotspot->actorIndex = -1;
+		hotspot->wait = 0.0f;
 
-		if (!parseHotspot(text, setup, hotspot)) {
-			delete hotspot;
-			return -1;
+		argument = parseLine(conffile, "hotspot");
+
+		if (!argument) {
+			discardLastHotspot();
+			return;
 		}
 
-		_hotspots[_numHotspots++] = hotspot;
-	}
+		Common::strlcpy(hotspot->name, argument, sizeof(hotspot->name));
+		argument = parseLine(conffile, "id");
 
-	return num;
-}
+		if (!argument) {
+			discardLastHotspot();
+			return;
+		}
 
-bool HotspotManager::parseHotspot(TextBuffer *text, int setup, Hotspot *hotspot) {
-	const char *line = parseLine(text, "hotspot");
+		Common::strlcpy(hotspot->id, argument, sizeof(hotspot->id));
+		argument = parseLine(conffile, "type");
 
-	if (!line)
-		return false;
+		if (!argument) {
+			discardLastHotspot();
+			return;
+		}
 
-	Common::strlcpy(hotspot->name, line, sizeof(hotspot->name));
-
-	line = parseLine(text, "id");
-
-	if (!line)
-		return false;
-
-	Common::strlcpy(hotspot->id, line, sizeof(hotspot->id));
-
-	line = parseLine(text, "type");
-
-	if (!line)
-		return false;
-
-	if (!strcmp(line, "object"))
-		hotspot->type = kTypeObject;
-	else if (!strcmp(line, "walk"))
-		hotspot->type = kTypeWalk;
-	else if (!strcmp(line, "dynamic"))
-		hotspot->type = kTypeDynamic;
-	else if (!strcmp(line, "special"))
-		hotspot->type = kTypeSpecial;
-	else if (!strcmp(line, "dialog"))
-		hotspot->type = kTypeDialog;
-	else if (!strcmp(line, "options"))
-		hotspot->type = kTypeOptions;
-	else
 		hotspot->type = kTypeNone;
 
-	line = parseLine(text, "cursor");
+		if (!strcmp(argument, "object"))
+			hotspot->type = kTypeObject;
+		else if (!strcmp(argument, "walk"))
+			hotspot->type = kTypeWalk;
+		else if (!strcmp(argument, "dynamic"))
+			hotspot->type = kTypeDynamic;
+		else if (!strcmp(argument, "special"))
+			hotspot->type = kTypeSpecial;
+		else if (!strcmp(argument, "dialog"))
+			hotspot->type = kTypeDialog;
+		else if (!strcmp(argument, "options"))
+			hotspot->type = kTypeOptions;
 
-	if (!line)
-		return false;
+		argument = parseLine(conffile, "cursor");
 
-	if (!strcmp(line, "hotspot"))
-		hotspot->cursor = kCursorHotspot;
-	else if (!strcmp(line, "walk"))
-		hotspot->cursor = kCursorWalk;
-	else if (!strcmp(line, "arrow_left"))
-		hotspot->cursor = kCursorArrowLeft;
-	else if (!strcmp(line, "arrow_right"))
-		hotspot->cursor = kCursorArrowRight;
-	else if (!strcmp(line, "arrow_up"))
-		hotspot->cursor = kCursorArrowUp;
-	else if (!strcmp(line, "arrow_down"))
-		hotspot->cursor = kCursorArrowDown;
-	else
-		hotspot->cursor = kCursorNone;
-
-	hotspot->actorIndex = -1;
-	hotspot->overlayHandle = -1;
-
-	if (hotspot->type == kTypeDynamic) {
-		line = parseLine(text, "offset");
-
-		if (!line || sscanf(line, " (%f %f %f)", &hotspot->offset[0], &hotspot->offset[1], &hotspot->offset[2]) != 3)
-			return false;
-	} else {
-		line = parseLine(text, "path");
-
-		if (!line || sscanf(line, "%d", &hotspot->pathLen) != 1 || hotspot->pathLen < 0 || hotspot->pathLen > Hotspot::kMaxPath)
-			return false;
-
-		const char *point = strchr(line, ':');
-
-		for (int i = 0; i < hotspot->pathLen; i++) {
-			point = point ? strchr(point, '(') : nullptr;
-
-			if (!point || sscanf(point, "(%f %f %f)", &hotspot->path[i][0], &hotspot->path[i][1], &hotspot->path[i][2]) != 3)
-				return false;
-
-			point = strchr(point, ')');
+		if (!argument) {
+			discardLastHotspot();
+			return;
 		}
 
-		const char *wait = point ? strstr(point, "wait") : nullptr;
+		hotspot->cursor = kCursorNone;
 
-		if (wait)
-			sscanf(wait + 4, "%f", &hotspot->wait);
+		if (!strcmp(argument, "hotspot"))
+			hotspot->cursor = kCursorHotspot;
+		else if (!strcmp(argument, "walk"))
+			hotspot->cursor = kCursorWalk;
+		else if (!strcmp(argument, "arrow_left"))
+			hotspot->cursor = kCursorArrowLeft;
+		else if (!strcmp(argument, "arrow_right"))
+			hotspot->cursor = kCursorArrowRight;
+		else if (!strcmp(argument, "arrow_up"))
+			hotspot->cursor = kCursorArrowUp;
+		else if (!strcmp(argument, "arrow_down"))
+			hotspot->cursor = kCursorArrowDown;
+
+		if (hotspot->type == kTypeDynamic) {
+			hotspot->pathLen = 0;
+			argument = parseLine(conffile, "offset");
+
+			if (!argument) {
+				discardLastHotspot();
+				return;
+			}
+
+			if (sscanf(argument, " (%f %f %f)%n", &offsetX, &offsetY, &offsetZ, &numRead) <= 0)
+				warning("HotspotManager::parseSetup(): invalid hotspot file, offset of %s", hotspot->id);
+
+			hotspot->offset[0] = offsetX;
+			hotspot->offset[1] = offsetY;
+			hotspot->offset[2] = offsetZ;
+		} else {
+			hotspot->offset[0] = 0.0f;
+			hotspot->offset[1] = 0.0f;
+			hotspot->offset[2] = 0.0f;
+			argument = parseLine(conffile, "path");
+
+			if (!argument) {
+				discardLastHotspot();
+				return;
+			}
+
+			if (sscanf(argument, "%d:%n", &hotspot->pathLen, &numRead) <= 0)
+				warning("HotspotManager::parseSetup(): invalid hotspot file, path of %s", hotspot->id);
+
+			const char *point = argument + numRead;
+
+			if (hotspot->pathLen < 0 || hotspot->pathLen > Hotspot::kMaxPath) {
+				warning("HotspotManager::parseSetup(): path too long in %s", hotspot->id);
+				hotspot->pathLen = hotspot->pathLen < 0 ? 0 : (int)Hotspot::kMaxPath;
+			}
+
+			for (int i = 0; i < hotspot->pathLen; i++) {
+				sscanf(point, " (%f %f %f)%n", &pointX, &pointY, &pointZ, &numRead);
+				hotspot->path[i][0] = pointX;
+				hotspot->path[i][1] = pointY;
+				hotspot->path[i][2] = pointZ;
+				point += numRead;
+			}
+
+			float wait = 0.0f;
+
+			if (sscanf(point, " wait %f%n", &wait, &numRead) == 1)
+				hotspot->wait = wait;
+		}
+
+		argument = parseLine(conffile, "region");
+
+		if (!argument) {
+			discardLastHotspot();
+			return;
+		}
+
+		if (sscanf(argument, "%d:%n", &hotspot->polyNum, &numRead) <= 0)
+			warning("HotspotManager::parseSetup(): invalid hotspot file, region of %s", hotspot->id);
+
+		const char *vertex = argument + numRead;
+
+		if (hotspot->polyNum < 0 || hotspot->polyNum > Hotspot::kMaxPolygon) {
+			warning("HotspotManager::parseSetup(): too many vertices in a polygon of %s", hotspot->id);
+			hotspot->polyNum = hotspot->polyNum < 0 ? 0 : (int)Hotspot::kMaxPolygon;
+		}
+
+		for (int i = 0; i < hotspot->polyNum; i++) {
+			sscanf(vertex, " (%d %d)%n", &hotspot->poly[i][0], &hotspot->poly[i][1], &numRead);
+			convertCoords1080(&hotspot->poly[i][0], &hotspot->poly[i][1], kCoordsLegacy, false);
+			convertCoordsNative(&hotspot->poly[i][0], &hotspot->poly[i][1], kCoordsGameScreen, false);
+			vertex += numRead;
+		}
+
+		hotspot->coordMode = kCoordsGameScreen;
 	}
-
-	line = parseLine(text, "region");
-
-	if (!line || sscanf(line, "%d", &hotspot->polyNum) != 1 || hotspot->polyNum < 0 || hotspot->polyNum > Hotspot::kMaxPolygon)
-		return false;
-
-	const char *vertex = strchr(line, ':');
-
-	for (int i = 0; i < hotspot->polyNum; i++) {
-		vertex = vertex ? strchr(vertex, '(') : nullptr;
-
-		if (!vertex || sscanf(vertex, "(%d %d)", &hotspot->poly[i][0], &hotspot->poly[i][1]) != 2)
-			return false;
-
-		convertCoords1080(&hotspot->poly[i][0], &hotspot->poly[i][1], kCoordsLegacy, false);
-		convertCoordsNative(&hotspot->poly[i][0], &hotspot->poly[i][1], kCoordsGameScreen, false);
-		vertex = strchr(vertex, ')');
-	}
-
-	hotspot->added = 0;
-	hotspot->handle = newHandle();
-	hotspot->setup = setup;
-	hotspot->coordMode = kCoordsGameScreen;
-
-	return true;
 }
 
 int HotspotManager::getActiveHotspots(int canvasX, int canvasY, const Hotspot **out, int max, int mode) {
-	loadCurrentRoom();
+	Room *room = _sputRoom->getCurrentRoom();
 
-	for (int i = 0; i < _numHotspots; i++)
-		setHoverHidden(_hotspots[i], 2);
+	if (!room || _numHotspots <= 0)
+		return 0;
 
+	int setup = room->curSetup;
 	int count = 0;
 
-	for (int pass = 0; pass < 2; pass++) {
-		for (int i = 0; i < _numHotspots && count < max; i++) {
-			const Hotspot *hotspot = _hotspots[i];
-			bool priority = hotspot->type == kTypeSpecial || hotspot->type == kTypeOverlay;
+	// Every hover image hides, the special and overlay hotspots under the point show theirs
+	for (int i = 0; i < _numHotspots; i++) {
+		Hotspot *hotspot = _hotspots[i];
 
-			if (priority != (pass == 0) || !isInCurrentSetup(hotspot))
-				continue;
+		setHoverHidden(hotspot, 2);
 
-			if (pass == 0) {
-				if (!isPriorityCompatible(mode, hotspot->type))
-					continue;
-			} else if (!isCompatible(mode, hotspot->type, hotspot->cursor)) {
-				continue;
-			}
+		if (hotspot->setup != setup && hotspot->setup != -1)
+			continue;
 
-			int poly[Hotspot::kMaxPolygon][2];
+		if (hotspot->type != kTypeSpecial && hotspot->type != kTypeOverlay)
+			continue;
 
-			if (!getPolygon(hotspot, poly))
-				continue;
+		if (!isPriorityCompatible(mode, hotspot->type))
+			continue;
 
-			int pointX = canvasX;
-			int pointY = canvasY;
+		int pointX = canvasX;
+		int pointY = canvasY;
 
-			convertCoordsNative(&pointX, &pointY, hotspot->coordMode, false);
+		convertCoordsNative(&pointX, &pointY, hotspot->coordMode, false);
 
-			if (!isInside(poly, hotspot->polyNum, pointX, pointY))
-				continue;
-
+		if (isInside(hotspot->poly, hotspot->polyNum, pointX, pointY) && count < max) {
 			out[count++] = hotspot;
-
-			if (pass == 0)
-				setHoverHidden(hotspot, 1);
+			setHoverHidden(hotspot, 1);
 		}
+	}
+
+	// The other hotspots. A hover image of these stays hidden, only its layer grows.
+	for (int i = 0; i < _numHotspots; i++) {
+		Hotspot *hotspot = _hotspots[i];
+
+		if (hotspot->setup != setup && hotspot->setup != -1)
+			continue;
+
+		if (hotspot->type == kTypeSpecial || hotspot->type == kTypeOverlay)
+			continue;
+
+		if (!isCompatible(mode, hotspot->type, hotspot->cursor) || count >= max)
+			continue;
+
+		bool unplaced = hotspot->type == kTypeDynamic;
+
+		if (unplaced && updateDynamicPolygon(hotspot))
+			unplaced = false;
+
+		int pointX = canvasX;
+		int pointY = canvasY;
+
+		convertCoordsNative(&pointX, &pointY, hotspot->coordMode, false);
+
+		if (!isInside(hotspot->poly, hotspot->polyNum, pointX, pointY) || unplaced)
+			continue;
+
+		out[count++] = hotspot;
+
+		int layer;
+
+		if (hotspot->overlayHandle >= 0 && _overlays && _overlays->getLayer(hotspot->overlayHandle, &layer))
+			_overlays->setLayer(hotspot->overlayHandle, layer + 2);
 	}
 
 	return count;
@@ -554,17 +564,14 @@ int HotspotManager::getActiveHotspots(int canvasX, int canvasY, const Hotspot **
 
 int HotspotManager::addHotspot(const char *id, int x, int y, int width, int height, int cursor, int boost, int menuType,
 		const char *hoverImage, int hoverLayer, int coords) {
-	if (_numHotspots >= kMaxHotspots) {
-		warning("HotspotManager::addHotspot(): too many hotspots");
-		return -1;
-	}
+	if ((int)strlen(id) >= Hotspot::kIdSize)
+		warning("HotspotManager::addHotspot(): id too long");
 
 	Hotspot *hotspot = new Hotspot;
 
 	memset(hotspot, 0, sizeof(Hotspot));
 
 	hotspot->added = 1;
-	hotspot->handle = newHandle();
 	hotspot->setup = -1;
 	Common::strlcpy(hotspot->name, id, sizeof(hotspot->name));
 	Common::strlcpy(hotspot->id, id, sizeof(hotspot->id));
@@ -590,7 +597,7 @@ int HotspotManager::addHotspot(const char *id, int x, int y, int width, int heig
 	hotspot->coordMode = coords;
 	hotspot->overlayHandle = -1;
 
-	if (hoverImage && _overlays) {
+	if (hoverImage && hoverImage[0] && _overlays) {
 		int layer = hoverLayer;
 
 		if (menuType != 0 && layer < 10)
@@ -610,17 +617,44 @@ int HotspotManager::addHotspot(const char *id, int x, int y, int width, int heig
 		}
 	}
 
+	// At most 127 hotspots. The overlay of a hotspot that does not fit stays.
+	if (_numHotspots + 1 >= kMaxHotspots)
+		warning("HotspotManager::addHotspot(): too many hotspots");
+
+	if (_numHotspots > kMaxHotspots - 2) {
+		delete hotspot;
+
+		return -1;
+	}
+
+	hotspot->handle = newHandle();
 	_hotspots[_numHotspots++] = hotspot;
 
-	return hotspot->handle;
+	int handle = _serial;
+
+	_serial = handle + 1;
+
+	return handle;
 }
 
+// The last hotspot takes the place of the removed one, so the order of the queries changes
 void HotspotManager::removeHotspot(int handle) {
 	for (int i = 0; i < _numHotspots; i++) {
-		if (_hotspots[i]->handle == handle) {
-			removeAt(i);
-			return;
-		}
+		if (_hotspots[i]->handle != handle)
+			continue;
+
+		Hotspot *hotspot = _hotspots[i];
+
+		if (hotspot->overlayHandle >= 0 && _overlays)
+			_overlays->destroy(hotspot->overlayHandle);
+
+		delete hotspot;
+
+		_numHotspots--;
+		_hotspots[i] = _hotspots[_numHotspots];
+		_hotspots[_numHotspots] = nullptr;
+
+		return;
 	}
 }
 
@@ -652,10 +686,10 @@ void HotspotManager::updateHotspot(const char *id, int x, int y, int coords) {
 	}
 }
 
-void HotspotManager::linkHotspot(const char *id, int actorIndex) {
+void HotspotManager::linkHotspot(const char *id, int actorHandle) {
 	for (int i = 0; i < _numHotspots; i++) {
 		if (strcmp(_hotspots[i]->id, id) == 0)
-			_hotspots[i]->actorIndex = actorIndex;
+			_hotspots[i]->actorIndex = actorHandle;
 	}
 }
 
@@ -665,7 +699,7 @@ int HotspotManager::serialize(Common::WriteStream *stream) const {
 	memset(padding, kPaddingByte, sizeof(padding));
 
 	stream->writeSint32LE(_numHotspots);
-	stream->writeSint32LE(_nextHandle);
+	stream->writeSint32LE(_serial);
 	stream->write(padding, 20);
 	stream->write(_setName, kSetNameSize);
 
@@ -718,12 +752,13 @@ int HotspotManager::deserialize(Common::ReadStream *stream) {
 
 	int num = stream->readSint32LE();
 
-	_nextHandle = stream->readSint32LE();
+	_serial = stream->readSint32LE();
 	stream->read(padding, 20);
 	stream->read(_setName, kSetNameSize);
 	_setName[kSetNameSize - 1] = 0;
 
-	if (stream->err() || stream->eos() || num < 0 || num > kMaxHotspots || _nextHandle < 0 || _nextHandle >= kNumHandles) {
+	// The serial is one past the last handle that was given, so it can be 1024
+	if (stream->err() || stream->eos() || num < 0 || num > kMaxHotspots || _serial < 0 || _serial > kNumHandles) {
 		warning("HotspotManager::deserialize(): invalid hotspot header");
 		return 1;
 	}

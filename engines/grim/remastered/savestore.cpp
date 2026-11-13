@@ -29,6 +29,8 @@
 #include "graphics/pixelformat.h"
 #include "graphics/surface.h"
 
+#include "engines/grim/grim.h"
+#include "engines/grim/remastered/commentary.h"
 #include "engines/grim/remastered/overlay.h"
 #include "engines/grim/remastered/savestore.h"
 
@@ -61,10 +63,8 @@ bool SaveStore::parseSlotName(const Common::String &name, int *slot) {
 	int value = 0;
 	int count = 0;
 
-	for (; *digits; digits++) {
-		if (*digits < '0' || *digits > '9' || count >= 9)
-			return false;
-
+	// Like the scan of the original: four digits at most, whatever follows them is ignored
+	for (; *digits >= '0' && *digits <= '9' && count < 4; digits++) {
 		value = value * 10 + (*digits - '0');
 		count++;
 	}
@@ -292,8 +292,8 @@ uint32 SaveStore::packMetadata(int setIndex, const char *mural) {
 	char puzzles[kMuralLength + 1];
 	int first = kMuralLength;
 
-	memset(puzzles, '0', kMuralLength);
-	puzzles[kMuralLength] = '\0';
+	// A mural shorter than 60 characters has no puzzles after its end: they are neither solved nor open
+	memset(puzzles, 0, sizeof(puzzles));
 
 	for (int i = 0; i < kMuralLength && mural[i]; i++)
 		puzzles[i] = mural[i];
@@ -327,7 +327,8 @@ void SaveStore::unpackMetadata(uint32 packed, int *setIndex, Common::String *mur
 	for (int i = 0; year > 0 && i < yearEnd[year - 1]; i++)
 		puzzles[i] = '1';
 
-	for (int k = 0; k < puzzleBits && yearStart[year] + k != yearEnd[year]; k++) {
+	// The 22 bits are not cut at the end of the year, only at the end of the mural
+	for (int k = 0; k < puzzleBits && yearStart[year] + k < kMuralLength; k++) {
 		if ((packed >> (puzzleBits - 1 - k)) & 1)
 			puzzles[yearStart[year] + k] = '1';
 	}
@@ -354,22 +355,12 @@ bool SaveStore::readTag(Common::ReadStream *stream, const char *tag) {
 	return true;
 }
 
-// The module of the commentary does not exist yet: nothing is available and nothing was heard
 void SaveStore::writeCommentary(Common::WriteStream *stream) {
-	byte heard[kCommentarySize];
-
-	memset(heard, 0, sizeof(heard));
-	stream->writeSint32LE(-1);
-	stream->write(heard, sizeof(heard));
+	g_grim->getCommentary()->saveRemastered(stream);
 }
 
 bool SaveStore::readCommentary(Common::ReadStream *stream) {
-	byte heard[kCommentarySize];
-
-	stream->readSint32LE();
-	stream->read(heard, sizeof(heard));
-
-	return !stream->err() && !stream->eos();
+	return g_grim->getCommentary()->restoreRemastered(stream);
 }
 
 // The solved puzzles are light and the others dark, like the mural of the game menu

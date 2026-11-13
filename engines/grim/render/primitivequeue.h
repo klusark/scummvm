@@ -51,6 +51,10 @@ struct SputPrimitiveObject {
 	int color;
 	int pattern;
 	int filled;
+
+	// Remastered only: the 24-bit color (red, green << 8, blue << 16) and the opacity of the rectangles on the canvas
+	uint colorRgb;
+	float alpha;
 };
 
 class PrimitiveQueue {
@@ -66,6 +70,8 @@ public:
 	SputPrimitiveObject *addObject(int id, int layer);
 	void deletePrimitive(int id);
 	void changeColor(int id, int color);
+	void changeColorRgb(int id, uint colorRgb);
+	void setAlpha(int id, float alpha);
 	void changeLayer(int id, int layer);
 	void move(int id, int dx, int dy);
 	void moveTo(int id, int x, int y);

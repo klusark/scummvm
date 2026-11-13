@@ -35,6 +35,7 @@
 #include "common/stream.h"
 #include "common/system.h"
 #include "common/textconsole.h"
+#include "common/util.h"
 
 #include "backends/keymapper/action.h"
 #include "backends/keymapper/keymap.h"
@@ -62,6 +63,7 @@
 #include "engines/grim/grim.h"
 #include "engines/grim/lua.h"
 #include "engines/grim/lua_v1_opcodes/lua_v1.h"
+#include "engines/grim/remastered/commentary.h"
 #include "engines/grim/remastered/hdcanvas.h"
 #include "engines/grim/remastered/dialoglog.h"
 #include "engines/grim/remastered/hotspot.h"
@@ -348,7 +350,7 @@ int GrimEngine::getJoystickButtonIndex(int button, bool remastered) {
 			return 9;
 		case Common::JOYSTICK_BUTTON_START:
 			return 10;
-		case Common::JOYSTICK_BUTTON_LEFT_STICK:
+		case Common::JOYSTICK_BUTTON_RIGHT_STICK:
 			return 11;
 		default:
 			return -1;
@@ -576,7 +578,7 @@ void GrimEngine::createModules() {
 
 	_rd = new RenderDroid(_stdMath, _stdDisplay, _stdConffile, _stdFile, isDemo);
 	_rd->setStd3D(_std3D);
-	_walkSystem = new WalkSystem(_rd, _stdMath, _stdConffile, isDemo);
+	_walkSystem = new WalkSystem(_rd, _stdMath, _stdConffile, isDemo, isRemastered());
 
 	_res = new Res(isDemo);
 	_sputResource = new SputResource(_res, _rd, _stdDisplay, _stdBitmap);
@@ -587,7 +589,7 @@ void GrimEngine::createModules() {
 
 	controlInput->numJoysticks = 1;
 	joyCaps->available = 1;
-	joyCaps->flags = 0x0F;
+	joyCaps->flags = isRemastered() ? 0 : 0x0F;
 	joyCaps->maxButtons = isRemastered() ? 12 : 10;
 
 	for (int axis = 0; axis < 6; axis++) {
@@ -595,7 +597,7 @@ void GrimEngine::createModules() {
 		joyCaps->axisMax[axis] = 32767;
 	}
 
-	controlInput->joyState[0].flags = 0x3C;
+	controlInput->joyState[0].flags = isRemastered() ? 0 : 0x3C;
 
 	_wuRegistry = new WuRegistry();
 	_polyglotV1 = new Polyglot();
@@ -608,7 +610,7 @@ void GrimEngine::createModules() {
 	_blastText = new BlastText(_text);
 	_text->setBlastText(_blastText);
 	_normalText = new NormalText();
-	_sputText = new SputText(_res, _rd, _normalText, _text, _blastText, _sputTime, _polyglotV1);
+	_sputText = new SputText(_res, _rd, _normalText, _text, _blastText, _sputTime, _polyglotV1, isRemastered());
 
 	_mainGfxBuffer = new StdVBuffer();
 	_backBuffer = new StdVBuffer();
@@ -639,6 +641,8 @@ void GrimEngine::createModules() {
 		_sputMouse = new SputMouse(this, this, _stdControl, _sputRoom, _sputActor, _walkSystem, _rd);
 		_dialogLog = new DialogLog();
 		_sputMouse->getHotspots()->setOverlays(_hdCanvas->getOverlays());
+		_sputMouse->startup();
+		_commentary = new Commentary(_res, _imuse, _sputText, _sputSmush, _wuRegistry, _hdCanvas->getOverlays());
 	}
 
 	_res->setSputRender(_sputRender);
@@ -680,6 +684,11 @@ void GrimEngine::destroyModules() {
 		shutdownDisplay();
 
 	freeVideoDevices();
+
+	delete _commentary;
+	_commentary = nullptr;
+	if (_sputMouse)
+		_sputMouse->shutdown();
 
 	delete _sputMouse;
 	_sputMouse = nullptr;
@@ -1451,6 +1460,11 @@ int GrimEngine::loop(int render, int manualTicks) {
 				queryPerfCounterDiff(3);
 				mode = _libMode;
 			}
+
+			if (_commentary) {
+				_commentary->update();
+				mode = _libMode;
+			}
 		}
 
 		if (render && (mode != 1 || manualTicks)) {
@@ -1478,16 +1492,24 @@ int GrimEngine::loop(int render, int manualTicks) {
 void GrimEngine::timedPageFlip() {
 	setPerfCounter(8);
 
-	// The frame after the menus is black with only the borders, and the scene is redrawn after it
-	if (isRemastered()) {
+	// The frame in which the menus end is black with only the borders, the next frame redraws the scene
+	if (isRemastered() && _libMode != kLibModeExiting) {
 		if (_displayPrevMode == kLibModeMenu && _libMode != kLibModeMenu && _renderingMode != kRenderingModeHd) {
 			_sputRender->getIris(1.0f, 320, 240);
 			_hdCanvas->clearBuffer();
 			_hdCanvas->getOverlays()->render(40, 0);
-			_sputRender->forceRefresh();
 		}
 
 		_displayPrevMode = _libMode;
+	}
+
+	if (isRemastered()) {
+		// The canvas shows each picture one flip after it is made, so every mode flips but the exit
+		if (_libMode != kLibModeExiting)
+			_sputRender->pageFlip();
+
+		queryPerfCounterDiff(8);
+		return;
 	}
 
 	switch (_libMode) {
@@ -1506,17 +1528,16 @@ void GrimEngine::timedPageFlip() {
 		}
 
 		break;
-	case kLibModeUser:
-	case kLibModeMenu:
-		if (isRemastered())
-			_sputRender->pageFlip();
-
-		break;
 	default:
 		break;
 	}
 
 	queryPerfCounterDiff(8);
+}
+
+// The widescreen option 2 stretches the 4:3 area over the whole output
+bool GrimEngine::isWidescreenStretched() {
+	return (int)_wuRegistry->getFloat("Widescreen", 0.0f) == 2;
 }
 
 void GrimEngine::setPerfCounter(uint slot) {
@@ -1582,6 +1603,11 @@ void GrimEngine::makeCurrentSet(const char *name) {
 
 		if (room && room->colormaps && room != _sputRoom->getCurrentRoom()) {
 			_sputRoom->setCurrentRoom(room);
+
+			if (isRemastered())
+				_sputMouse->getHotspots()->load(name);
+
+			_walkSystem->markPathFinderDirty();
 			_walkSystem->setCollection(room->name);
 			_sputRender->syncCamera(room, room->curSetup);
 		}
@@ -2871,16 +2897,29 @@ void GrimEngine::pumpEvents() {
 		case Common::EVENT_X1BUTTONUP:
 			addMouseButtonEvent(15, 0);
 			break;
+		// The remastered takes a pad axis inside the dead zone for 0
 		case Common::EVENT_JOYAXIS_MOTION:
-			if (event.joystick.axis < 6)
-				input->joyState[0].axisPos[event.joystick.axis] = event.joystick.position;
+			if (event.joystick.axis < 6) {
+				int position = event.joystick.position;
+
+				if (isRemastered() && ABS(position) < 12000)
+					position = 0;
+
+				input->joyState[0].axisPos[event.joystick.axis] = position;
+			}
 
 			break;
 		case Common::EVENT_CUSTOM_BACKEND_ACTION_AXIS: {
 			int axis = applyStickAction(_stickAxes, event);
 
-			if (axis >= 0)
-				input->joyState[0].axisPos[axis] = _stickAxes[axis];
+			if (axis >= 0) {
+				int position = _stickAxes[axis];
+
+				if (isRemastered() && ABS(position) < 12000)
+					position = 0;
+
+				input->joyState[0].axisPos[axis] = position;
+			}
 
 			break;
 		}
@@ -2925,7 +2964,20 @@ void GrimEngine::handleFocus(int hasFocus) {
 }
 
 void GrimEngine::handleKey(Common::EventType type, const Common::KeyState &key, bool repeat) {
-	int scanCode = keyCodeToScanCode(key.keycode);
+	Common::KeyCode keycode = key.keycode;
+
+	// The player can choose the keys in the remastered. While a key is being chosen the next press
+	// is taken for it and the controls do not see it, otherwise a chosen key acts as the key it replaces.
+	if (isRemastered()) {
+		if (type == Common::EVENT_KEYDOWN && !repeat && _stdControl->isKeyMappingActive()) {
+			_luaV1->notifyKeyMapped(_stdControl->endKeyMapping(keycode));
+			keycode = Common::KEYCODE_INVALID;
+		} else {
+			keycode = _stdControl->translateKey(keycode);
+		}
+	}
+
+	int scanCode = keyCodeToScanCode(keycode);
 
 	if (type == Common::EVENT_KEYUP) {
 		if (scanCode)
@@ -2937,7 +2989,8 @@ void GrimEngine::handleKey(Common::EventType type, const Common::KeyState &key, 
 		return;
 	}
 
-	if (scanCode && !repeat)
+	// The remastered controls take the repeats of a held key as presses too
+	if (scanCode && (!repeat || isRemastered()))
 		addKeyboardEvent(scanCode, 0x80);
 
 	handleKeyDebug(key);

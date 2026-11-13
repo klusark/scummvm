@@ -149,7 +149,9 @@ void SputActorModule::updateActors(float delta) {
 		link = link->next;
 	} while (link);
 
+	_hadDynamicCollision = false;
 	updatePositions();
+	_dynamicCollisionFrames = _hadDynamicCollision ? _dynamicCollisionFrames + 1 : 0;
 }
 
 void SputActorModule::updateActorsDemo(float delta) {
@@ -657,7 +659,7 @@ void SputActorModule::updatePuckMovement(SputActor *actor) {
 			extra->pathIndex++;
 			setActorPosition(actor, actor->extra->walkTarget);
 
-			if (actor->extra->pathIndex < 0 || actor->extra->pathIndex >= 30) {
+			if (actor->extra->pathIndex < 0 || actor->extra->pathIndex >= pathCapacity()) {
 				warning("SputActorModule::updatePuckMovement(): path index %d out of range", actor->extra->pathIndex);
 				break;
 			}

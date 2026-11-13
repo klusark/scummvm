@@ -44,6 +44,7 @@ class WriteStream;
 namespace Grim {
 
 class BlastText;
+class Commentary;
 class DialogLog;
 class HdCanvas;
 class IMuse;
@@ -218,8 +219,10 @@ public:
 	SputCostume *getSputCostume() const { return _sputCostume; }
 	SputResource *getSputResource() const { return _sputResource; }
 	HdCanvas *getHdCanvas() const { return _hdCanvas; }
+	bool isWidescreenStretched();
 	SputMouse *getSputMouse() const { return _sputMouse; }
 	DialogLog *getDialogLog() const { return _dialogLog; }
+	Commentary *getCommentary() const { return _commentary; }
 
 	// grimlib module
 	void overrideSelectedActorCostume(int instance);
@@ -252,6 +255,9 @@ public:
 	int justLoaded();
 	int getLibMode() const { return _libMode; }
 	void setLibMode(int mode) { _libMode = mode; }
+	// Width of the canvas of the text of the remastered, only SetGameRenderMode changes it
+	int getTextCanvasWidth() const { return _textCanvasWidth; }
+	void setTextCanvasWidth(int width) { _textCanvasWidth = width; }
 	int getDebugKeys() const { return _debugKeys; }
 	void setDebugKeys(int debugKeys) { _debugKeys = debugKeys; }
 	const StdColorFormat *getColorInfo() const { return &_colorInfoCopy; }
@@ -417,6 +423,7 @@ protected:
 	SputSmush *_sputSmush = nullptr;
 	SputMouse *_sputMouse = nullptr;
 	DialogLog *_dialogLog = nullptr;
+	Commentary *_commentary = nullptr;
 	Lua_V1 *_luaV1 = nullptr;
 	WalkSystem *_walkSystem = nullptr;
 	StdVBuffer *_mainGfxBuffer = nullptr;
@@ -438,6 +445,7 @@ protected:
 	Common::SeekableReadStream *_saveReadStream = nullptr;
 
 	int _libMode = 0;
+	int _textCanvasWidth = 1440;
 	int _libPauseOldMode = 0;
 	int _libPauseSavedMode = 0;
 	int _libPauseSavedOldMode = 0;

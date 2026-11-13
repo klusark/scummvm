@@ -25,6 +25,8 @@
 
 #include "engines/grim/grim.h"
 #include "engines/grim/puck.h"
+#include "engines/grim/remastered/hotspot.h"
+#include "engines/grim/remastered/sputmouse.h"
 #include "engines/grim/sputobjectstate.h"
 #include "engines/grim/sputresource.h"
 #include "engines/grim/sputroom.h"
@@ -231,6 +233,7 @@ int SputRoom::restoreRemastered(Common::ReadStream *stream) {
 
 	if (currentRoom) {
 		_grim->makeCurrentSetupLib(currentRoom->curSetup);
+		_grim->getSputMouse()->getHotspots()->load(currentRoom->name);
 
 		_walkSystem->setCollection(currentRoom->name);
 
@@ -245,6 +248,7 @@ int SputRoom::restoreRemastered(Common::ReadStream *stream) {
 
 			if (number == plane->_number) {
 				plane->_active = stream->readSint32LE();
+				_walkSystem->markPathFinderDirty();
 				plane->setType(stream->readSint32LE());
 				plane->_enabled = stream->readSint32LE();
 

@@ -223,7 +223,7 @@ int SputActorModule::getActorHandle(SputActor *actor) {
 	return (int)(actor - _actors);
 }
 
-int SputActorModule::allocateActor() {
+int SputActorModule::allocateActor(int flag20, int flag80) {
 	SputActor *actor = nullptr;
 
 	for (int i = 0; i < _maxActors; i++) {
@@ -280,6 +280,12 @@ int SputActorModule::allocateActor() {
 	actor->costumeStack = nullptr;
 	actor->colorMap = new ResRef();
 	actor->inUse = 1;
+
+	if (flag20)
+		actor->flags |= 0x20;
+
+	if (flag80)
+		actor->flags |= 0x80;
 
 	return (int)(actor - _actors);
 }

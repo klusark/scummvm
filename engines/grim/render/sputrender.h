@@ -207,6 +207,7 @@ public:
 private:
 	// Layers of the primitives drawn on the canvas of the remastered
 	enum {
+		kPrimitiveLayerUnderlay = 1,
 		kPrimitiveLayerOverlay = 2,
 		kPrimitiveLayerMenu = 4,
 		kPrimitiveLayerDialog = 8

@@ -28,6 +28,7 @@
 #include "common/path.h"
 #include "common/stream.h"
 #include "common/textconsole.h"
+#include "common/util.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -239,22 +240,10 @@ const HdFont::Glyph *HdFont::getGlyph(int c) const {
 	return &_glyphs[c];
 }
 
-HdTextCache::HdTextCache() : pixelSize(0.0f), originX(0), originY(0), minX(0), minY(0), maxWidth(0), maxHeight(0),
-		pixels(nullptr), bitmapWidth(0), bitmapHeight(0), bitmapX(0), bitmapY(0), bitmapAlpha(-1.0f),
-		bitmapFirstLine(0), bitmapLineCount(0) {
+HdTextCache::HdTextCache() : pixelSize(0.0f), minX(0.0f), minY(0.0f), maxRight(0.0f), maxBottom(0.0f) {
 }
 
-HdTextCache::~HdTextCache() {
-	freeBitmap();
-}
-
-// A negative alpha means that the bitmap has not been drawn yet
-void HdTextCache::freeBitmap() {
-	delete[] pixels;
-	pixels = nullptr;
-	bitmapWidth = 0;
-	bitmapHeight = 0;
-	bitmapAlpha = -1.0f;
+HdTextDraw::HdTextDraw() : originX(0.0f), originY(0.0f), textRed(0.0f), textGreen(0.0f), textBlue(0.0f), alpha(0.0f) {
 }
 
 HdText::HdText() : _library(nullptr), _customFont(nullptr), _customFontTried(false) {
@@ -418,17 +407,10 @@ bool HdText::isWordCharacter(int c) {
 	if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
 		return true;
 
-	if (c >= 33 && c <= 63 && ((0x440E8143u >> (c - 33)) & 1))
+	if (c >= 33 && c <= 63 && ((0x44002843u >> (c - 33)) & 1))
 		return true;
 
 	return (c & 0xC0) == 0xC0;
-}
-
-float HdText::coverage(const HdFont::Glyph *glyph, int x, int y) {
-	if (x < 0 || y < 0 || x >= glyph->width || y >= glyph->height)
-		return 0.0f;
-
-	return (float)glyph->alpha[y * glyph->width + x] / 255.0f;
 }
 
 void HdText::layout(const HdTextInfo &info, HdTextCache *cache) {
@@ -436,14 +418,11 @@ void HdText::layout(const HdTextInfo &info, HdTextCache *cache) {
 
 	cache->quads.clear();
 	cache->rows.clear();
-	cache->freeBitmap();
 	cache->pixelSize = font->getPixelSize();
-	cache->originX = info.x;
-	cache->originY = info.y;
-	cache->minX = 0;
-	cache->minY = 0;
-	cache->maxWidth = 0;
-	cache->maxHeight = 0;
+	cache->minX = 0.0f;
+	cache->minY = 0.0f;
+	cache->maxRight = 0.0f;
+	cache->maxBottom = 0.0f;
 
 	int baseLine = (int)ceilf(cache->pixelSize);
 	float penX = 0.0f;
@@ -469,7 +448,7 @@ void HdText::layout(const HdTextInfo &info, HdTextCache *cache) {
 }
 
 void HdText::splitLines(HdTextCache *cache, const char *text, float maxWidth) const {
-	float lineHeight = ceilf(cache->pixelSize * 1.2f);
+	float lineHeight = (float)(int)ceilf(cache->pixelSize * 1.2f);
 	float previousX = -999999.0f;
 	float wordWidth = 0.0f;
 	int wordStart = -1;
@@ -484,17 +463,18 @@ void HdText::splitLines(HdTextCache *cache, const char *text, float maxWidth) co
 		if (previousX != -999999.0f && previousX >= x)
 			lineStart = i;
 
-		float advance = (float)cache->quads[i].width;
+		float advance = (x + (float)cache->quads[i].width) - x;
 
 		if (i + 1 < numQuads && cache->quads[i + 1].x > x)
 			advance = cache->quads[i + 1].x - x;
 
 		wordWidth += advance;
 
+		// A newline is not a hard break: it breaks like a character that is past the right edge
 		if (c != 182 && (c == '\n' || x >= maxWidth)) {
 			int breakAt = i;
 
-			if (c != '\n' && wordStart != -1 && !(maxWidth < wordWidth))
+			if (wordStart != -1 && !(maxWidth < wordWidth))
 				breakAt = wordStart;
 
 			if (lineStart != breakAt) {
@@ -524,259 +504,197 @@ void HdText::splitLines(HdTextCache *cache, const char *text, float maxWidth) co
 
 void HdText::measure(HdTextCache *cache) const {
 	int numQuads = (int)cache->quads.size();
-	int i = 0;
+	float previousLeft = 9999999.0f;
+	float maxRight = 0.0f;
+	float maxBottom = 0.0f;
+	int line = -1;
 
-	// A new row starts where the horizontal position goes back
-	while (i < numQuads) {
-		int left = (int)cache->quads[i].x;
-		int right = left + cache->quads[i].width;
-		int top = (int)cache->quads[i].y;
-		int bottom = top + cache->quads[i].height;
-		int j = i + 1;
+	for (int i = 0; i < numQuads; i++) {
+		float left = cache->quads[i].x;
+		float top = cache->quads[i].y;
+		float right = left + (float)cache->quads[i].width;
+		float bottom = top + (float)cache->quads[i].height;
 
-		while (j < numQuads && cache->quads[j].x >= cache->quads[j - 1].x) {
-			int quadLeft = (int)cache->quads[j].x;
-			int quadTop = (int)cache->quads[j].y;
+		// A new line starts where the horizontal position does not increase
+		if (previousLeft >= left) {
+			HdTextRow newRow;
 
-			if (quadLeft < left)
-				left = quadLeft;
-
-			if (quadLeft + cache->quads[j].width > right)
-				right = quadLeft + cache->quads[j].width;
-
-			if (quadTop < top)
-				top = quadTop;
-
-			if (quadTop + cache->quads[j].height > bottom)
-				bottom = quadTop + cache->quads[j].height;
-
-			j++;
+			newRow.firstQuad = i;
+			newRow.numQuads = 0;
+			newRow.x = left;
+			newRow.y = top;
+			newRow.width = 0.0f;
+			newRow.height = 0.0f;
+			cache->rows.push_back(newRow);
+			line++;
 		}
 
-		HdTextRow row;
+		previousLeft = left;
 
-		row.firstQuad = i;
-		row.numQuads = j - i;
-		row.x = left;
-		row.y = top;
-		row.width = right - left;
-		row.height = bottom - top;
-		cache->rows.push_back(row);
+		HdTextRow *row = &cache->rows[line];
 
-		if (row.width > cache->maxWidth)
-			cache->maxWidth = row.width;
+		if (right - row->x > row->width)
+			row->width = right - row->x;
 
-		if (bottom > cache->maxHeight)
-			cache->maxHeight = bottom;
+		if (bottom - row->y > row->height)
+			row->height = bottom - row->y;
 
-		i = j;
+		if (right > maxRight)
+			maxRight = right;
+
+		if (bottom > maxBottom)
+			maxBottom = bottom;
+
+		row->numQuads++;
 	}
+
+	// These two are the largest right and bottom coordinates, taken before the alignment
+	cache->maxRight = maxRight;
+	cache->maxBottom = maxBottom;
 }
 
 void HdText::align(HdTextCache *cache, float alignX, float alignY) const {
+	int numRows = (int)cache->rows.size();
+	float height = cache->pixelSize;
+
+	// The block is one line high plus 1.2 lines for every other line (not rounded here)
+	float firstLine = numRows > 1 ? 1.0f : (float)numRows;
+	float otherLines = numRows - 1 > 0 ? (float)(numRows - 1) : 0.0f;
+	float shiftY = ceilf(-((firstLine * height + (height * 1.2f) * otherLines) * alignY));
+	float blockMinX = 999999.0f;
+	float blockMinY = 999999.0f;
+
+	for (int i = 0; i < numRows; i++) {
+		HdTextRow *row = &cache->rows[i];
+		float shiftX = ceilf(-(row->width * alignX));
+		float minX = 999999.0f;
+		float minY = 999999.0f;
+
+		for (int j = 0; j < row->numQuads; j++) {
+			HdTextQuad *quad = &cache->quads[row->firstQuad + j];
+
+			quad->x += shiftX;
+			quad->y += shiftY;
+
+			if (quad->x < minX)
+				minX = quad->x;
+
+			if (quad->y < minY)
+				minY = quad->y;
+		}
+
+		row->x = minX;
+		row->y = minY;
+
+		if (minX < blockMinX)
+			blockMinX = minX;
+
+		if (minY < blockMinY)
+			blockMinY = minY;
+	}
+
+	cache->minX = blockMinX;
+	cache->minY = blockMinY;
+}
+
+void HdText::buildDraw(const HdTextInfo &info, const HdTextCache *cache, const HdTextCanvas &canvas, HdTextDraw *draw) const {
+	draw->quads.clear();
+
 	int numRows = (int)cache->rows.size();
 
 	if (numRows == 0)
 		return;
 
-	for (int i = 0; i < numRows; i++) {
-		HdTextRow *row = &cache->rows[i];
-		int shift = -(int)ceilf((float)row->width * alignX);
+	bool stretch = canvas.stretched && !canvas.boxingHD;
+	float backWidth = (float)kCanvasWidth;
+	float backHeight = (float)kCanvasHeight;
+	float canvasWidth = (float)canvas.width;
+	float canvasHeight = 1080.0f;
+	float scaleX = backWidth / canvasWidth;
+	float scaleY;
+	float offsetX = 0.0f;
+	float offsetY = 0.0f;
 
-		for (int j = 0; j < row->numQuads; j++)
-			cache->quads[row->firstQuad + j].x += (float)shift;
-
-		row->x += shift;
+	if (stretch) {
+		scaleY = backHeight / canvasHeight;
+	} else {
+		scaleY = MIN(backHeight / canvasHeight, scaleX);
+		offsetY = (backHeight - canvasHeight * scaleY) * 0.5f;
+		scaleX = scaleY;
+		offsetX = (backWidth - canvasWidth * scaleY) * 0.5f;
 	}
 
-	float height = cache->pixelSize;
-	float blockHeight = height + 1.2f * height * (float)(numRows - 1);
-	int shiftY = -(int)ceilf(blockHeight * alignY);
+	float shiftX = (float)(kCanvasWidth - canvas.width);
+	float baseX = (shiftX * scaleX) * -0.5f;
 
-	if (shiftY != 0) {
-		for (uint i = 0; i < cache->quads.size(); i++)
-			cache->quads[i].y += (float)shiftY;
+	draw->originX = (baseX + offsetX) + scaleX * (float)info.x;
+	draw->originY = offsetY + scaleY * (float)info.y;
 
-		for (int i = 0; i < numRows; i++)
-			cache->rows[i].y += shiftY;
-	}
-
-	cache->minX = cache->rows[0].x;
-	cache->minY = cache->rows[0].y;
-
-	for (int i = 1; i < numRows; i++) {
-		if (cache->rows[i].x < cache->minX)
-			cache->minX = cache->rows[i].x;
-
-		if (cache->rows[i].y < cache->minY)
-			cache->minY = cache->rows[i].y;
-	}
-}
-
-void HdText::render(const HdTextInfo &info, HdTextCache *cache) {
-	cache->freeBitmap();
-	cache->bitmapAlpha = info.alpha;
-	cache->bitmapFirstLine = info.firstLine;
-	cache->bitmapLineCount = info.lineCount;
-
-	int numRows = (int)cache->rows.size();
+	// The first line is clamped to the last one, the count to the lines there are, and the
+	// block always has at least its first line
 	int firstRow = info.firstLine;
+
+	if (numRows - 1 <= firstRow)
+		firstRow = numRows - 1;
 
 	if (firstRow < 0)
 		firstRow = 0;
 
-	if (firstRow >= numRows)
-		return;
+	int count = info.lineCount;
 
-	int lastRow = numRows;
+	if (count > numRows)
+		count = numRows;
 
-	if (info.lineCount < numRows - firstRow)
-		lastRow = firstRow + (info.lineCount > 0 ? info.lineCount : 0);
+	int lastRow = count + firstRow - 1;
 
-	if (lastRow <= firstRow)
-		return;
+	if (lastRow < firstRow)
+		lastRow = firstRow;
 
+	// A last line past the end draws everything that is left
 	int firstQuad = cache->rows[firstRow].firstQuad;
-	int endQuad = cache->rows[lastRow - 1].firstQuad + cache->rows[lastRow - 1].numQuads;
-	int shiftY = 0;
+	int endQuad = (int)cache->quads.size();
 
-	if (firstRow > 0)
-		shiftY = -(int)floorf((float)firstRow * cache->pixelSize * 1.21f + 0.5f);
+	if (lastRow < numRows)
+		endQuad = cache->rows[lastRow].firstQuad + cache->rows[lastRow].numQuads;
 
-	// The rectangle that holds every box of the visible rows, cut to the canvas
-	int left = kCanvasWidth;
-	int top = kCanvasHeight;
-	int right = 0;
-	int bottom = 0;
+	if (firstRow != 0)
+		draw->originY = (((float)firstRow * cache->pixelSize) * -1.21f) + draw->originY;
 
-	for (int i = firstQuad; i < endQuad; i++) {
-		const HdTextQuad &quad = cache->quads[i];
-		int quadLeft = info.x + (int)quad.x;
-		int quadTop = info.y + shiftY + (int)quad.y;
+	for (int i = firstQuad; i < endQuad; i++)
+		draw->quads.push_back(cache->quads[i]);
 
-		if (quadLeft < left)
-			left = quadLeft;
-
-		if (quadTop < top)
-			top = quadTop;
-
-		if (quadLeft + quad.width > right)
-			right = quadLeft + quad.width;
-
-		if (quadTop + quad.height > bottom)
-			bottom = quadTop + quad.height;
-	}
-
-	if (left < 0)
-		left = 0;
-
-	if (top < 0)
-		top = 0;
-
-	if (right > kCanvasWidth)
-		right = kCanvasWidth;
-
-	if (bottom > kCanvasHeight)
-		bottom = kCanvasHeight;
-
-	if (right <= left || bottom <= top)
-		return;
-
-	int width = right - left;
-	int height = bottom - top;
-	float *colorCover = new float[width * height]();
-	float *alphaCover = new float[width * height]();
 	float alpha = info.alpha;
 
-	if (alpha < 0.0f)
-		alpha = 0.0f;
+	draw->textRed = ((float)(info.color & 0xFF) / 255.0f) * alpha;
+	draw->textGreen = ((float)((info.color >> 8) & 0xFF) / 255.0f) * alpha;
+	draw->textBlue = ((float)((info.color >> 16) & 0xFF) / 255.0f) * alpha;
+	draw->alpha = alpha;
+}
 
-	if (alpha > 1.0f)
-		alpha = 1.0f;
+void HdText::queryText(const HdTextInfo &info, const HdTextCache *cache, const HdTextCanvas &canvas, int *x, int *y,
+		int *width, int *height) {
+	bool stretch = canvas.stretched && !canvas.boxingHD;
+	float scaleX = (float)kCanvasWidth / (float)canvas.width;
+	float scaleY = (float)kCanvasHeight / 1080.0f;
+	float uniform = MIN(scaleY, scaleX);
 
-	// The text shader draws, for every box, the glyph over a black halo that is the sum of the
-	// glyph shifted around by a pixel, and the boxes are blended in order
-	static const int haloOffsets[11][2] = {
-		{ -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 }, { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 },
-		{ -2, -2 }, { -2, -1 }, { -1, -2 }
-	};
-
-	for (int i = firstQuad; i < endQuad; i++) {
-		const HdTextQuad &quad = cache->quads[i];
-		const HdFont::Glyph *glyph = quad.glyph;
-
-		if (!glyph->alpha)
-			continue;
-
-		int quadLeft = info.x + (int)quad.x;
-		int quadTop = info.y + shiftY + (int)quad.y;
-		int startX = quadLeft > left ? quadLeft : left;
-		int startY = quadTop > top ? quadTop : top;
-		int endX = quadLeft + quad.width < right ? quadLeft + quad.width : right;
-		int endY = quadTop + quad.height < bottom ? quadTop + quad.height : bottom;
-
-		for (int y = startY; y < endY; y++) {
-			for (int x = startX; x < endX; x++) {
-				int glyphX = x - (quadLeft + 2);
-				int glyphY = y - (quadTop + 2);
-				float cover = coverage(glyph, glyphX, glyphY);
-				float halo = 0.0f;
-
-				for (int k = 0; k < 11; k++)
-					halo += coverage(glyph, glyphX + haloOffsets[k][0], glyphY + haloOffsets[k][1]);
-
-				if (halo > 1.0f)
-					halo = 1.0f;
-
-				float outAlpha = alpha * (cover + halo * (1.0f - cover));
-				float outColor = alpha * cover;
-				int index = (y - top) * width + (x - left);
-
-				alphaCover[index] = outAlpha + alphaCover[index] * (1.0f - outAlpha);
-				colorCover[index] = outColor + colorCover[index] * (1.0f - outAlpha);
-			}
-		}
+	if (!stretch) {
+		scaleX = uniform;
+		scaleY = uniform;
 	}
 
-	int red = info.color & 0xFF;
-	int green = (info.color >> 8) & 0xFF;
-	int blue = (info.color >> 16) & 0xFF;
-	byte *pixels = new byte[width * height * 4];
+	*x = (int)floorf(((float)(int)((float)info.x * scaleX) + cache->minX) / scaleX);
+	*y = (int)floorf((float)(int)((float)info.y * scaleY) / scaleY);
 
-	for (int i = 0; i < width * height; i++) {
-		float a = alphaCover[i];
-		byte *dest = pixels + i * 4;
-
-		if (a <= 0.0f) {
-			dest[0] = 0;
-			dest[1] = 0;
-			dest[2] = 0;
-			dest[3] = 0;
-			continue;
-		}
-
-		if (a > 1.0f)
-			a = 1.0f;
-
-		float fraction = colorCover[i] / a;
-
-		if (fraction > 1.0f)
-			fraction = 1.0f;
-
-		dest[0] = (byte)((float)red * fraction + 0.5f);
-		dest[1] = (byte)((float)green * fraction + 0.5f);
-		dest[2] = (byte)((float)blue * fraction + 0.5f);
-		dest[3] = (byte)(a * 255.0f + 0.5f);
+	// With the stretch the size of the text keeps the shape: both axes use the smaller scale
+	if (stretch) {
+		uniform = MIN(scaleX, scaleY);
+		scaleX = uniform;
+		scaleY = uniform;
 	}
 
-	delete[] colorCover;
-	delete[] alphaCover;
-
-	cache->pixels = pixels;
-	cache->bitmapWidth = width;
-	cache->bitmapHeight = height;
-	cache->bitmapX = left;
-	cache->bitmapY = top;
+	*width = (int)ceilf(fabsf(cache->maxRight / scaleX));
+	*height = (int)ceilf(fabsf(cache->maxBottom / scaleY));
 }
 
 } // End of namespace Grim

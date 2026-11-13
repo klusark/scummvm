@@ -243,6 +243,16 @@ void Lua_V1::WriteRegistryValue() {
 	lua_Object valObj = lua_getparam(2);
 	WuRegistry *wuRegistry = g_grim->_wuRegistry;
 
+	// A number is a string for Lua 3.1, the remastered tests it first and keeps it as a number
+	if (g_grim->isRemastered()) {
+		if (lua_isnumber(valObj))
+			wuRegistry->saveFloat(key, lua_getnumber(valObj));
+		else if (lua_isstring(valObj))
+			wuRegistry->saveStr(key, lua_getstring(valObj));
+
+		return;
+	}
+
 	if (lua_isstring(valObj))
 		wuRegistry->saveStr(key, lua_getstring(valObj));
 	else if (lua_isnumber(valObj))
@@ -1755,7 +1765,7 @@ struct luaL_reg grimDemoCostumeOpcodes[] = {
 };
 
 Lua_V1::Lua_V1(bool isEmi) : LuaBase(isEmi), _hs(nullptr), _initialized(0), _debugToggleFunc(nullptr), _totSaveBytes(0), _nextImageHandle(1), _nextObjectStateHandle(1),
-		_resolutionScaling(0.0f), _advancedLighting(0.0f) {
+		_resolutionScaling(0.0f), _advancedLighting(0), _controlEventCount(0), _lastInputMode(0) {
 	for (int i = 0; i < kMaxImages; i++) {
 		_imageHandles[i] = 0;
 		_images[i] = nullptr;
@@ -1893,6 +1903,32 @@ void Lua_V1::makeSystemTable() {
 
 	registerControls();
 
+	// The remastered has a function of its own for each kind of handler, and a handler for the
+	// kind of device in use
+	if (g_grim->isRemastered()) {
+		lua_pushobject(lua_getref(_refSystemTable));
+		lua_pushstring("camChangeHandler");
+		lua_pushcfunction(LUA_OPCODE(Lua_V1, DefaultCamChangeHandler));
+		lua_settable();
+
+		lua_pushobject(lua_getref(_refSystemTable));
+		lua_pushstring("axisHandler");
+		lua_pushcfunction(LUA_OPCODE(Lua_V1, DefaultControlHandler));
+		lua_settable();
+
+		lua_pushobject(lua_getref(_refSystemTable));
+		lua_pushstring("inputModeHandler");
+		lua_pushcfunction(LUA_OPCODE(Lua_V1, DefaultControlHandler));
+		lua_settable();
+
+		lua_pushobject(lua_getref(_refSystemTable));
+		lua_pushstring("buttonHandler");
+		lua_pushcfunction(LUA_OPCODE(Lua_V1, DefaultControlHandler));
+		lua_settable();
+
+		return;
+	}
+
 	lua_pushobject(lua_getref(_refSystemTable));
 	lua_pushstring("camChangeHandler");
 	lua_pushcfunction(LUA_OPCODE(LuaBase, dummyHandler));
@@ -1907,6 +1943,12 @@ void Lua_V1::makeSystemTable() {
 	lua_pushstring("buttonHandler");
 	lua_pushcfunction(LUA_OPCODE(LuaBase, dummyHandler));
 	lua_settable();
+}
+
+void Lua_V1::DefaultCamChangeHandler() {
+}
+
+void Lua_V1::DefaultControlHandler() {
 }
 
 void Lua_V1::registerControls() {
@@ -2283,6 +2325,13 @@ int32 Lua_V1::restoreIndirector(int32 tag, int32 data, SaveRestoreAccess *restor
 
 	if (tag == MKTAG('T', 'X', 'E', 'T')) {
 		if (g_grim->_sputText->findSerialNumber(data))
+			return data;
+
+		return 0;
+	}
+
+	if (g_grim->isRemastered() && tag == kSputTagFont) {
+		if (g_grim->_res->handleFromSerialNumber(data))
 			return data;
 
 		return 0;

@@ -27,8 +27,8 @@
 
 namespace Grim {
 
-// The primitives in the savegames of the remastered have the color as 24 bits and an alpha
-// between the 16 bit color and the pattern
+// The primitives in the savegames of the remastered have the 24 bit color (red in the low byte)
+// and the alpha between the 16 bit color and the pattern
 int SputPrimitive::saveRemastered(Common::WriteStream *stream) {
 	int numPrimitives = 0;
 
@@ -43,11 +43,6 @@ int SputPrimitive::saveRemastered(Common::WriteStream *stream) {
 	}
 
 	for (SputPrimitiveObject *obj = _current.getHead(); obj; obj = obj->next) {
-		uint16 color = (uint16)obj->color;
-		int red = (color >> 11) & 0x1F;
-		int green = (color >> 5) & 0x3F;
-		int blue = color & 0x1F;
-
 		stream->writeSint32LE(obj->shape);
 		stream->writeSint32LE(obj->id);
 		stream->writeSint32LE(obj->layer);
@@ -56,8 +51,8 @@ int SputPrimitive::saveRemastered(Common::WriteStream *stream) {
 		stream->writeSint32LE(obj->x2);
 		stream->writeSint32LE(obj->y2);
 		stream->writeSint32LE(obj->color);
-		stream->writeSint32LE((((red << 3) | (red >> 2)) << 16) | (((green << 2) | (green >> 4)) << 8) | ((blue << 3) | (blue >> 2)));
-		stream->writeFloatLE(1.0f);
+		stream->writeUint32LE(obj->colorRgb);
+		stream->writeFloatLE(obj->alpha);
 		stream->writeSint32LE(obj->pattern);
 		stream->writeSint32LE(obj->filled);
 
@@ -95,10 +90,8 @@ int SputPrimitive::restoreRemastered(Common::ReadStream *stream) {
 		int y2 = stream->readSint32LE();
 		int color = stream->readSint32LE();
 
-		// The 24 bit color and the alpha are not used
-		stream->readSint32LE();
-		stream->readFloatLE();
-
+		uint colorRgb = stream->readUint32LE();
+		float alpha = stream->readFloatLE();
 		int pattern = stream->readSint32LE();
 		int filled = stream->readSint32LE();
 
@@ -115,6 +108,8 @@ int SputPrimitive::restoreRemastered(Common::ReadStream *stream) {
 		obj->x2 = x2;
 		obj->y2 = y2;
 		obj->color = color;
+		obj->colorRgb = colorRgb;
+		obj->alpha = alpha;
 		obj->pattern = pattern;
 		obj->filled = filled;
 

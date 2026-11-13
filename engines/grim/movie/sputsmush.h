@@ -78,17 +78,29 @@ public:
 	virtual int pause(int pause);
 	virtual void blitFrame() {}
 
+	// Remastered: true while a HD movie plays (the commentary checks it before it ducks the movie audio)
+	bool isHdMoviePlaying() const { return videoIsPlayingMovie(); }
+	bool videoIsPlayingMovie() const;
+	bool videoIsVisible() const { return _isVideoVisible; }
+
+	// Remastered: the commentary module sets this while a commentary plays. The audio of the HD movie
+	// is then limited to 5% of the full gain; it is cleared when the commentary stops.
+	void setCommentaryDucking(bool ducking) { _commentaryDucking = ducking; }
+
 protected:
 	// Layer number of the HD movie frame in the 1920x1080 canvas
 	enum {
 		kHdMovieLayer = 30
 	};
 
-	bool startHdMovie(const char *name, int looping);
-	void stopHdMovie();
-	void pauseHdMovie(bool pause);
-	int periodicHd();
+	bool videoPlay(const char *name, bool playFromMenu);
+	void videoStop();
+	void videoUpdate(int force);
+	int videoGetMovieTimeMs() const;
+	static int getVideoDurationMs(const char *name);
+	static bool isHdMovieName(const char *name);
 	void queueHdFrame();
+	void freeVideoResources();
 
 	SmushPlay *_smushPlay;
 	Res *_res;
@@ -110,12 +122,24 @@ protected:
 	uint _startTime;
 	uint _lastPeriodicTime;
 
-	// HD movie (remastered): the Theora decoder, the last decoded frame and its packed or scaled copy
-	Video::TheoraDecoder *_hdDecoder;
-	const Graphics::Surface *_hdFrame;
-	Graphics::Surface *_hdScaled;
-	bool _hdMovie;
-	bool _hdPaused;
+	// HD movie (remastered): the Theora decoder, the surface that holds the last frame, the surface
+	// of a stopped movie (freed later, the canvas may still read it in the current frame) and the
+	// scaled copy of the frame queued last
+	Video::TheoraDecoder *_videoClip;
+	Graphics::Surface *_movieSurface;
+	Graphics::Surface *_releasedSurface;
+	Graphics::Surface *_scaledSurface;
+	float _frameTime;
+	bool _isVideoVisible;
+	bool _playFromMenu;
+	int _videoExtraFramesLeft;
+	int _videoDuration;
+	bool _playingMovie;
+	bool _wasPlayingMovie;
+	bool _commentaryDucking;
+
+	// Changes every time the pixels of the movie surface change, so the canvas knows when a frame is the same
+	int _movieSerial;
 };
 
 } // End of namespace Grim

@@ -42,15 +42,19 @@ public:
 
 	Lua_Remastered();
 
+	void recognizeOpcodes() override;
 	void registerMainOpcodes() override;
 	void registerCostumeOpcodes() override;
 	void registerPrimitiveOpcodes() override;
 	void registerHardwareOpcodes() override;
 
+	int controlCallback(float frameTime) override;
+
 protected:
 	// The remastered calls these with other arguments than the original (slot numbers)
 	DECLARE_LUA_OPCODE(Load) override;
 	DECLARE_LUA_OPCODE(Save) override;
+	DECLARE_LUA_OPCODE(Is3DHardwareEnabled) override;
 
 	// Debugging
 	DECLARE_LUA_OPCODE(PrintStack);
@@ -69,8 +73,25 @@ protected:
 	DECLARE_LUA_OPCODE(ResetKeyMappingToDefault);
 	DECLARE_LUA_OPCODE(GetRemappedKeyName);
 	DECLARE_LUA_OPCODE(GetRemappedKeyHint);
-	DECLARE_LUA_OPCODE(LoadRemappedKeys);
-	DECLARE_LUA_OPCODE(SaveRemappedKeys);
+
+	// The functions that do nothing: the original has one for each name, and the number a saved
+	// state keeps for a function depends on the function, so each one needs its own
+	DECLARE_LUA_OPCODE(NoOpPutActorAtOrigin);
+	DECLARE_LUA_OPCODE(NoOpGetClippedPos);
+	DECLARE_LUA_OPCODE(NoOpDriveActorTo);
+	DECLARE_LUA_OPCODE(NoOpWalkActorToInterest);
+	DECLARE_LUA_OPCODE(NoOpUnLockFont);
+	DECLARE_LUA_OPCODE(NoOpLockSound);
+	DECLARE_LUA_OPCODE(NoOpUnlockSound);
+	DECLARE_LUA_OPCODE(NoOpLockCostume);
+	DECLARE_LUA_OPCODE(NoOpUnlockCostume);
+	DECLARE_LUA_OPCODE(NoOpPlaySound);
+	DECLARE_LUA_OPCODE(NoOpPlaySoundAt);
+	DECLARE_LUA_OPCODE(NoOpPlaySoundAttached);
+	DECLARE_LUA_OPCODE(NoOpIsSoundPlaying);
+	DECLARE_LUA_OPCODE(NoOpGetSectorVertices);
+	DECLARE_LUA_OPCODE(NoOpLoadBundle);
+	DECLARE_LUA_OPCODE(NoOpUnloadBundle);
 
 	// Overlay module
 	DECLARE_LUA_OPCODE(OverlayCreate);

@@ -26,52 +26,107 @@
 
 namespace Grim {
 
+class SputActorModule;
 class WalkPlane;
 class WalkSystem;
+struct SputActor;
 
-// Shortest path over the walkable planes of the set. The graph has the vertices of the
-// planes as nodes, two nodes are connected when the straight segment between them stays on
-// the planes. The graph is rebuilt when the planes change.
+// Paths over the walkable planes of the set. The planes are merged into polygons and the boxes of
+// the actors in the way are cut out of them. The reflex corners of the outline are the nodes of a
+// visibility graph, the shortest route is found with A* and its corners are rounded.
 class PathFinder {
 public:
 	enum {
-		kMaxPlanes = 256,
-		kMaxNodes = 400
+		kMaxBoxPoints = 256,
+		kMaxPathPoints = 128
 	};
 
 	explicit PathFinder(WalkSystem *walkSystem);
+	~PathFinder();
 
-	// Writes the points from the start to the goal and returns how many, or 0 if there is no path
-	int buildPath(const float *start, const float *goal, float (*outPath)[3], int maxPoints);
+	void markDirty() { _dirty = 1; }
+	void setDirect(bool direct) { _direct = direct ? 1 : 0; }
+
+	// Writes the points from the start to the goal and returns how many, -1 when the polygons can
+	// not be made. The goal and the start are moved into the polygons.
+	int buildPath(SputActorModule *actorModule, SputActor *actor, float *goal, float *start, float (*outPath)[3], int maxPoints, SputActor *avoid);
 
 private:
-	static bool isWalkable(const WalkPlane *plane);
-	static uint32 hashBytes(uint32 hash, const void *data, int size);
-	static bool clipRange(double value0, double value1, double minValue, double maxValue, double *low, double *high);
+	enum {
+		kMaxPolygons = 256,
+		kMaxSegments = 256,
+		kMaxVertices = 256,
+		kMaxGraphNodes = 128,
+		kMaxVertexPolygons = 6,
+		kMaxCircleOut = 128,
+		kModeDifference = 0,
+		kModeUnion = 1
+	};
 
-	bool update();
-	bool rebuild();
-	bool clipSegmentToPlane(int planeIndex, const float *from, const float *to, double *low, double *high) const;
-	bool isSegmentWalkable(const float *from, const float *to) const;
-	bool projectPoint(const float *point, float *out) const;
-	bool isConnected(int a, int b) const;
-	double distance(int a, int b) const;
-	int search(int startNode, int goalNode, float (*outPath)[3], int maxPoints);
+	struct Segment {
+		int v0;
+		int v1;
+		int flag;
+	};
+
+	struct Polygon {
+		Segment segments[kMaxSegments];
+		float boxMin[3];
+		float boxMax[3];
+		int flag;
+		int numSegments;
+	};
+
+	struct Vertex {
+		float pos[3];
+		int next;
+		int prev;
+		int numPolygons;
+		int polygons[kMaxVertexPolygons];
+	};
+
+	static float sseMin(float a, float b);
+	static float sseMax(float a, float b);
+	static float sqrtFloat(float value);
+
+	Polygon *newPolygon() const;
+	int vertIndex(const float *pos);
+	void computeBoundingBox(Polygon *poly) const;
+	Polygon *fromWalkPlane(const WalkPlane *plane);
+	int addSegment(Polygon *poly, const Segment &segment) const;
+	int splitSegment(Polygon *poly, int index, float t, unsigned *fail);
+	bool linearSplit(Polygon *poly, int index, const float *first, const float *second, unsigned *fail);
+	Polygon *combinePolygons(Polygon *a, Polygon *b, unsigned mode);
+	void alignSegmentDirection(Polygon *poly) const;
+	int separatePolygons(Polygon **polys, int *count);
+	int compactVertices(Polygon **polys, int count);
+	int getCCWverts(Vertex *graph, Polygon **polys, int count, int first);
+	bool pointInPoly2D(const Polygon *poly, const float *point) const;
+	bool onEdge(const Polygon *poly, const float *point) const;
+	bool segmentInPoly2D(const Polygon *poly, const Segment &segment) const;
+	float getSectorHeight(const Polygon *poly, const float *point) const;
+	bool sharesVertexWithOther(Polygon **polys, int count, int index) const;
+	int projectIntoPolygons(float *point, Polygon **polys, int count, int startIndex) const;
+	int rebuild();
+	void visibilityGraphNaive(int from, int to);
+	int findPath(int from, int to, float (*outPath)[3], int maxPoints) const;
+	void smoothenPath(float (*path)[3], int *numPoints, int maxPoints) const;
+	int addCircleSegments(float (*path)[3], int index, float (*out)[3], const float *nextPoint, const float *prevPoint) const;
+	float getCircleAngle(const float *corner, const float *other, bool positive) const;
 
 	WalkSystem *_walkSystem;
 
-	WalkPlane *_planes[kMaxPlanes];
-	double _planeMin[kMaxPlanes][3];
-	double _planeMax[kMaxPlanes][3];
-	int _numPlanes;
-	uint32 _signature;
-	bool _built;
-	bool _valid;
-
-	float _nodes[kMaxNodes + 2][3];
-	int _numNodes;
-	byte _adjacent[kMaxNodes][kMaxNodes];
-	byte _tempAdjacent[2][kMaxNodes];
+	Polygon *_polygons[kMaxPolygons];
+	int _numPolygons;
+	int _dirty;
+	Vertex _vertices[kMaxVertices];
+	int _numVertices;
+	Vertex _graph[kMaxGraphNodes];
+	float _adjacency[kMaxGraphNodes][kMaxGraphNodes];
+	int _graphCount;
+	int _direct;
+	float _boxPoints[kMaxBoxPoints][3];
+	int _numBoxPoints;
 };
 
 } // End of namespace Grim

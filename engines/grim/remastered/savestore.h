@@ -93,7 +93,7 @@ public:
 	static void writeTag(Common::WriteStream *stream, const char *tag);
 	static bool readTag(Common::ReadStream *stream, const char *tag);
 
-	// The state of the commentary, until the module that owns it exists
+	// The block of the commentary: the module writes and reads it
 	static void writeCommentary(Common::WriteStream *stream);
 	static bool readCommentary(Common::ReadStream *stream);
 
@@ -103,8 +103,7 @@ public:
 private:
 	enum {
 		kGzipHeaderSize = 10,
-		kGzipTrailerSize = 8,
-		kCommentarySize = 32
+		kGzipTrailerSize = 8
 	};
 
 	static bool parseSlotName(const Common::String &name, int *slot);

@@ -31,9 +31,21 @@ DialogLog::DialogLog() : _head(0), _tail(0) {
 	memset(_lines, 0, sizeof(_lines));
 }
 
-// The ring never fills up: when the tail reaches the head, the oldest line is dropped
+void DialogLog::clear() {
+	memset(_lines, 0, sizeof(_lines));
+	_head = 0;
+	_tail = 0;
+}
+
+// The ring never fills up: when the tail reaches the head, the oldest line is dropped.
+// A text of 150 characters or more fills the slot and has no end.
 void DialogLog::addLine(const char *text) {
-	Common::strlcpy(_lines[_tail], text, kLineSize);
+	char *slot = _lines[_tail];
+
+	memset(slot, 0, kLineSize);
+
+	for (int i = 0; i < kLineSize && text[i]; i++)
+		slot[i] = text[i];
 
 	_tail = (_tail + 1) % kMaxLines;
 
@@ -42,20 +54,78 @@ void DialogLog::addLine(const char *text) {
 }
 
 int DialogLog::getLineCount() const {
-	return (_tail - _head + kMaxLines) % kMaxLines;
+	if (_head == _tail)
+		return 0;
+
+	return (uint)_tail > (uint)_head ? _tail : kMaxLines;
 }
 
-int DialogLog::getLineIndex(int position) const {
-	return (_head + position) % kMaxLines;
-}
+const char *DialogLog::getLine(int slot) const {
+	if (getLineCount() <= slot)
+		return nullptr;
 
-const char *DialogLog::getLine(int ringIndex) const {
-	if (ringIndex < 0 || ringIndex >= kMaxLines) {
-		warning("DialogLog::getLine(): invalid line %d", ringIndex);
+	if (slot < 0) {
+		warning("DialogLog::getLine(): invalid slot %d", slot);
 		return nullptr;
 	}
 
-	return _lines[ringIndex];
+	return _lines[slot];
+}
+
+const char *DialogLog::getNextLine(int *cursor) const {
+	if (!cursor)
+		return nullptr;
+
+	if (_head == _tail) {
+		*cursor = -1;
+		return nullptr;
+	}
+
+	int current = *cursor;
+
+	if (current == -1) {
+		*cursor = _head;
+		return _lines[_head];
+	}
+
+	if (current < 0 || current >= kMaxLines) {
+		warning("DialogLog::getNextLine(): invalid cursor %d", current);
+		*cursor = -1;
+		return nullptr;
+	}
+
+	int next = (current + 1) % kMaxLines;
+
+	if (next == _head || next == _tail) {
+		*cursor = -1;
+		return nullptr;
+	}
+
+	*cursor = next;
+
+	return _lines[current];
+}
+
+bool DialogLog::copyLine(int slot, char *buffer, int bufferSize, int length) const {
+	if (!getLine(slot))
+		return false;
+
+	// The slots follow each other: a line without an end goes on in the next one
+	const char *text = &_lines[0][0] + slot * kLineSize;
+	int available = kMaxLines * kLineSize - slot * kLineSize;
+
+	if (length > available)
+		length = available;
+
+	if (length > bufferSize - 1)
+		length = bufferSize - 1;
+
+	memset(buffer, 0, bufferSize);
+
+	for (int i = 0; i < length && text[i]; i++)
+		buffer[i] = text[i];
+
+	return true;
 }
 
 int DialogLog::save(Common::WriteStream *stream) const {
@@ -90,9 +160,6 @@ int DialogLog::restore(Common::ReadStream *stream) {
 	}
 
 	memcpy(_lines, lines, sizeof(_lines));
-
-	for (int i = 0; i < kMaxLines; i++)
-		_lines[i][kLineSize - 1] = 0;
 
 	_head = head;
 	_tail = tail;

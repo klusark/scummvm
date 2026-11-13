@@ -32,6 +32,7 @@
 #include "engines/grim/remastered/overlay.h"
 
 #include <math.h>
+#include <string.h>
 
 namespace Grim {
 
@@ -39,15 +40,15 @@ enum {
 	kMuralDarkAlpha = 204
 };
 
-// Steps of the fades, per rendered frame
+// Steps of the fades, per rendered frame. The thresholds of the gray fades are the floats next to 0.025 and 0.05.
 static const float kFadeStep = 1.0f / 18.0f;
 static const float kFadeThreshold = 1.0f / 12.0f;
 static const float kGrayAlphaStep = 1.0f / 60.0f;
 static const float kGrayDesaturateStep = 1.0f / 30.0f;
 static const float kGrayAlphaTarget = 0.7f;
-static const float kGrayAlphaThreshold = 0.025f;
+static const float kGrayAlphaThreshold = 0.025000002f;
 static const float kGrayDesaturateTarget = 0.6f;
-static const float kGrayDesaturateThreshold = 0.05f;
+static const float kGrayDesaturateThreshold = 0.050000004f;
 
 // The pixels of the mural (32x10) that belong to each of the 60 puzzles, as y * 32 + x, ended by -1
 static const short muralPixels[60][10] = {
@@ -113,98 +114,94 @@ static const short muralPixels[60][10] = {
 	{ 159, 190, 191, 223, 255, 286, 287, 318, 319, -1 }
 };
 
-OverlayManager::OverlayManager(HdCanvas *canvas) : _canvas(canvas), _serial(0), _spinnerHandle(kNoHandle), _useCounter(0) {
+OverlayManager::OverlayManager(HdCanvas *canvas) : _canvas(canvas), _numOverlays(0), _numImages(0), _serial(0),
+		_spinnerHandle(kNoHandle) {
+	memset(_overlays, 0, sizeof(_overlays));
+	memset(_images, 0, sizeof(_images));
 }
 
 OverlayManager::~OverlayManager() {
-	for (uint i = 0; i < _images.size(); i++) {
+	for (int i = 0; i < _numImages; i++) {
 		delete[] _images[i]->pixels;
 		delete _images[i];
+		_images[i] = nullptr;
 	}
 
-	_images.clear();
+	_numImages = 0;
 }
 
 int OverlayManager::findOverlay(int handle) const {
-	for (uint i = 0; i < _overlays.size(); i++) {
+	for (int i = 0; i < _numOverlays; i++) {
 		if (_overlays[i].handle == handle)
-			return (int)i;
+			return i;
 	}
 
 	return -1;
 }
 
-// The handles go from 0 to 1023 and the ones in use are skipped
-int OverlayManager::nextHandle() {
-	for (int i = 0; i < kHandleCount; i++) {
-		_serial = (_serial + 1) % kHandleCount;
+// The entry of a handle, with its image loaded
+OverlayManager::Overlay *OverlayManager::fromHandle(int handle) {
+	int index = findOverlay(handle);
 
-		if (findOverlay(_serial) < 0)
-			return _serial;
-	}
+	if (index < 0)
+		return nullptr;
 
-	return kNoHandle;
+	if (_overlays[index].image)
+		ensureLoaded(_overlays[index].image);
+
+	return &_overlays[index];
 }
 
-OverlayManager::CachedImage *OverlayManager::findImage(const Common::String &name) const {
-	for (uint i = 0; i < _images.size(); i++) {
-		if (_images[i]->name == name)
-			return _images[i];
+// The image of a name. A full cache gives up the image with the smallest last handle among the ones
+// that nobody uses and that are not persistent, and the new image takes its place.
+OverlayManager::CachedImage *OverlayManager::acquireImage(const Common::String &name) {
+	int victim = -1;
+
+	for (int i = 0; i < _numImages; i++) {
+		CachedImage *image = _images[i];
+
+		if (image->name == name)
+			return image;
+
+		if (image->refCount == 0 && image->cacheMode != kCachePersistent && (victim < 0 || image->lastHandle < _images[victim]->lastHandle))
+			victim = i;
 	}
 
-	return nullptr;
-}
+	int slot = _numImages;
 
-OverlayManager::CachedImage *OverlayManager::acquireImage(const Common::String &name, int cacheMode) {
-	CachedImage *image = findImage(name);
-
-	if (image) {
-		image->lastUse = ++_useCounter;
-		return image;
-	}
-
-	if ((int)_images.size() >= kMaxImages) {
-		// The least recently used image that nobody references and that is not persistent goes away
-		CachedImage *oldest = nullptr;
-
-		for (uint i = 0; i < _images.size(); i++) {
-			CachedImage *candidate = _images[i];
-
-			if (candidate->refCount == 0 && candidate->cacheMode != kCachePersistent && (!oldest || candidate->lastUse < oldest->lastUse))
-				oldest = candidate;
-		}
-
-		if (!oldest) {
+	if (_numImages == kMaxImages) {
+		if (victim < 0) {
 			warning("OverlayManager::acquireImage(): the image cache is full");
-			return nullptr;
+			victim = 0;
 		}
 
-		deleteImage(oldest);
+		releaseImage(_images[victim]);
+		slot = victim;
+	} else {
+		_numImages++;
 	}
 
-	image = new CachedImage();
+	if (name.size() >= kSavedNameSize)
+		warning("OverlayManager::acquireImage(): the file name is too long");
+
+	CachedImage *image = new CachedImage();
+
 	image->name = name;
 	image->refCount = 0;
-	image->cacheMode = cacheMode;
+	image->cacheMode = kCacheDefault;
 	image->pixels = nullptr;
 	image->width = 0;
 	image->height = 0;
 	image->loadAllowed = true;
-	image->lastUse = ++_useCounter;
-	_images.push_back(image);
+	image->lastHandle = 0;
+	_images[slot] = image;
 
 	return image;
 }
 
-void OverlayManager::deleteImage(CachedImage *image) {
-	for (uint i = 0; i < _images.size(); i++) {
-		if (_images[i] == image) {
-			_images.remove_at(i);
-			break;
-		}
-	}
-
+void OverlayManager::releaseImage(CachedImage *image) {
 	freePixels(image);
+	image->refCount = 0;
 	delete image;
 }
 
@@ -219,26 +216,22 @@ void OverlayManager::freePixels(CachedImage *image) {
 	image->pixels = nullptr;
 }
 
+// The suffix is tested as it is: ".png" and ".save". A file that is missing or that does not decode is not tried again.
 void OverlayManager::ensureLoaded(CachedImage *image) {
-	if (image->pixels || !image->loadAllowed)
+	if (image->pixels || image->name.empty() || !image->loadAllowed)
 		return;
 
-	bool loaded = false;
+	size_t length = image->name.size();
 
-	if (image->name.hasSuffixIgnoreCase(".png")) {
-		loaded = loadPng(image);
-	} else if (image->name.hasSuffixIgnoreCase(".save")) {
+	if (length >= 4 && image->name.hasSuffix(".png")) {
+		if (!loadPng(image)) {
+			image->loadAllowed = false;
+			return;
+		}
+	} else if (length >= 5 && image->name.hasSuffix(".save")) {
 		buildMural(image);
-		loaded = true;
 	} else {
 		warning("OverlayManager::ensureLoaded(): unknown image file type for %s", image->name.c_str());
-	}
-
-	if (!loaded) {
-		image->loadAllowed = false;
-		image->width = 0;
-		image->height = 0;
-		return;
 	}
 
 	// The big images are not kept after their last overlay is gone
@@ -309,9 +302,9 @@ bool OverlayManager::loadPng(CachedImage *image) {
 					alpha = source[x * bytesPerPixel + 3];
 			}
 
-			destination[0] = (byte)((red * alpha + 127) / 255);
-			destination[1] = (byte)((green * alpha + 127) / 255);
-			destination[2] = (byte)((blue * alpha + 127) / 255);
+			destination[0] = (byte)((red * alpha) / 255);
+			destination[1] = (byte)((green * alpha) / 255);
+			destination[2] = (byte)((blue * alpha) / 255);
 			destination[3] = (byte)alpha;
 			destination += 4;
 		}
@@ -353,32 +346,32 @@ int OverlayManager::save(Common::WriteStream *stream) const {
 
 	memset(firewall, 0xFF, sizeof(firewall));
 
-	stream->writeSint32LE((int)_overlays.size());
-	stream->writeSint32LE((int)_images.size());
+	stream->writeSint32LE(_numOverlays);
+	stream->writeSint32LE(_numImages);
 	stream->writeSint32LE(_serial);
 	stream->write(firewall, 24);
 
-	for (uint i = 0; i < _images.size(); i++) {
+	for (int i = 0; i < _numImages; i++) {
 		const CachedImage *image = _images[i];
 		char name[kSavedNameSize];
 
 		memset(name, 0, sizeof(name));
 		Common::strlcpy(name, image->name.c_str(), sizeof(name));
 		stream->write(name, sizeof(name));
-		stream->writeSint32LE((int)image->lastUse);
+		stream->writeSint32LE(image->lastHandle);
 		stream->writeSint32LE(image->refCount);
 		stream->writeSint32LE(image->loadAllowed ? 1 : 0);
 		stream->writeSint32LE(image->cacheMode);
 		stream->write(firewall, 24);
 	}
 
-	for (uint i = 0; i < _overlays.size(); i++) {
+	for (int i = 0; i < _numOverlays; i++) {
 		const Overlay &overlay = _overlays[i];
 		int imageIndex = -1;
 
-		for (uint j = 0; j < _images.size(); j++) {
+		for (int j = 0; j < _numImages; j++) {
 			if (_images[j] == overlay.image) {
-				imageIndex = (int)j;
+				imageIndex = j;
 				break;
 			}
 		}
@@ -424,16 +417,17 @@ int OverlayManager::restore(Common::ReadStream *stream) {
 	}
 
 	// The images and the overlays of the game are replaced, the pixels are loaded again when drawn
-	for (uint i = 0; i < _images.size(); i++) {
+	for (int i = 0; i < _numImages; i++) {
 		freePixels(_images[i]);
 		delete _images[i];
+		_images[i] = nullptr;
 	}
 
-	_images.clear();
-	_overlays.clear();
+	_numImages = 0;
+	_numOverlays = 0;
+	memset(_overlays, 0, sizeof(_overlays));
 	_spinnerHandle = kNoHandle;
 	_serial = serial;
-	_useCounter = 0;
 
 	for (int i = 0; i < numImages; i++) {
 		char name[kSavedNameSize];
@@ -443,7 +437,7 @@ int OverlayManager::restore(Common::ReadStream *stream) {
 		name[sizeof(name) - 1] = '\0';
 
 		image->name = name;
-		image->lastUse = (uint32)stream->readSint32LE();
+		image->lastHandle = stream->readSint32LE();
 		image->refCount = stream->readSint32LE();
 		image->loadAllowed = stream->readSint32LE() != 0;
 		image->cacheMode = stream->readSint32LE();
@@ -452,10 +446,7 @@ int OverlayManager::restore(Common::ReadStream *stream) {
 		image->height = 0;
 
 		stream->read(firewall, 24);
-		_images.push_back(image);
-
-		if (image->lastUse > _useCounter)
-			_useCounter = image->lastUse;
+		_images[_numImages++] = image;
 	}
 
 	for (int i = 0; i < numOverlays; i++) {
@@ -482,56 +473,81 @@ int OverlayManager::restore(Common::ReadStream *stream) {
 			return 1;
 		}
 
-		if (imageIndex < 0 || imageIndex >= (int)_images.size()) {
-			warning("OverlayManager::restore(): the overlay %d has no image, dropped", overlay.handle);
-			continue;
+		// An entry without image (the cursors) is kept
+		if (imageIndex >= _numImages) {
+			warning("OverlayManager::restore(): the overlay %d has an unknown image", overlay.handle);
+			imageIndex = -1;
 		}
 
 		if (overlay.flags == -1)
 			overlay.flags = 0;
 
-		overlay.image = _images[imageIndex];
-		_overlays.push_back(overlay);
+		overlay.image = imageIndex >= 0 ? _images[imageIndex] : nullptr;
+		_overlays[_numOverlays++] = overlay;
 	}
 
 	return 0;
 }
 
+// The entry takes the next free slot; its handle is the next number that no slot has, the slot after
+// the last one included (it still holds what an earlier entry left there)
 int OverlayManager::create(const Common::String &name, int x, int y, const OverlayProps &props) {
-	if ((int)_overlays.size() >= kMaxOverlays) {
+	if (_numOverlays >= kMaxOverlays) {
 		warning("OverlayManager::create(): too many overlays");
 		return kNoHandle;
 	}
 
-	CachedImage *image = acquireImage(name, props.cache);
+	CachedImage *image = nullptr;
 
-	if (!image)
-		return kNoHandle;
+	if (!name.empty())
+		image = acquireImage(name);
 
-	int handle = nextHandle();
+	int slot = _numOverlays++;
+	Overlay *overlay = &_overlays[slot];
 
-	if (handle == kNoHandle)
-		return kNoHandle;
+	overlay->image = image;
+	overlay->x = x;
+	overlay->y = y;
+	overlay->widthOverride = -1;
+	overlay->heightOverride = -1;
+	overlay->coords = props.coords;
+	overlay->alpha = 1.0f;
+	overlay->desaturate = 0.0f;
+	overlay->fade = kFadeNone;
+	overlay->layer = props.layer;
+	overlay->hidden = 0;
+	overlay->flags = props.clearBuffer ? 1 : 0;
 
-	image->refCount++;
+	int handle = _serial;
+	bool used = true;
 
-	Overlay overlay;
+	while (used) {
+		handle = (handle + 1) % kHandleCount;
+		used = false;
 
-	overlay.image = image;
-	overlay.handle = handle;
-	overlay.x = x;
-	overlay.y = y;
-	overlay.widthOverride = props.width;
-	overlay.heightOverride = props.height;
-	overlay.alpha = 1.0f;
-	overlay.desaturate = 0.0f;
-	overlay.flags = props.clearBuffer ? 1 : 0;
-	overlay.coords = props.coords;
-	overlay.layer = props.layer;
-	overlay.mirror = props.mirror;
-	overlay.hidden = 0;
-	overlay.fade = kFadeNone;
-	_overlays.push_back(overlay);
+		for (int i = 0; i < _numOverlays; i++) {
+			if (_overlays[i].handle == handle) {
+				used = true;
+				break;
+			}
+		}
+	}
+
+	_serial = handle;
+	overlay->handle = handle;
+	overlay->mirror = props.mirror;
+
+	if (image) {
+		image->cacheMode = props.cache;
+		image->refCount++;
+		image->lastHandle = handle;
+
+		// The image is loaded when the overlay is made, the sizes that were asked for are kept
+		ensureLoaded(image);
+	}
+
+	overlay->widthOverride = props.width;
+	overlay->heightOverride = props.height;
 
 	return handle;
 }
@@ -542,7 +558,9 @@ void OverlayManager::move(int handle, int x, int y) {
 	if (index < 0)
 		return;
 
-	ensureLoaded(_overlays[index].image);
+	if (_overlays[index].image)
+		ensureLoaded(_overlays[index].image);
+
 	_overlays[index].x = x;
 	_overlays[index].y = y;
 }
@@ -553,7 +571,9 @@ void OverlayManager::setLayer(int handle, int layer) {
 	if (index < 0)
 		return;
 
-	ensureLoaded(_overlays[index].image);
+	if (_overlays[index].image)
+		ensureLoaded(_overlays[index].image);
+
 	_overlays[index].layer = layer;
 }
 
@@ -564,6 +584,14 @@ void OverlayManager::setHidden(int handle, int hidden) {
 		_overlays[index].hidden = hidden;
 }
 
+// The entry goes and the ones after it move down by one
+void OverlayManager::removeOverlay(int index) {
+	for (int i = index + 1; i < _numOverlays; i++)
+		_overlays[i - 1] = _overlays[i];
+
+	_numOverlays--;
+}
+
 void OverlayManager::destroy(int handle) {
 	int index = findOverlay(handle);
 
@@ -572,12 +600,16 @@ void OverlayManager::destroy(int handle) {
 
 	CachedImage *image = _overlays[index].image;
 
-	image->refCount--;
+	if (image) {
+		image->refCount--;
 
-	if (image->cacheMode == kCacheNever && image->refCount == 0)
-		freePixels(image);
+		if (image->cacheMode == kCacheNever && image->refCount == 0) {
+			freePixels(image);
+			image->refCount = 0;
+		}
+	}
 
-	_overlays.remove_at(index);
+	removeOverlay(index);
 }
 
 // A width or height override wins over the size of the image, an unknown handle has no size
@@ -591,18 +623,27 @@ void OverlayManager::getDimensions(int handle, int *width, int *height) {
 		return;
 
 	const Overlay &overlay = _overlays[index];
+	int imageWidth = 0;
+	int imageHeight = 0;
 
-	ensureLoaded(overlay.image);
-	*width = overlay.widthOverride > 0 ? overlay.widthOverride : overlay.image->width;
-	*height = overlay.heightOverride > 0 ? overlay.heightOverride : overlay.image->height;
+	if (overlay.image) {
+		ensureLoaded(overlay.image);
+		imageWidth = overlay.image->width;
+		imageHeight = overlay.image->height;
+	}
+
+	*width = overlay.widthOverride > 0 ? overlay.widthOverride : imageWidth;
+	*height = overlay.heightOverride > 0 ? overlay.heightOverride : imageHeight;
 }
 
 void OverlayManager::clearCache() {
-	for (uint i = 0; i < _images.size(); i++) {
+	for (int i = 0; i < _numImages; i++) {
 		CachedImage *image = _images[i];
 
-		if (image->refCount == 0 && image->cacheMode != kCachePersistent)
+		if (image->refCount == 0 && image->cacheMode != kCachePersistent) {
 			freePixels(image);
+			image->refCount = 0;
+		}
 	}
 }
 
@@ -614,56 +655,103 @@ void OverlayManager::fade(int handle, int type, bool hasValue, float value) {
 
 	Overlay &overlay = _overlays[index];
 
-	ensureLoaded(overlay.image);
+	if (overlay.image)
+		ensureLoaded(overlay.image);
+
 	overlay.fade = type;
 
-	if (type == kFadeSet) {
-		if (hasValue)
-			overlay.alpha = value;
-	} else if (type == kFadeIn) {
+	if (type == kFadeSet)
+		overlay.alpha = hasValue ? value : 0.0f;
+	else if (type == kFadeIn)
 		overlay.alpha = 0.0f;
-	}
 }
 
+// The icon is made once and put at the center of the position. Hiding forgets it even when it is gone.
 void OverlayManager::showLoadSpinner(bool show, int x, int y) {
-	if (_spinnerHandle != kNoHandle) {
-		destroy(_spinnerHandle);
-		_spinnerHandle = kNoHandle;
-	}
+	if (show) {
+		if (_spinnerHandle != kNoHandle)
+			return;
 
-	if (!show)
-		return;
+		OverlayProps props;
 
-	OverlayProps props;
+		props.layer = 5;
+		props.coords = kCoordsGlobal;
+		props.cache = kCachePersistent;
+		_spinnerHandle = create("save_wait_icon.png", x, y, props);
 
-	props.layer = 5;
-	props.coords = kCoordsGlobal;
-	props.cache = kCachePersistent;
-	_spinnerHandle = create("save_wait_icon.png", x, y, props);
+		int index = findOverlay(_spinnerHandle);
 
-	if (_spinnerHandle != kNoHandle) {
+		if (index < 0)
+			return;
+
 		int width = 0;
 		int height = 0;
 
 		getDimensions(_spinnerHandle, &width, &height);
-		move(_spinnerHandle, x - width / 2, y - height / 2);
+		_overlays[index].x -= width / 2;
+		_overlays[index].y -= height / 2;
+	} else if (_spinnerHandle >= 0) {
+		destroy(_spinnerHandle);
+		_spinnerHandle = kNoHandle;
 	}
 }
 
-void OverlayManager::drawOverlay(const Overlay &overlay) {
+bool OverlayManager::loadCached(const Common::String &name, int cacheMode) {
+	if (name.empty())
+		return false;
+
+	CachedImage *image = acquireImage(name);
+
+	image->cacheMode = cacheMode;
+
+	return true;
+}
+
+// The entry shows another image without changing any count; an empty name takes the image away
+void OverlayManager::setImage(int handle, const Common::String &name) {
+	Overlay *overlay = fromHandle(handle);
+
+	if (!overlay)
+		return;
+
+	overlay->image = name.empty() ? nullptr : acquireImage(name);
+}
+
+bool OverlayManager::getLayer(int handle, int *layer) {
+	Overlay *overlay = fromHandle(handle);
+
+	if (!overlay)
+		return false;
+
+	*layer = overlay->layer;
+
+	return true;
+}
+
+bool OverlayManager::hasImage(int handle) {
+	Overlay *overlay = fromHandle(handle);
+
+	return overlay && overlay->image;
+}
+
+void OverlayManager::preloadImage(const Common::String &name) {
+	if (name.empty())
+		return;
+
+	ensureLoaded(acquireImage(name));
+}
+
+// The overlays of the 4:3 area (boxing 0) follow the stretch of the widescreen option, the ones that have the
+// whole canvas (boxing 1) do not. The images keep their size, the sizes that were asked for are scaled.
+void OverlayManager::drawOverlay(const Overlay &overlay, int boxing) {
 	int x = overlay.x;
 	int y = overlay.y;
 
-	switch (overlay.coords) {
-	case kCoordsLegacy:
-		x = 1440 * x / 640 + 240;
-		y = 1080 * y / 480;
-		break;
-	case kCoordsGameScreen:
+	if (overlay.coords == kCoordsGameScreen) {
 		x += 240;
-		break;
-	default:
-		break;
+	} else if (overlay.coords == kCoordsLegacy) {
+		y = 1080 * y / 480;
+		x = 1440 * x / 640 + 240;
 	}
 
 	if (overlay.flags & 1)
@@ -676,53 +764,87 @@ void OverlayManager::drawOverlay(const Overlay &overlay) {
 
 	int width = overlay.widthOverride > 0 ? overlay.widthOverride : image->width;
 	int height = overlay.heightOverride > 0 ? overlay.heightOverride : image->height;
+	float scaleX;
+	float scaleY;
+	float offsetX;
+	float offsetY;
+	float widthScale;
+	float heightScale;
 
-	_canvas->queueOverlay(overlay.layer, image->pixels, image->width, image->height, x, y, width, height,
-			overlay.mirror, overlay.alpha, overlay.desaturate);
+	if (boxing == 1) {
+		_canvas->computeScaling(false, 1920, 1080, &scaleX, &scaleY, &offsetX, &offsetY);
+		widthScale = scaleX;
+		heightScale = scaleY;
+	} else {
+		_canvas->computeScaling(_canvas->isStretched(), 1440, 1080, &scaleX, &scaleY, &offsetX, &offsetY);
+		offsetX = (-240.0f * scaleX) + offsetX;
+		widthScale = scaleX < scaleY ? scaleX : scaleY;
+		heightScale = widthScale;
+	}
+
+	float pixelX = (float)x * scaleX + offsetX;
+	float pixelY = (float)y * scaleY + offsetY;
+
+	_canvas->queueOverlay(image->pixels, image->width, image->height, pixelX, pixelY, (float)width * widthScale,
+			(float)height * heightScale, overlay.mirror, overlay.alpha, overlay.desaturate);
 }
 
-// Moves the fade of an overlay one frame on, true when the overlay has to be destroyed
+// Moves the fade of an overlay one frame on: the end is tested before the step, and the ends snap.
+// True when the overlay has to be destroyed.
 bool OverlayManager::stepFade(Overlay &overlay) {
 	switch (overlay.fade) {
 	case kFadeIn:
-		overlay.alpha += kFadeStep;
-
-		if (fabsf(overlay.alpha - 1.0f) < kFadeThreshold) {
+		if (fabsf(overlay.alpha + -1.0f) < kFadeThreshold) {
 			overlay.alpha = 1.0f;
 			overlay.fade = kFadeNone;
+		} else {
+			overlay.alpha += overlay.alpha > 1.0f ? -kFadeStep : kFadeStep;
 		}
 
 		break;
 	case kFadeOut:
 	case kFadeOutDelete:
-		overlay.alpha -= kFadeStep;
-
 		if (fabsf(overlay.alpha) < kFadeThreshold) {
+			int fade = overlay.fade;
+
 			overlay.alpha = 0.0f;
-
-			if (overlay.fade == kFadeOutDelete)
-				return true;
-
 			overlay.fade = kFadeNone;
+
+			if (fade == kFadeOutDelete)
+				return true;
+		} else {
+			overlay.alpha += overlay.alpha > 0.0f ? -kFadeStep : kFadeStep;
 		}
 
 		break;
 	case kFadeToGray:
-		if (fabsf(overlay.alpha - kGrayAlphaTarget) >= kGrayAlphaThreshold)
-			overlay.alpha += overlay.alpha < kGrayAlphaTarget ? kGrayAlphaStep : -kGrayAlphaStep;
-		else if (fabsf(overlay.desaturate - kGrayDesaturateTarget) >= kGrayDesaturateThreshold)
-			overlay.desaturate += overlay.desaturate < kGrayDesaturateTarget ? kGrayDesaturateStep : -kGrayDesaturateStep;
-		else
-			overlay.fade = kFadeNone;
+		if (fabsf(overlay.alpha + -kGrayAlphaTarget) >= kGrayAlphaThreshold) {
+			overlay.alpha += overlay.alpha > kGrayAlphaTarget ? -kGrayAlphaStep : kGrayAlphaStep;
+		} else {
+			overlay.alpha = kGrayAlphaTarget;
+
+			if (fabsf(overlay.desaturate + -kGrayDesaturateTarget) < kGrayDesaturateThreshold) {
+				overlay.desaturate = kGrayDesaturateTarget;
+				overlay.fade = kFadeNone;
+			} else {
+				overlay.desaturate += overlay.desaturate > kGrayDesaturateTarget ? -kGrayDesaturateStep : kGrayDesaturateStep;
+			}
+		}
 
 		break;
 	case kFadeFromGray:
-		if (fabsf(overlay.alpha - 1.0f) >= kGrayAlphaThreshold)
-			overlay.alpha += overlay.alpha < 1.0f ? kGrayAlphaStep : -kGrayAlphaStep;
-		else if (fabsf(overlay.desaturate) >= kGrayDesaturateThreshold)
-			overlay.desaturate += overlay.desaturate < 0.0f ? kGrayDesaturateStep : -kGrayDesaturateStep;
-		else
-			overlay.fade = kFadeNone;
+		if (fabsf(overlay.alpha + -1.0f) >= kGrayAlphaThreshold) {
+			overlay.alpha += overlay.alpha > 1.0f ? -kGrayAlphaStep : kGrayAlphaStep;
+		} else {
+			overlay.alpha = 1.0f;
+
+			if (fabsf(overlay.desaturate) < kGrayDesaturateThreshold) {
+				overlay.desaturate = 0.0f;
+				overlay.fade = kFadeNone;
+			} else {
+				overlay.desaturate += overlay.desaturate > 0.0f ? -kGrayDesaturateStep : kGrayDesaturateStep;
+			}
+		}
 
 		break;
 	default:
@@ -732,26 +854,23 @@ bool OverlayManager::stepFade(Overlay &overlay) {
 	return false;
 }
 
-// The boxing mode only matters when the output is not 1920x1080 or the widescreen is stretched: neither happens here
+// The entries of a layer in the order they were made. An entry without image is not drawn. The ones
+// that fade out and are deleted go when the fade ends.
 void OverlayManager::render(int layer, int boxing) {
-	Common::Array<int> toDestroy;
-
-	for (uint i = 0; i < _overlays.size(); i++) {
+	for (int i = 0; i < _numOverlays; i++) {
 		Overlay &overlay = _overlays[i];
 
 		if (overlay.layer != layer || overlay.hidden == 2 || !overlay.image)
 			continue;
 
 		ensureLoaded(overlay.image);
-		overlay.image->lastUse = ++_useCounter;
-		drawOverlay(overlay);
+		drawOverlay(overlay, boxing);
 
-		if (stepFade(overlay))
-			toDestroy.push_back(overlay.handle);
+		if (stepFade(overlay)) {
+			destroy(overlay.handle);
+			i--;
+		}
 	}
-
-	for (uint i = 0; i < toDestroy.size(); i++)
-		destroy(toDestroy[i]);
 }
 
 } // End of namespace Grim

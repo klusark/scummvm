@@ -24,6 +24,7 @@
 #include "common/stream.h"
 #include "common/textconsole.h"
 
+#include "engines/grim/grim.h"
 #include "engines/grim/text/polyglot.h"
 #include "engines/grim/std/std_sort.h"
 #include "engines/grim/wuregistry.h"
@@ -78,11 +79,15 @@ void Polyglot::configure(const char *tabFile) {
 			_languageMalloc[i] = _languageMalloc[i + 4] ^ 0xDD;
 	}
 
+	// The remastered skips the empty lines and the comments
+	bool skipComments = g_grim->isRemastered();
 	char *line = _languageMalloc;
 
 	do {
+		if (!skipComments || (*line != 13 && *line != '#'))
+			_lineCount++;
+
 		line = findChar(line, 13) + 2;
-		_lineCount++;
 	} while (line - _languageMalloc < size - 1);
 
 	_languageLine = new char *[_lineCount];
@@ -93,21 +98,24 @@ void Polyglot::configure(const char *tabFile) {
 	do {
 		char *lineEnd = findChar(line, 13);
 
-		*lineEnd = 0;
+		if (!skipComments || (*line != 13 && *line != '#')) {
+			*lineEnd = 0;
 
-		char *tab = strchr(line, 9);
+			char *tab = strchr(line, 9);
 
-		if (tab)
-			*tab = 0;
+			if (tab)
+				*tab = 0;
 
-		for (char *p = line; *p; p++) {
-			if (*p >= 'a' && *p <= 'z')
-				*p -= 0x20;
+			for (char *p = line; *p; p++) {
+				if (*p >= 'a' && *p <= 'z')
+					*p -= 0x20;
+			}
+
+			_languageLine[lineIndex] = line;
+			lineIndex++;
 		}
 
-		_languageLine[lineIndex] = line;
 		line = lineEnd + 2;
-		lineIndex++;
 	} while (line - _languageMalloc < size - 1);
 
 	sort(_languageLine, _lineCount, sizeof(char *), WuRegistry::compareNames);

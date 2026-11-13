@@ -41,12 +41,22 @@ public:
 
 	DialogLog();
 
+	// Empties the log
+	void clear();
+
 	void addLine(const char *text);
 
-	// Number of lines in the log, the oldest one is at ring index getLineIndex(0)
+	// Number of line slots in use: 0 when the log is empty, the tail index when the ring has not
+	// wrapped yet and 100 after that
 	int getLineCount() const;
-	int getLineIndex(int position) const;
-	const char *getLine(int ringIndex) const;
+	// The line at a slot, or null when the slot is not in use
+	const char *getLine(int slot) const;
+	// Walks the ring from the oldest line. Starts with the cursor at -1 and gives the cursor of
+	// each line (the last slot, where the next line goes, is never given). Null at the end.
+	const char *getNextLine(int *cursor) const;
+	// Copies at most length characters of the text from the start of a slot, like strncpy: the
+	// text goes on in the next slots when the line has no end. The rest of the buffer is zero.
+	bool copyLine(int slot, char *buffer, int bufferSize, int length) const;
 
 	// Block of the save game: the lines, then the head and the tail index
 	int save(Common::WriteStream *stream) const;
