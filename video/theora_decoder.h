@@ -95,13 +95,70 @@ public:
 		_languageHint = hint;
 	}
 
+	/**
+	 * Converts the planes of a decoded frame into the pixels of the output
+	 * surface, in place of the YUV to RGB conversion of the decoder.
+	 */
+	class FrameConverter {
+	public:
+		virtual ~FrameConverter() {}
+
+		/**
+		 * @param dest         the output surface: it has the size of the Y plane
+		 *                     and the pixel format of the video track
+		 * @param pixelFormat  the chroma subsampling of the stream
+		 * @param y            the luma plane
+		 * @param u            the Cb plane
+		 * @param v            the Cr plane
+		 */
+		virtual void convert(Graphics::Surface *dest, th_pixel_fmt pixelFormat,
+		                     const th_img_plane &y, const th_img_plane &u, const th_img_plane &v) = 0;
+	};
+
+	/**
+	 * Turn the post-processing of libtheora on or off. It is on by default
+	 * (the maximum level); off leaves the decoded frames as they are coded.
+	 * Must be called before loadStream().
+	 */
+	void setPostProcessing(bool enable) { _postProcessing = enable; }
+
+	/**
+	 * Use @p converter in place of the standard YUV to RGB conversion.
+	 * The converter is not owned and must outlive the decoder. Null, the
+	 * default, selects the standard conversion.
+	 * Must be called before loadStream().
+	 */
+	void setFrameConverter(FrameConverter *converter) { _frameConverter = converter; }
+
+	/**
+	 * Converts a decoded Vorbis sample into a 16 bit sample, in place of the
+	 * standard conversion. It is called for every sample, in the order of the
+	 * output (channels interleaved), when the sample is decoded.
+	 */
+	class SampleConverter {
+	public:
+		virtual ~SampleConverter() {}
+
+		/** @param sample  a decoded sample, nominally in the range -1.0 to 1.0 */
+		virtual int16 convert(float sample) = 0;
+	};
+
+	/**
+	 * Use @p converter in place of the standard sample conversion.
+	 * The converter is not owned and must outlive the decoder. Null, the
+	 * default, selects the standard conversion. It is not used with Tremor,
+	 * whose samples are integers.
+	 * Must be called before loadStream().
+	 */
+	void setSampleConverter(SampleConverter *converter) { _sampleConverter = converter; }
+
 protected:
 	void readNextPacket() override;
 
 private:
 	class TheoraVideoTrack : public VideoTrack {
 	public:
-		TheoraVideoTrack(th_info &theoraInfo, th_setup_info *theoraSetup);
+		TheoraVideoTrack(th_info &theoraInfo, th_setup_info *theoraSetup, bool postProcessing, FrameConverter *frameConverter);
 		~TheoraVideoTrack();
 
 		bool endOfTrack() const override { return _endOfVideo; }
@@ -141,13 +198,14 @@ private:
 
 		th_dec_ctx *_theoraDecode;
 		th_pixel_fmt _theoraPixelFormat;
+		FrameConverter *_frameConverter;
 
 		void translateYUVtoRGBA(th_ycbcr_buffer &YUVBuffer);
 	};
 
 	class VorbisAudioTrack : public AudioTrack {
 	public:
-		VorbisAudioTrack(Audio::Mixer::SoundType soundType, vorbis_info &vorbisInfo);
+		VorbisAudioTrack(Audio::Mixer::SoundType soundType, vorbis_info &vorbisInfo, SampleConverter *sampleConverter);
 		~VorbisAudioTrack();
 
 		bool decodeSamples();
@@ -170,6 +228,7 @@ private:
 		vorbis_dsp_state _vorbisDSP;
 
 		bool _endOfAudio;
+		SampleConverter *_sampleConverter;
 	};
 
 	void queuePage(ogg_page *page);
@@ -182,6 +241,9 @@ private:
 	const char *const *_languageCodes;
 	int _numLanguageCodes;
 	int _languageHint;
+	bool _postProcessing;
+	FrameConverter *_frameConverter;
+	SampleConverter *_sampleConverter;
 
 	ogg_sync_state _oggSync;
 	ogg_page _oggPage;

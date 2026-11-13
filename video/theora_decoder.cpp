@@ -56,6 +56,9 @@ TheoraDecoder::TheoraDecoder() {
 	_languageCodes = 0;
 	_numLanguageCodes = 0;
 	_languageHint = 0;
+	_postProcessing = true;
+	_frameConverter = nullptr;
+	_sampleConverter = nullptr;
 }
 
 TheoraDecoder::~TheoraDecoder() {
@@ -176,7 +179,7 @@ bool TheoraDecoder::loadStream(Common::SeekableReadStream *stream) {
 
 	// And now we have it all. Initialize decoders next
 	if (_hasVideo) {
-		_videoTrack = new TheoraVideoTrack(theoraInfo, theoraSetup);
+		_videoTrack = new TheoraVideoTrack(theoraInfo, theoraSetup, _postProcessing, _frameConverter);
 		addTrack(_videoTrack);
 	}
 
@@ -185,7 +188,7 @@ bool TheoraDecoder::loadStream(Common::SeekableReadStream *stream) {
 	th_setup_free(theoraSetup);
 
 	if (_hasAudio) {
-		_audioTrack = new VorbisAudioTrack(getSoundType(), _vorbisInfo);
+		_audioTrack = new VorbisAudioTrack(getSoundType(), _vorbisInfo, _sampleConverter);
 
 		// Get enough audio data to start us off
 		while (!_audioTrack->hasAudio()) {
@@ -379,16 +382,19 @@ Common::Rational TheoraDecoder::getFrameRate() const {
 	return Common::Rational();
 }
 
-TheoraDecoder::TheoraVideoTrack::TheoraVideoTrack(th_info &theoraInfo, th_setup_info *theoraSetup) {
+TheoraDecoder::TheoraVideoTrack::TheoraVideoTrack(th_info &theoraInfo, th_setup_info *theoraSetup, bool postProcessing, FrameConverter *frameConverter) {
 	_theoraDecode = th_decode_alloc(&theoraInfo, theoraSetup);
+	_frameConverter = frameConverter;
 
 	if (theoraInfo.pixel_fmt != TH_PF_420 && theoraInfo.pixel_fmt != TH_PF_422 && theoraInfo.pixel_fmt != TH_PF_444) {
 		error("Found unknown Theora format (must be YUV420, YUV422 or YUV444)");
 	}
 
-	int postProcessingMax;
-	th_decode_ctl(_theoraDecode, TH_DECCTL_GET_PPLEVEL_MAX, &postProcessingMax, sizeof(postProcessingMax));
-	th_decode_ctl(_theoraDecode, TH_DECCTL_SET_PPLEVEL, &postProcessingMax, sizeof(postProcessingMax));
+	if (postProcessing) {
+		int postProcessingMax;
+		th_decode_ctl(_theoraDecode, TH_DECCTL_GET_PPLEVEL_MAX, &postProcessingMax, sizeof(postProcessingMax));
+		th_decode_ctl(_theoraDecode, TH_DECCTL_SET_PPLEVEL, &postProcessingMax, sizeof(postProcessingMax));
+	}
 
 	_x = theoraInfo.pic_x;
 	_y = theoraInfo.pic_y;
@@ -488,6 +494,11 @@ void TheoraDecoder::TheoraVideoTrack::translateYUVtoRGBA(th_ycbcr_buffer &YUVBuf
 		                      _surface->getBasePtr(_x, _y), _surface->format);
 	}
 
+	if (_frameConverter) {
+		_frameConverter->convert(_surface, _theoraPixelFormat, YUVBuffer[kBufferY], YUVBuffer[kBufferU], YUVBuffer[kBufferV]);
+		return;
+	}
+
 	switch (_theoraPixelFormat) {
 	case TH_PF_420:
 		YUVToRGBMan.convert420(_surface, Graphics::YUVToRGBManager::kScaleITU, YUVBuffer[kBufferY].data, YUVBuffer[kBufferU].data, YUVBuffer[kBufferV].data, YUVBuffer[kBufferY].width, YUVBuffer[kBufferY].height, YUVBuffer[kBufferY].stride, YUVBuffer[kBufferU].stride);
@@ -505,8 +516,10 @@ void TheoraDecoder::TheoraVideoTrack::translateYUVtoRGBA(th_ycbcr_buffer &YUVBuf
 
 static vorbis_info *info = 0;
 
-TheoraDecoder::VorbisAudioTrack::VorbisAudioTrack(Audio::Mixer::SoundType soundType, vorbis_info &vorbisInfo) :
+TheoraDecoder::VorbisAudioTrack::VorbisAudioTrack(Audio::Mixer::SoundType soundType, vorbis_info &vorbisInfo, SampleConverter *sampleConverter) :
 		AudioTrack(soundType) {
+	_sampleConverter = sampleConverter;
+
 	vorbis_synthesis_init(&_vorbisDSP, &vorbisInfo);
 	vorbis_block_init(&_vorbisDSP, &_vorbisBlock);
 	info = &vorbisInfo;
@@ -563,7 +576,12 @@ bool TheoraDecoder::VorbisAudioTrack::decodeSamples() {
 #ifdef USE_TREMOR
 				int val = CLIP((int)pcm[j][i] >> 9, -32768, 32767);
 #else
-				int val = CLIP((int)rint(pcm[j][i] * 32767.f), -32768, 32767);
+				int val;
+
+				if (_sampleConverter)
+					val = _sampleConverter->convert(pcm[j][i]);
+				else
+					val = CLIP((int)rint(pcm[j][i] * 32767.f), -32768, 32767);
 #endif
 				_audioBuffer[count++] = val;
 			}
