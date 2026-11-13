@@ -971,6 +971,85 @@ int Res::sysLoad(Common::ReadStream *stream) {
 	return 0;
 }
 
+// The remastered keeps the serial in a slot of 8 bytes
+int Res::sysSaveRemastered(Common::WriteStream *stream) {
+	int numNodes = 0;
+
+	for (ResNode *node = _nodeHead; node; node = node->next) {
+		if ((node->refs && !strstr(node->name, "TEMP")) || (node->flags & 8))
+			numNodes++;
+	}
+
+	stream->writeSint32LE(numNodes);
+
+	for (ResNode *node = _nodeHead; node; node = node->next) {
+		if ((node->refs && !strstr(node->name, "TEMP")) || (node->flags & 8)) {
+			int length = strlen(node->name);
+
+			stream->writeSint32LE(length);
+			stream->write(node->name, length);
+			stream->writeSint32LE(node->tag);
+			stream->writeSint32LE(node->serial);
+			stream->writeSint32LE(0);
+
+			if (stream->err())
+				return 1;
+		}
+	}
+
+	return stream->err() ? 1 : 0;
+}
+
+int Res::sysLoadRemastered(Common::ReadStream *stream) {
+	char fileName[256];
+
+	int numNodes = stream->readSint32LE();
+
+	if (stream->err() || stream->eos())
+		return 1;
+
+	for (int i = 0; i < numNodes; i++) {
+		int length = stream->readSint32LE();
+
+		if (stream->err() || stream->eos() || length > 255)
+			return 1;
+
+		if (length < 0) {
+			warning("Res::sysLoadRemastered(): negative name length");
+			return 1;
+		}
+
+		if (stream->read(fileName, length) != (uint32)length)
+			return 1;
+
+		fileName[length] = 0;
+
+		int tag = stream->readSint32LE();
+
+		if (stream->err() || stream->eos())
+			return 1;
+
+		int result;
+		ResNode *node = checkForNeedLoadRes(tag, fileName, &result);
+
+		if (!result)
+			return 1;
+
+		if (!node) {
+			warning("Res::sysLoadRemastered(): %s was not loaded", fileName);
+			return 1;
+		}
+
+		node->serial = stream->readSint32LE();
+		stream->readSint32LE();
+
+		if (stream->err() || stream->eos())
+			return 1;
+	}
+
+	return 0;
+}
+
 void Res::freeAll() {
 	ResNode *result = _nodeHead;
 	ResNode *node = _nodeHead;

@@ -25,6 +25,7 @@
 #include "common/str-array.h"
 
 #include "engines/grim/lua_v1_opcodes/lua_v1.h"
+#include "engines/grim/remastered/savestore.h"
 
 namespace Grim {
 
@@ -54,7 +55,7 @@ protected:
 	// Debugging
 	DECLARE_LUA_OPCODE(PrintStack);
 
-	// Save module
+	// Save module, through the requests of the engine
 	DECLARE_LUA_OPCODE(New);
 	DECLARE_LUA_OPCODE(Erase);
 	DECLARE_LUA_OPCODE(GetSaveStatus);
@@ -97,6 +98,8 @@ private:
 	void reportStub(const char *opcode, const char *module);
 
 	Common::StringArray _reportedStubs;
+	Common::Array<SaveStore::SlotInfo> _foundSaves;
+	int _findSaveGamesStatus = 0;
 };
 
 } // end of namespace Grim

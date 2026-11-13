@@ -327,22 +327,174 @@ bool OverlayManager::loadPng(CachedImage *image) {
 // The name is one character per puzzle: '0' when it is not solved, which darkens its tiles of the mural
 void OverlayManager::buildMural(CachedImage *image) {
 	byte *pixels = new byte[kMuralWidth * kMuralHeight * 4]();
-	int numPuzzles = (int)image->name.size() - 5;
 
+	renderMural(image->name.c_str(), (int)image->name.size() - 5, pixels);
+
+	image->pixels = pixels;
+	image->width = kMuralWidth;
+	image->height = kMuralHeight;
+}
+
+void OverlayManager::renderMural(const char *puzzles, int numPuzzles, byte *pixels) {
 	if (numPuzzles > kMuralPuzzles)
 		numPuzzles = kMuralPuzzles;
 
 	for (int i = 0; i < numPuzzles; i++) {
-		if (image->name[i] != '0')
+		if (puzzles[i] != '0')
 			continue;
 
 		for (int j = 0; j < 10 && muralPixels[i][j] >= 0; j++)
 			pixels[muralPixels[i][j] * 4 + 3] = kMuralDarkAlpha;
 	}
+}
 
-	image->pixels = pixels;
-	image->width = kMuralWidth;
-	image->height = kMuralHeight;
+int OverlayManager::save(Common::WriteStream *stream) const {
+	byte firewall[24];
+
+	memset(firewall, 0xFF, sizeof(firewall));
+
+	stream->writeSint32LE((int)_overlays.size());
+	stream->writeSint32LE((int)_images.size());
+	stream->writeSint32LE(_serial);
+	stream->write(firewall, 24);
+
+	for (uint i = 0; i < _images.size(); i++) {
+		const CachedImage *image = _images[i];
+		char name[kSavedNameSize];
+
+		memset(name, 0, sizeof(name));
+		Common::strlcpy(name, image->name.c_str(), sizeof(name));
+		stream->write(name, sizeof(name));
+		stream->writeSint32LE((int)image->lastUse);
+		stream->writeSint32LE(image->refCount);
+		stream->writeSint32LE(image->loadAllowed ? 1 : 0);
+		stream->writeSint32LE(image->cacheMode);
+		stream->write(firewall, 24);
+	}
+
+	for (uint i = 0; i < _overlays.size(); i++) {
+		const Overlay &overlay = _overlays[i];
+		int imageIndex = -1;
+
+		for (uint j = 0; j < _images.size(); j++) {
+			if (_images[j] == overlay.image) {
+				imageIndex = (int)j;
+				break;
+			}
+		}
+
+		stream->writeSint32LE(imageIndex);
+		stream->writeSint32LE(overlay.handle);
+		stream->writeSint32LE(overlay.x);
+		stream->writeSint32LE(overlay.y);
+		stream->writeSint32LE(overlay.coords);
+		stream->writeSint32LE(overlay.layer);
+		stream->writeSint32LE(overlay.widthOverride);
+		stream->writeSint32LE(overlay.heightOverride);
+		stream->writeSint32LE(overlay.hidden);
+		stream->writeFloatLE(overlay.alpha);
+		stream->writeSint32LE(overlay.fade);
+		stream->writeSint32LE(overlay.flags);
+		stream->writeFloatLE(overlay.desaturate);
+		stream->writeSint32LE(overlay.mirror);
+		stream->write(firewall, 12);
+	}
+
+	if (stream->err()) {
+		warning("OverlayManager::save(): failed to write the overlays");
+		return 1;
+	}
+
+	return 0;
+}
+
+int OverlayManager::restore(Common::ReadStream *stream) {
+	byte firewall[24];
+
+	int numOverlays = stream->readSint32LE();
+	int numImages = stream->readSint32LE();
+	int serial = stream->readSint32LE();
+
+	stream->read(firewall, 24);
+
+	if (stream->err() || stream->eos() || numOverlays < 0 || numOverlays > kMaxOverlays || numImages < 0 ||
+			numImages > kMaxImages || serial < 0 || serial >= kHandleCount) {
+		warning("OverlayManager::restore(): invalid overlay counts %d and %d", numOverlays, numImages);
+		return 1;
+	}
+
+	// The images and the overlays of the game are replaced, the pixels are loaded again when drawn
+	for (uint i = 0; i < _images.size(); i++) {
+		freePixels(_images[i]);
+		delete _images[i];
+	}
+
+	_images.clear();
+	_overlays.clear();
+	_spinnerHandle = kNoHandle;
+	_serial = serial;
+	_useCounter = 0;
+
+	for (int i = 0; i < numImages; i++) {
+		char name[kSavedNameSize];
+		CachedImage *image = new CachedImage();
+
+		stream->read(name, sizeof(name));
+		name[sizeof(name) - 1] = '\0';
+
+		image->name = name;
+		image->lastUse = (uint32)stream->readSint32LE();
+		image->refCount = stream->readSint32LE();
+		image->loadAllowed = stream->readSint32LE() != 0;
+		image->cacheMode = stream->readSint32LE();
+		image->pixels = nullptr;
+		image->width = 0;
+		image->height = 0;
+
+		stream->read(firewall, 24);
+		_images.push_back(image);
+
+		if (image->lastUse > _useCounter)
+			_useCounter = image->lastUse;
+	}
+
+	for (int i = 0; i < numOverlays; i++) {
+		Overlay overlay;
+		int imageIndex = stream->readSint32LE();
+
+		overlay.handle = stream->readSint32LE();
+		overlay.x = stream->readSint32LE();
+		overlay.y = stream->readSint32LE();
+		overlay.coords = stream->readSint32LE();
+		overlay.layer = stream->readSint32LE();
+		overlay.widthOverride = stream->readSint32LE();
+		overlay.heightOverride = stream->readSint32LE();
+		overlay.hidden = stream->readSint32LE();
+		overlay.alpha = stream->readFloatLE();
+		overlay.fade = stream->readSint32LE();
+		overlay.flags = stream->readSint32LE();
+		overlay.desaturate = stream->readFloatLE();
+		overlay.mirror = stream->readSint32LE();
+		stream->read(firewall, 12);
+
+		if (stream->err() || stream->eos()) {
+			warning("OverlayManager::restore(): failed to read the overlay %d of %d", i + 1, numOverlays);
+			return 1;
+		}
+
+		if (imageIndex < 0 || imageIndex >= (int)_images.size()) {
+			warning("OverlayManager::restore(): the overlay %d has no image, dropped", overlay.handle);
+			continue;
+		}
+
+		if (overlay.flags == -1)
+			overlay.flags = 0;
+
+		overlay.image = _images[imageIndex];
+		_overlays.push_back(overlay);
+	}
+
+	return 0;
 }
 
 int OverlayManager::create(const Common::String &name, int x, int y, const OverlayProps &props) {

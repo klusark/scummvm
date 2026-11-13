@@ -201,6 +201,13 @@ public:
 	int zwrite(const void *buffer, int size);
 	void restore();
 	int zread(void *buffer, int size);
+
+	// Savegames of the remastered: the requests are done at the start of the next frame
+	void requestRemasteredSave(int slot, const char *mural, int setIndex, const char *title);
+	void requestRemasteredLoad(int slot, bool loadLast);
+	void requestRemasteredErase(int slot);
+	void requestRemasteredNewGame();
+	int getRemasteredSaveStatus() const { return _remasteredSaveStatus; }
 	StdVBuffer *getSaveGameImage(const char *fileName);
 	void setPrevMode(int mode);
 	int getPrevMode() const;
@@ -290,6 +297,12 @@ protected:
 	void restorePrologue();
 	void restoreEpilogue();
 	void restoreLegacy();
+	void saveRemastered();
+	void restoreRemastered();
+	void eraseRemastered();
+	void newGameRemastered();
+	static int saveWriteCallback(void *buffer, int size);
+	static int saveReadCallback(void *buffer, int size);
 
 	// grim module
 	bool checkGameData(const char *gameName);
@@ -434,6 +447,18 @@ protected:
 	int _libLoadRequest = 0;
 	Common::String _libSaveGameFileName;
 	int _libJustLoaded = 0;
+
+	// The save requests of the remastered scripts
+	int _remasteredSaveStatus = 0;
+	int _remasteredSaveSlot = 0;
+	int _remasteredSaveSetIndex = 0;
+	Common::String _remasteredSaveMural;
+	Common::String _remasteredSaveTitle;
+	int _remasteredLoadSlot = 0;
+	bool _remasteredLoadLast = false;
+	int _remasteredEraseRequest = 0;
+	int _remasteredEraseSlot = 0;
+	int _remasteredNewGameRequest = 0;
 	int _libImuseState = -1;
 	int (*_shutdownCallback)(int) = nullptr;
 	int _libRenderOptions[8] = { 4, 3, 1, 1, 0, 0, 2, 0 };

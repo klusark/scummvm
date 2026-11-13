@@ -36,12 +36,6 @@ enum {
 	kCanvasHeight = 1080
 };
 
-// Values of the save status that the scripts wait for
-enum {
-	kSaveStatusError = 1,
-	kFindSaveGamesDone = 1
-};
-
 // The main table has the order of the remastered. A saved Lua state stores every C function
 // as (number of lists registered after its list << 16) | index in the list, and the id model
 // in lua/lapi.cpp lists the same names in the same order.
@@ -445,12 +439,29 @@ void Lua_Remastered::reportStub(const char *opcode, const char *module) {
 	warning("Lua_Remastered::%s(): the %s is not implemented yet, the call is ignored or answered with a neutral value", opcode, module);
 }
 
+// Load(slot, loadLast): the last one is true when the game continues from the last save
 void Lua_Remastered::Load() {
-	reportStub("Load", "save module");
+	lua_Object slotObj = lua_getparam(1);
+	lua_Object lastObj = lua_getparam(2);
+
+	if (!lua_isnumber(slotObj))
+		return;
+
+	g_grim->requestRemasteredLoad(luaFtol(lua_getnumber(slotObj)), !lua_isnil(lastObj));
 }
 
+// Save(slot, puzzles, set, title): the puzzles are one character each, '1' when solved
 void Lua_Remastered::Save() {
-	reportStub("Save", "save module");
+	lua_Object slotObj = lua_getparam(1);
+	lua_Object muralObj = lua_getparam(2);
+	lua_Object setObj = lua_getparam(3);
+	lua_Object titleObj = lua_getparam(4);
+
+	if (!lua_isnumber(slotObj) || !lua_isstring(muralObj) || !lua_isnumber(setObj) || !lua_isstring(titleObj))
+		return;
+
+	g_grim->requestRemasteredSave(luaFtol(lua_getnumber(slotObj)), lua_getstring(muralObj), luaFtol(lua_getnumber(setObj)),
+			lua_getstring(titleObj));
 }
 
 void Lua_Remastered::PrintStack() {
@@ -458,31 +469,74 @@ void Lua_Remastered::PrintStack() {
 }
 
 void Lua_Remastered::New() {
-	reportStub("New", "save module");
+	g_grim->requestRemasteredNewGame();
 }
 
 void Lua_Remastered::Erase() {
-	reportStub("Erase", "save module");
+	lua_Object slotObj = lua_getparam(1);
+
+	if (!lua_isnumber(slotObj))
+		return;
+
+	g_grim->requestRemasteredErase(luaFtol(lua_getnumber(slotObj)));
 }
 
-// Nothing was saved, so the status is an error
+// -1 while the request is waiting, then 0 or the number of the error
 void Lua_Remastered::GetSaveStatus() {
-	reportStub("GetSaveStatus", "save module");
-	lua_pushnumber((float)kSaveStatusError);
+	lua_pushnumber((float)g_grim->getRemasteredSaveStatus());
 }
 
+// The list is a table with an entry from 0 for each save. The date is left out because the
+// folders have no way to tell it.
 void Lua_Remastered::FindSaveGames() {
-	reportStub("FindSaveGames", "save module");
-	lua_pushnil();
+	if (_foundSaves.empty()) {
+		lua_pushnil();
+		return;
+	}
+
+	lua_Object list = lua_createtable();
+
+	for (uint i = 0; i < _foundSaves.size(); i++) {
+		const SaveStore::SlotInfo &info = _foundSaves[i];
+		lua_Object entry = lua_createtable();
+
+		lua_pushobject(entry);
+		lua_pushstring("slot");
+		lua_pushnumber((float)info.slot);
+		lua_settable();
+
+		lua_pushobject(entry);
+		lua_pushstring("title");
+		lua_pushstring(info.title.c_str());
+		lua_settable();
+
+		lua_pushobject(entry);
+		lua_pushstring("mural_info");
+		lua_pushstring(info.mural.c_str());
+		lua_settable();
+
+		lua_pushobject(entry);
+		lua_pushstring("setIndex");
+		lua_pushnumber((float)info.setIndex);
+		lua_settable();
+
+		lua_pushobject(list);
+		lua_pushnumber((float)i);
+		lua_pushobject(entry);
+		lua_settable();
+	}
+
+	lua_pushobject(list);
 }
 
+// The folders are read at once, so the list is ready when the scripts ask
 void Lua_Remastered::InitiateFindSaveGames() {
-	reportStub("InitiateFindSaveGames", "save module");
+	SaveStore::listSlots(_foundSaves);
+	_findSaveGamesStatus = 1;
 }
 
 void Lua_Remastered::GetFindSaveGameStatus() {
-	reportStub("GetFindSaveGameStatus", "save module");
-	lua_pushnumber((float)kFindSaveGamesDone);
+	lua_pushnumber((float)_findSaveGamesStatus);
 }
 
 void Lua_Remastered::SetMouseSpeedScale() {

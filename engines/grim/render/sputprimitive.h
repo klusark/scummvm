@@ -54,6 +54,8 @@ public:
 	int shutdown();
 	int save(Common::WriteStream *stream);
 	int restore(Common::ReadStream *stream);
+	int saveRemastered(Common::WriteStream *stream);
+	int restoreRemastered(Common::ReadStream *stream);
 
 	PrimitiveQueue *getCurrent() { return &_current; }
 

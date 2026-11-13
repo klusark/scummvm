@@ -6,6 +6,7 @@ MODULE_OBJS := \
 	actor/sputactor_costume.o \
 	actor/sputactor_move.o \
 	actor/sputactor_save.o \
+	actor/sputactor_save_remastered.o \
 	actor/sputactor_shadow.o \
 	actor/sputactor_talk.o \
 	actor/sputactor_walk.o \
@@ -214,6 +215,7 @@ MODULE_OBJS := \
 	imuse/imuse_internalmixer.o \
 	imuse/imuse_lipsync.o \
 	imuse/imuse_mcmp_mgr.o \
+	imuse/imuse_save_remastered.o \
 	imuse/imuse_scripts.o \
 	imuse/imuse_streamer.o \
 	imuse/imuse_tables.o \
@@ -244,7 +246,9 @@ MODULE_OBJS := \
 	lua/lmem.o \
 	lua/lobject.o \
 	lua/lrestore.o \
+	lua/lrestore_remastered.o \
 	lua/lsave.o \
+	lua/lsave_remastered.o \
 	lua/lstate.o \
 	lua/lstring.o \
 	lua/lstrlib.o \
@@ -277,6 +281,7 @@ MODULE_OBJS := \
 	movie/smush_timer.o \
 	movie/smush_wave.o \
 	movie/sputsmush.o \
+	movie/sputsmush_save_remastered.o \
 	movie/sputsmush_demo.o \
 	remastered/commentary.o \
 	remastered/dialoglog.o \
@@ -286,9 +291,11 @@ MODULE_OBJS := \
 	remastered/overlay.o \
 	remastered/pathfinder.o \
 	remastered/registry_unlocks.o \
+	remastered/savestore.o \
 	remastered/sputmouse.o \
 	render/primitivequeue.o \
 	render/sputprimitive.o \
+	render/sputprimitive_save_remastered.o \
 	render/sputrender.o \
 	render/sputrender_buffers.o \
 	render/sputrender_color.o \
@@ -345,6 +352,7 @@ MODULE_OBJS := \
 	text/normaltext.o \
 	text/polyglot.o \
 	text/sputtext.o \
+	text/sputtext_save_remastered.o \
 	text/text.o \
 	update/packfile.o \
 	update/mscab.o \
@@ -352,6 +360,7 @@ MODULE_OBJS := \
 	update/update.o \
 	debug.o \
 	grim.o \
+	grim_save_remastered.o \
 	inputdialog.o \
 	lab.o \
 	lua.o \
@@ -362,6 +371,7 @@ MODULE_OBJS := \
 	sputobjectstate.o \
 	sputresource.o \
 	sputroom.o \
+	sputroom_save_remastered.o \
 	sputroom_sections.o \
 	sputtime.o \
 	stdcontrol.o \

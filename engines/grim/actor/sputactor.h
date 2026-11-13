@@ -171,6 +171,8 @@ public:
 	int initialize(SysStruct *hs);
 	int save(Common::WriteStream *stream);
 	int restore(Common::ReadStream *stream);
+	int saveRemastered(Common::WriteStream *stream);
+	int restoreRemastered(Common::ReadStream *stream);
 	int getNumActorsTalking();
 	int setCostume(SputActor *actor, const char *costumeName, int instance);
 	void setActorHead(SputActor *actor, uint joint1, uint joint2, uint joint3, float maxAngle, float yawLimit, float pitchLimit);
@@ -209,6 +211,7 @@ public:
 	int terminate();
 	int startup();
 	void shutdown();
+	void reset();
 	void updateCostumes3(SputActor *actor);
 	void updatePuck(SputActor *actor);
 	int alignToPuck(SputActor *actor, Puck *puck);

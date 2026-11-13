@@ -404,7 +404,6 @@ void WuRegistry::shutdown() {
 	freeIndex();
 	_started = 0;
 
-	_unlocks.saveFile();
 	ConfMan.flushToDisk();
 }
 

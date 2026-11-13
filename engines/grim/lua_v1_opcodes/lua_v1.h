@@ -64,6 +64,8 @@ public:
 	virtual int shutdown();
 	virtual int findSystemFiles();
 	virtual int boot(int saveGameResume, const char *bootParam);
+	// The remastered: the part of the boot that starts the game in the given set
+	int bootSecondStage(const char *defaultSet);
 	virtual void update();
 
 	virtual void registerMainOpcodes();

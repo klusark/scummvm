@@ -159,6 +159,8 @@ public:
 	const char *getCurrentRoomName();
 	int save(Common::WriteStream *stream);
 	int restore(Common::ReadStream *stream);
+	int saveRemastered(Common::WriteStream *stream);
+	int restoreRemastered(Common::ReadStream *stream);
 	int initialize(SysStruct *hs);
 	StdVBuffer *loadZBuffer(const char *fileName);
 	void freeZBuffer(StdVBuffer *&zBuffer);

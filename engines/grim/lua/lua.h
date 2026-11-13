@@ -67,6 +67,10 @@ extern lua_SaveRestoreUserHFunction lua_restorehook;
 int lua_Save(SaveRestoreAccess *saveFunc);
 int lua_Restore(SaveRestoreAccess *restoreFunc);
 
+// The remastered saves every serial and object value in a slot of 8 bytes
+int lua_SaveRemastered(SaveRestoreAccess *saveFunc);
+int lua_RestoreRemastered(SaveRestoreAccess *restoreFunc);
+
 uint32 lua_FuncPtrToID(lua_CFunction func);
 lua_CFunction lua_IDToFuncPtr(uint32 id);
 bool lua_FuncPtrHasID(lua_CFunction func);

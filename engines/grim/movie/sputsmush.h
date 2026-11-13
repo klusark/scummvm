@@ -59,6 +59,8 @@ public:
 	virtual int initialize(SysStruct *hs);
 	virtual int save(Common::WriteStream *stream);
 	virtual int restore(Common::ReadStream *stream);
+	int saveRemastered(Common::WriteStream *stream);
+	int restoreRemastered(Common::ReadStream *stream);
 	virtual int startup();
 	virtual int shutdown();
 	virtual int terminate();

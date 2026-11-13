@@ -22,6 +22,7 @@
 #include "engines/grim/emi/emiengine.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/legacy_savegames/legacy_savegames.h"
+#include "engines/grim/remastered/savestore.h"
 
 #include "common/endian.h"
 #include "common/language.h"
@@ -175,6 +176,8 @@ public:
 
 	SaveStateDescriptor querySaveMetaInfos(const char *target, int slot) const override;
 
+	bool removeSaveState(const char *target, int slot) const override;
+
 	Common::String getSavegameFile(int saveGameIdx, const char *target = nullptr) const override;
 
 };
@@ -242,6 +245,14 @@ Common::String GrimMetaEngine::getSavegameFile(int saveGameIdx, const char *targ
 	return Common::String::format("grim%02d.gsv", saveGameIdx);
 }
 
+// The slots of the remastered are folders: their files are emptied, which takes them out of the list
+bool GrimMetaEngine::removeSaveState(const char *target, int slot) const {
+	if (ConfMan.get("extra", target).contains("Remastered"))
+		return SaveStore::eraseSlot(slot) == SaveStore::kStatusOk;
+
+	return AdvancedMetaEngine::removeSaveState(target, slot);
+}
+
 Common::KeymapArray GrimMetaEngine::initKeymaps(const char *target) const {
 	Common::String gameId = ConfMan.get("gameid", target);
 
@@ -273,8 +284,16 @@ SaveStateList GrimMetaEngine::listSaves(const char *target) const {
 	if (isDemo)
 		return saveList; // Demos do not support saving
 
-	if (isRemastered)
-		return saveList; // The save folders of the remastered are not listed yet
+	if (isRemastered) {
+		Common::Array<SaveStore::SlotInfo> slots;
+
+		SaveStore::listSlots(slots);
+
+		for (uint i = 0; i < slots.size(); i++)
+			saveList.push_back(SaveStateDescriptor(this, slots[i].slot, slots[i].title));
+
+		return saveList;
+	}
 
 	filenames = saveFileMan->listSavefiles(pattern);
 
@@ -307,8 +326,25 @@ SaveStateDescriptor GrimMetaEngine::querySaveMetaInfos(const char *target, int s
 	Common::SaveFileManager *saveFileMan = g_system->getSavefileManager();
 	Common::String fileName = getSavegameFile(slot, target);
 
-	if (extra.contains("Remastered"))
+	if (extra.contains("Remastered")) {
+		Common::Array<SaveStore::SlotInfo> slots;
+
+		SaveStore::listSlots(slots);
+
+		for (uint i = 0; i < slots.size(); i++) {
+			if (slots[i].slot != slot)
+				continue;
+
+			SaveStateDescriptor remasteredDesc(this, slot, slots[i].title);
+
+			// The thumbnail is the mural of the solved puzzles
+			remasteredDesc.setThumbnail(SaveStore::makeMuralThumbnail(slots[i].mural.c_str()));
+
+			return remasteredDesc;
+		}
+
 		return SaveStateDescriptor();
+	}
 
 	Common::SeekableReadStream *file = saveFileMan->openForLoading(fileName);
 	Common::Array<Common::String> strings;

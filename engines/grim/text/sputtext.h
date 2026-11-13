@@ -44,6 +44,7 @@ class NormalText;
 class Polyglot;
 class RenderDroid;
 class Res;
+class SputActorModule;
 class SputRender;
 class SputRoom;
 class SputTime;
@@ -81,6 +82,7 @@ public:
 
 	void setSputRender(SputRender *sputRender) { _sputRender = sputRender; }
 	void setSputRoom(SputRoom *sputRoom) { _sputRoom = sputRoom; }
+	void setSputActor(SputActorModule *sputActor) { _sputActor = sputActor; }
 	void setGrimEngine(GrimEngine *grim) { _grim = grim; }
 	void setLua(Lua_V1 *lua) { _lua = lua; }
 
@@ -114,6 +116,8 @@ public:
 	TextParams *getDefaultTextParams() { return &_defaultTextParams; }
 	int save(Common::WriteStream *stream);
 	int restore(Common::ReadStream *stream);
+	int saveRemastered(Common::WriteStream *stream);
+	int restoreRemastered(Common::ReadStream *stream);
 
 private:
 	friend class Lua_V1;
@@ -128,6 +132,7 @@ private:
 	Polyglot *_polyglot;
 	SputRender *_sputRender;
 	SputRoom *_sputRoom;
+	SputActorModule *_sputActor = nullptr;
 	GrimEngine *_grim;
 	Lua_V1 *_lua = nullptr;
 

@@ -26,6 +26,11 @@
 #include "common/scummsys.h"
 #include "common/str.h"
 
+namespace Common {
+class ReadStream;
+class WriteStream;
+}
+
 namespace Grim {
 
 class HdCanvas;
@@ -93,13 +98,24 @@ public:
 	// Queues the overlays of a layer in the canvas and steps their fades
 	void render(int layer, int boxing);
 
+	// The block of the overlays in the savegames, the images are loaded again when they are needed
+	int save(Common::WriteStream *stream) const;
+	int restore(Common::ReadStream *stream);
+
+	enum {
+		kMuralWidth = 32,
+		kMuralHeight = 10,
+		kMuralPuzzles = 60
+	};
+
+	// Fills the pixels (RGBA, kMuralWidth x kMuralHeight) of the mural: a '0' puzzle darkens its tiles
+	static void renderMural(const char *puzzles, int numPuzzles, byte *pixels);
+
 private:
 	enum {
 		kHandleCount = 1024,
 		kLargeImagePixels = 40001,
-		kMuralWidth = 32,
-		kMuralHeight = 10,
-		kMuralPuzzles = 60
+		kSavedNameSize = 128
 	};
 
 	struct CachedImage {

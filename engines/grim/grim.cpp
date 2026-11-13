@@ -384,6 +384,13 @@ int GrimEngine::getJoystickButtonIndex(int button, bool remastered) {
 
 Common::Error GrimEngine::loadGameState(int slot) {
 	assert(slot >= 0);
+
+	if (isRemastered()) {
+		requestRemasteredLoad(slot, false);
+
+		return Common::kNoError;
+	}
+
 	loadLib(Common::String::format("grim%02d.gsv", slot).c_str());
 	return Common::kNoError;
 }
@@ -648,6 +655,7 @@ void GrimEngine::createModules() {
 	_sputRoom->setGrimEngine(this);
 	_sputText->setSputRender(_sputRender);
 	_sputText->setSputRoom(_sputRoom);
+	_sputText->setSputActor(_sputActor);
 	_sputText->setGrimEngine(this);
 	_sputText->setLua(_luaV1);
 	_sputRender->setSputActor(_sputActor);
@@ -1398,6 +1406,12 @@ int GrimEngine::loop(int render, int manualTicks) {
 	if (_libLoadRequest)
 		restore();
 
+	if (_remasteredEraseRequest)
+		eraseRemastered();
+
+	if (_remasteredNewGameRequest)
+		newGameRemastered();
+
 	setPerfCounter(0);
 	setPerfCounter(10);
 	_imuse->soundsPeriodic();
@@ -1757,11 +1771,23 @@ int GrimEngine::userPaint() {
 }
 
 void GrimEngine::saveLib(const char *fileName) {
+	if (isRemastered()) {
+		warning("GrimEngine::saveLib(): the remastered saves through its own slots");
+
+		return;
+	}
+
 	_libSaveRequest = 1;
 	_libSaveGameFileName = fileName ? fileName : "";
 }
 
 void GrimEngine::loadLib(const char *fileName) {
+	if (isRemastered()) {
+		warning("GrimEngine::loadLib(): the remastered loads through its own slots");
+
+		return;
+	}
+
 	_libLoadRequest = 1;
 	_libSaveGameFileName = fileName ? fileName : "";
 }
@@ -1787,6 +1813,12 @@ static int luaZread(void *buffer, int size) {
 }
 
 void GrimEngine::save() {
+	if (isRemastered()) {
+		saveRemastered();
+
+		return;
+	}
+
 	_libSaveRequest = 0;
 	_sputRender->allowLoadImage(0);
 	_sputRender->drawProgressBar(0.1f);
@@ -1860,6 +1892,12 @@ int GrimEngine::zwrite(const void *buffer, int size) {
 }
 
 void GrimEngine::restore() {
+	if (isRemastered()) {
+		restoreRemastered();
+
+		return;
+	}
+
 	_libLoadRequest = 0;
 
 	Common::String fileName = _libSaveGameFileName;

@@ -1869,6 +1869,13 @@ int Lua_V1::boot(int saveGameResume, const char *bootParam) {
 	return lua_call("BOOT") == 0;
 }
 
+int Lua_V1::bootSecondStage(const char *defaultSet) {
+	lua_pushstring(defaultSet);
+	lua_pushnil();
+
+	return lua_call("BOOTTWO") == 0;
+}
+
 void Lua_V1::update() {
 	int movieTime = g_grim->_sputSmush->getMovieTime();
 	int frameTime = g_grim->_sputTime->getFrameTime();

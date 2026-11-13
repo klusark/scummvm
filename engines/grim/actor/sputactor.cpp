@@ -133,6 +133,20 @@ void SputActorModule::shutdown() {
 	_started = 0;
 }
 
+// No actor is left, not even the camera: the render module allocates it again
+void SputActorModule::reset() {
+	for (int i = 0; i < 4; i++)
+		_talkingActors[i] = nullptr;
+
+	_numActorsTalking = 0;
+
+	for (int i = 0; i < _maxActors; i++)
+		freeActor(&_actors[i]);
+
+	_numActors = 0;
+	_selectedActor = nullptr;
+}
+
 int SputActorModule::getNumActorsTalking() {
 	return _numActorsTalking;
 }

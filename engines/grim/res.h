@@ -116,6 +116,8 @@ public:
 	int fileMoveToFront(const char *path);
 	int sysSave(Common::WriteStream *stream);
 	int sysLoad(Common::ReadStream *stream);
+	int sysSaveRemastered(Common::WriteStream *stream);
+	int sysLoadRemastered(Common::ReadStream *stream);
 	int allocCompletion(int tag, const char *name, void *handle);
 	void *getResource(int tag, const char *name);
 	int setPurgeOnFree(void *handle, int purge);

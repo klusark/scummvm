@@ -376,6 +376,17 @@ public:
 	void soundsSaveLoad(Common::Serializer &ser, bool legacyLayout = false);
 	void soundsSaveLoadBlock(Common::Serializer &ser, bool isImSave, bool legacyLayout);
 	void soundsSaveLoadBlockData(Common::Serializer &ser, bool isImSave);
+
+	// The save format of the remastered: pointers in slots of 8 bytes, file names of 33 bytes
+	void soundsSaveLoadRemastered(Common::Serializer &ser);
+	void soundsSaveLoadBlockRemastered(Common::Serializer &ser, bool isImSave);
+	void soundsSaveLoadBlockDataRemastered(Common::Serializer &ser, bool isImSave);
+	void imSaveLoadRemastered(Common::Serializer &ser);
+	void scriptSaveLoadRemastered(Common::Serializer &ser);
+	void imSaveLoadFilelistRemastered(Common::Serializer &ser);
+	void tracksSaveLoadRemastered(Common::Serializer &ser);
+	void dispatchSaveLoadRemastered(Common::Serializer &ser);
+
 	void soundsRestoreLegacy(int32 stateIndex, int32 seqIndex);
 	void soundsPeriodic();
 	int soundsPause();

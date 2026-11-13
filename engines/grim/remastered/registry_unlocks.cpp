@@ -39,10 +39,8 @@ RegistryUnlocks::RegistryUnlocks() : _loaded(false), _dirty(false), _entriesKept
 void RegistryUnlocks::unlockCutscene(int index) {
 	ensureLoaded();
 
-	if (index < 0 || index >= kNumCutsceneSlots) {
-		warning("RegistryUnlocks::unlockCutscene(): the index %d is out of range", index);
+	if (index < 0 || index >= kNumCutsceneSlots)
 		return;
-	}
 
 	if (testBit(_cutsceneBits, kNumCutsceneSlots, index))
 		return;
@@ -60,10 +58,8 @@ bool RegistryUnlocks::isCutsceneUnlocked(int index) {
 void RegistryUnlocks::unlockConcept(int index) {
 	ensureLoaded();
 
-	if (index < 0 || index >= kNumConceptSlots) {
-		warning("RegistryUnlocks::unlockConcept(): the index %d is out of range", index);
+	if (index < 0 || index >= kNumConceptSlots)
 		return;
-	}
 
 	if (testBit(_conceptBits, kNumConceptSlots, index))
 		return;
@@ -141,13 +137,11 @@ bool RegistryUnlocks::mergeRegistrySav(Common::SeekableReadStream *stream) {
 	byte entries[kEntriesBytes];
 	byte unlocks[kCutsceneBytes + kConceptBytes];
 
-	if (!stream || stream->size() != kRegistrySavSize) {
-		warning("RegistryUnlocks::mergeRegistrySav(): the registry file does not have the expected size");
+	if (!stream || stream->size() == 0)
 		return false;
-	}
 
-	if (!stream->seek(0) || stream->readUint32LE() != (uint32)kRegistrySavVersion) {
-		warning("RegistryUnlocks::mergeRegistrySav(): the registry file does not have the expected version");
+	if (stream->size() < (int64)kRegistrySavSize) {
+		warning("RegistryUnlocks::mergeRegistrySav(): the registry file is too short");
 		return false;
 	}
 
