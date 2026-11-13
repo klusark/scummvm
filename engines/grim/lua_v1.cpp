@@ -77,7 +77,30 @@ void Lua_V1::new_dofile() {
 
 // Debugging message functions
 
+#ifdef CR_GCOV
+// (a coverage build of the engine tests, grim_tools/cleanroom, built with -DCR_GCOV: gcov writes the counters when the
+// process ends, shutdown included, and also when the tests ask (PrintDebug("CRGCOV")), with a reset after it so that
+// the write at the end still happens: a run killed as hung loses only what ran since)
+extern "C" void __gcov_dump(void);
+extern "C" void __gcov_reset(void);
+#endif
+
 void Lua_V1::PrintDebug() {
+	if (g_grim->isTestData()) {
+		lua_Object msgObj = lua_getparam(1);
+		if (lua_isstring(msgObj) && !strncmp(lua_getstring(msgObj), "CRSNAP:", 7)) {
+			g_grim->saveSnap(lua_getstring(msgObj) + 7);
+			return;
+		}
+		if (lua_isstring(msgObj) && !strcmp(lua_getstring(msgObj), "CRGCOV")) {
+#ifdef CR_GCOV
+			// (the counts so far into the .gcda files, and from zero again)
+			__gcov_dump();
+			__gcov_reset();
+#endif
+			return;
+		}
+	}
 	if (!Debug::isChannelEnabled(Debug::Scripts))
 		return;
 	Common::String msg("Debug: ");
