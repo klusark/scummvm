@@ -31,6 +31,8 @@
 #define FORBIDDEN_SYMBOL_EXCEPTION_fclose
 #define FORBIDDEN_SYMBOL_EXCEPTION_remove
 #define FORBIDDEN_SYMBOL_EXCEPTION_rename
+#define FORBIDDEN_SYMBOL_EXCEPTION_setjmp
+#define FORBIDDEN_SYMBOL_EXCEPTION_longjmp
 
 #include "common/archive.h"
 #include "common/debug-channels.h"
