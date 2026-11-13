@@ -25,6 +25,8 @@
 #include "common/util.h"
 #include "graphics/cursorman.h"
 
+#include "engines/grim/grim.h"
+#include "engines/grim/remastered/hdcanvas.h"
 #include "engines/grim/stdcontrol.h"
 
 namespace Grim {
@@ -118,6 +120,10 @@ int StdControl::startup() {
 	memset(_axes, 0, sizeof(_axes));
 	memset(_axisPos, 0, sizeof(_axisPos));
 
+	// Starting the input again puts back the keys that the player changed
+	if (_remastered)
+		resetKeyMappingToDefault();
+
 	initJoysticks();
 	initMouse();
 	reset();
@@ -169,6 +175,12 @@ void StdControl::reset() {
 
 	for (int i = 0; i < kNumAxes; i++)
 		_axes[i].flags &= ~2;
+}
+
+int StdControl::toggleMouse() {
+	_readMouse = _readMouse == 0;
+
+	return _readMouse;
 }
 
 int StdControl::pressButton(uint button) {
@@ -302,7 +314,7 @@ void StdControl::setActivation(int active) {
 
 	// The system cursor of the remastered stays hidden, see startup()
 	if (active) {
-		if (_readMouse || _remastered)
+		if (_readMouse)
 			CursorMan.showMouse(false);
 
 		_controlsActive = 1;
@@ -633,27 +645,31 @@ void StdControl::flushMouse() {
 
 void StdControl::getMouseCanvasPosition(bool menuMode, int *x, int *y) const {
 	Common::Point mouse = g_system->getEventManager()->getMousePos();
-	float width = (float)g_system->getWidth();
-	float height = (float)g_system->getHeight();
-	float refWidth = menuMode ? (float)kCanvasWidth : (float)kCanvasPlayWidth;
-	float scale = MIN(width / refWidth, height / (float)kCanvasHeight);
+	HdCanvas *canvas = g_grim->getHdCanvas();
 
-	if (scale <= 0.0f) {
-		warning("StdControl::getMouseCanvasPosition(): the screen has no size");
+	if (!canvas) {
+		warning("StdControl::getMouseCanvasPosition(): there is no canvas");
 		*x = 0;
 		*y = 0;
 		return;
 	}
 
-	float offsetX = (width - refWidth * scale) / 2.0f;
-	float offsetY = (height - (float)kCanvasHeight * scale) / 2.0f;
+	float scaleX;
+	float scaleY;
+	float offsetX;
+	float offsetY;
 
-	// The 4:3 play area sits in the middle of the canvas
-	if (!menuMode)
-		offsetX -= (float)kCanvasPlayOffset * scale;
+	if (menuMode) {
+		HdCanvas::computeScaling(false, kCanvasWidth, kCanvasHeight, &scaleX, &scaleY, &offsetX, &offsetY);
+	} else {
+		HdCanvas::computeScaling(canvas->isStretched(), kCanvasPlayWidth, kCanvasHeight, &scaleX, &scaleY, &offsetX, &offsetY);
 
-	*x = (int)(((float)mouse.x - offsetX) / scale);
-	*y = (int)(((float)mouse.y - offsetY) / scale);
+		// The 4:3 play area sits in the middle of the canvas
+		offsetX = (float)((double)offsetX - (double)scaleX * (double)kCanvasPlayOffset);
+	}
+
+	*x = (int)(((double)mouse.x - (double)offsetX) / (double)scaleX);
+	*y = (int)(((double)mouse.y - (double)offsetY) / (double)scaleY);
 }
 
 void StdControl::enableAxis(int axis, int minVal, int maxVal, float deadZone) {

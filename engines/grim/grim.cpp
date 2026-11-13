@@ -133,7 +133,8 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 
 	_showFps = ConfMan.getBool("show_fps");
 
-	_mixer->setVolumeForSoundType(Audio::Mixer::kPlainSoundType, 192);
+	// The remastered keeps the plain type neutral: the movies use it, and the output of iMUSE has its own level
+	_mixer->setVolumeForSoundType(Audio::Mixer::kPlainSoundType, isRemastered() ? Audio::Mixer::kMaxMixerVolume : 192);
 	_mixer->setVolumeForSoundType(Audio::Mixer::kSFXSoundType, ConfMan.getInt("sfx_volume"));
 	_mixer->setVolumeForSoundType(Audio::Mixer::kSpeechSoundType, ConfMan.getInt("speech_volume"));
 	_mixer->setVolumeForSoundType(Audio::Mixer::kMusicSoundType, ConfMan.getInt("music_volume"));
@@ -555,7 +556,7 @@ void GrimEngine::createImuse() {
 }
 
 void GrimEngine::createModules() {
-	_stdMath = new StdMath();
+	_stdMath = new StdMath(isRemastered());
 	_stdFile = new StdFile();
 	_stdDisplay = new StdDisplay();
 	_stdConffile = new StdConffile(this);
@@ -576,7 +577,7 @@ void GrimEngine::createModules() {
 
 	bool isDemo = (_gameFlags & ADGF_DEMO) != 0;
 
-	_rd = new RenderDroid(_stdMath, _stdDisplay, _stdConffile, _stdFile, isDemo);
+	_rd = new RenderDroid(_stdMath, _stdDisplay, _stdConffile, _stdFile, isDemo, isRemastered());
 	_rd->setStd3D(_std3D);
 	_walkSystem = new WalkSystem(_rd, _stdMath, _stdConffile, isDemo, isRemastered());
 
@@ -910,6 +911,9 @@ int GrimEngine::grimStartup() {
 				_polyglotV1->getTranslation("/engn007/Grim Fandango could not find files!"));
 		return 0;
 	}
+
+	if (_commentary)
+		_commentary->loadDefinitions();
 
 	if (startEngine(_saveGameToResume, nullptr))
 		return 0;

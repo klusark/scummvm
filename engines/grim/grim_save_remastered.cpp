@@ -32,6 +32,7 @@
 #include "engines/grim/lua/lua.h"
 #include "engines/grim/lua_v1_opcodes/lua_v1.h"
 #include "engines/grim/movie/sputsmush.h"
+#include "engines/grim/remastered/commentary.h"
 #include "engines/grim/remastered/dialoglog.h"
 #include "engines/grim/remastered/hdcanvas.h"
 #include "engines/grim/remastered/overlay.h"
@@ -40,8 +41,10 @@
 #include "engines/grim/render/sputprimitive.h"
 #include "engines/grim/render/sputrender.h"
 #include "engines/grim/res.h"
+#include "engines/grim/sputcontrol.h"
 #include "engines/grim/sputresource.h"
 #include "engines/grim/sputroom.h"
+#include "engines/grim/sputtime.h"
 #include "engines/grim/text/polyglot.h"
 #include "engines/grim/text/sputtext.h"
 #include "engines/grim/wuregistry.h"
@@ -366,12 +369,15 @@ void GrimEngine::restoreRemastered() {
 void GrimEngine::eraseRemastered() {
 	_remasteredEraseRequest = 0;
 	_remasteredSaveStatus = SaveStore::eraseSlot(_remasteredEraseSlot);
-	_wuRegistry->removeSlotTime(_remasteredEraseSlot);
+
+	// The stored time stands in for the file time: it goes away only with the files
+	if (_remasteredSaveStatus == SaveStore::kStatusOk)
+		_wuRegistry->removeSlotTime(_remasteredEraseSlot);
 }
 
-// A new game: the sounds, the movie, the resources and the actors of the game that is over go
-// away, the scripts are read again and the boot function runs from the start. The overlays, the
-// texts and the hotspots stay, because the loading screen that the scripts show is made of them.
+// A new game: the sounds, the movie and the resources of the game that is over go away, the
+// modules are shut down and started again (the resources and the display are not touched), the
+// Lua state is made again, the scripts are read again and the boot function runs from the start
 void GrimEngine::newGameRemastered() {
 	_remasteredNewGameRequest = 0;
 
@@ -380,12 +386,40 @@ void GrimEngine::newGameRemastered() {
 	_sputSmush->stopMovie();
 	_sputSmush->periodic();
 	_res->freeAll();
+	_sputRender->forgetRoom();
 	_sputActor->clearShadowMaterial();
 	_sputResource->stopPurge(1);
 	lua_collectgarbage(0);
 
-	_sputActor->reset();
-	_sputRender->open();
+	_sputMouse->shutdown();
+	_dialogLog->clear();
+	_hdCanvas->getOverlays()->reset();
+	_sputSmush->shutdown();
+	_sputPrimitive->shutdown();
+	_sputText->shutdown();
+	_sputRender->shutdown();
+	_imuse->soundsShutdown();
+	_sputControl->shutdown();
+	_commentary->shutdown();
+	_sputActor->shutdown();
+	_sputCostume->shutdown();
+	_luaV1->shutdown();
+	_sputTime->shutdown();
+	_sputRoom->shutdown();
+
+	_sputRoom->startup();
+	_sputTime->startup();
+	_luaV1->startup();
+	_sputCostume->startup();
+	_sputActor->startup();
+	_commentary->startup();
+	_sputControl->startup();
+	_imuse->soundsStartup();
+	_sputRender->startup();
+	_sputText->startup();
+	_sputPrimitive->startup();
+	_sputSmush->startup();
+	_sputMouse->startup();
 
 	_sputResource->stopPurge(0);
 	_sputRender->allowLoadImage(1);

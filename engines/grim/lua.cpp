@@ -83,9 +83,12 @@ void LuaObjects::pushObjects() const {
 
 LuaBase *LuaBase::_instance = nullptr;
 
-LuaBase::LuaBase(bool isEmi) :
+LuaBase::LuaBase(bool isEmi, bool openState) :
 		_frameTimeCollection(0) {
 	_instance = this;
+
+	if (!openState)
+		return;
 
 	lua_open(isEmi);
 	lua_iolibopen();
@@ -96,9 +99,11 @@ LuaBase::LuaBase(bool isEmi) :
 LuaBase::~LuaBase() {
 	_instance = nullptr;
 
-	lua_removelibslists();
-	lua_close();
-	lua_iolibclose();
+	if (lua_isopen()) {
+		lua_removelibslists();
+		lua_close();
+		lua_iolibclose();
+	}
 
 	lua_callhook = nullptr;
 	lua_linehook = nullptr;

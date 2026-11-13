@@ -56,7 +56,7 @@ class Lua_V1 : public LuaBase, public SputControlCallback {
 public:
 	typedef Lua_V1 LuaClass;
 
-	Lua_V1(bool isEmi);
+	Lua_V1(bool isEmi, bool openState = true);
 
 	virtual int initialize(SysStruct *hs);
 	virtual int terminate();

@@ -461,6 +461,11 @@ int SputControl::addCallback(SputControlCallback *callback) {
 	return _numCallbacks;
 }
 
+void SputControl::clearCallbacks() {
+	memset(_callbacks, 0, sizeof(_callbacks));
+	_numCallbacks = 0;
+}
+
 void SputControl::update(float frameTime) {
 	if (_numCallbacks > 0) {
 		_stdControl->readControls();
@@ -551,6 +556,10 @@ int SputControl::startup() {
 		return 1;
 
 	resetSymbols();
+
+	if (_grim->isRemastered())
+		_stdControl->toggleMouse();
+
 	addCallback(this);
 	_started = 1;
 

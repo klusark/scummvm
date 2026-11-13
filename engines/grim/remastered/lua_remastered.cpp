@@ -417,7 +417,7 @@ static struct luaL_reg remasteredExtraOpcodes[] = {
 	{ "  dfltcontrol", LUA_OPCODE(Lua_V1, DefaultControlHandler) }
 };
 
-Lua_Remastered::Lua_Remastered() : Lua_V1(false) {
+Lua_Remastered::Lua_Remastered() : Lua_V1(false, false) {
 	lua_FuncIDsSetRemastered(true);
 }
 

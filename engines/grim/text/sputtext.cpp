@@ -58,7 +58,7 @@ SputText::SputText(Res *res, RenderDroid *rd, NormalText *normalText, Text *text
 		_luaTextObjDurationRef(0), _luaTextObjCenterRef(0), _luaTextObjLJustifyRef(0), _luaTextObjRJustifyRef(0),
 		_luaTextObjVolumeRef(0), _luaTextObjBufferRef(0), _luaTextObjBackgroundRef(0),
 		_luaTextObjCoordsRef(0), _luaTextObjLeftClipRef(0), _luaTextObjAlphaRef(0), _luaTextObjLayerRef(0),
-		_luaTextObjFadeRef(0), _luaTextObjHighlightRef(0) {
+		_luaTextObjFadeRef(0), _luaTextObjHighlightRef(0), _luaTextObjCacheRef(0), _luaTextObjMirrorModeRef(0) {
 	_printLineClip.x = 0;
 	_printLineClip.y = 0;
 	_printLineClip.width = 640;
@@ -418,52 +418,89 @@ int SputText::startup() {
 
 	_lua->registerTextOpcodes();
 
-	lua_pushstring("x");
-	_luaTextObjXRef = lua_ref(1);
-	lua_pushstring("y");
-	_luaTextObjYRef = lua_ref(1);
-	lua_pushstring("font");
-	_luaTextObjFontRef = lua_ref(1);
-	lua_pushstring("width");
-	_luaTextObjWidthRef = lua_ref(1);
-	lua_pushstring("height");
-	_luaTextObjHeightRef = lua_ref(1);
-	lua_pushstring("fgcolor");
-	_luaTextObjFGColorRef = lua_ref(1);
-	lua_pushstring("bgcolor");
-	_luaTextObjBGColorRef = lua_ref(1);
-	lua_pushstring("fxcolor");
-	_luaTextObjFXColorRef = lua_ref(1);
-	lua_pushstring("hicolor");
-	_luaTextObjHIColorRef = lua_ref(1);
-	lua_pushstring("duration");
-	_luaTextObjDurationRef = lua_ref(1);
-	lua_pushstring("center");
-	_luaTextObjCenterRef = lua_ref(1);
-	lua_pushstring("ljustify");
-	_luaTextObjLJustifyRef = lua_ref(1);
-	lua_pushstring("rjustify");
-	_luaTextObjRJustifyRef = lua_ref(1);
-	lua_pushstring("volume");
-	_luaTextObjVolumeRef = lua_ref(1);
-	lua_pushstring("pan");
-	_luaTextObjBufferRef = lua_ref(1);
-	lua_pushstring("background");
-	_luaTextObjBackgroundRef = lua_ref(1);
-
+	// The numbers of the references are saved with the Lua state, the order is the one of the savegames
 	if (_grim->isRemastered()) {
-		lua_pushstring("coords");
-		_luaTextObjCoordsRef = lua_ref(1);
+		lua_pushstring("x");
+		_luaTextObjXRef = lua_ref(1);
+		lua_pushstring("y");
+		_luaTextObjYRef = lua_ref(1);
+		lua_pushstring("cache");
+		_luaTextObjCacheRef = lua_ref(1);
+		lua_pushstring("font");
+		_luaTextObjFontRef = lua_ref(1);
+		lua_pushstring("width");
+		_luaTextObjWidthRef = lua_ref(1);
 		lua_pushstring("leftclip");
 		_luaTextObjLeftClipRef = lua_ref(1);
-		lua_pushstring("alpha");
-		_luaTextObjAlphaRef = lua_ref(1);
+		lua_pushstring("height");
+		_luaTextObjHeightRef = lua_ref(1);
+		lua_pushstring("fgcolor");
+		_luaTextObjFGColorRef = lua_ref(1);
+		lua_pushstring("bgcolor");
+		_luaTextObjBGColorRef = lua_ref(1);
+		lua_pushstring("fxcolor");
+		_luaTextObjFXColorRef = lua_ref(1);
+		lua_pushstring("hicolor");
+		_luaTextObjHIColorRef = lua_ref(1);
+		lua_pushstring("duration");
+		_luaTextObjDurationRef = lua_ref(1);
+		lua_pushstring("center");
+		_luaTextObjCenterRef = lua_ref(1);
+		lua_pushstring("ljustify");
+		_luaTextObjLJustifyRef = lua_ref(1);
+		lua_pushstring("rjustify");
+		_luaTextObjRJustifyRef = lua_ref(1);
 		lua_pushstring("layer");
 		_luaTextObjLayerRef = lua_ref(1);
-		lua_pushstring("fade");
-		_luaTextObjFadeRef = lua_ref(1);
 		lua_pushstring("highlight");
 		_luaTextObjHighlightRef = lua_ref(1);
+		lua_pushstring("coords");
+		_luaTextObjCoordsRef = lua_ref(1);
+		lua_pushstring("volume");
+		_luaTextObjVolumeRef = lua_ref(1);
+		lua_pushstring("pan");
+		_luaTextObjBufferRef = lua_ref(1);
+		lua_pushstring("background");
+		_luaTextObjBackgroundRef = lua_ref(1);
+		lua_pushstring("alpha");
+		_luaTextObjAlphaRef = lua_ref(1);
+		lua_pushstring("fade");
+		_luaTextObjFadeRef = lua_ref(1);
+		lua_pushstring("mirrormode");
+		_luaTextObjMirrorModeRef = lua_ref(1);
+	} else {
+		lua_pushstring("x");
+		_luaTextObjXRef = lua_ref(1);
+		lua_pushstring("y");
+		_luaTextObjYRef = lua_ref(1);
+		lua_pushstring("font");
+		_luaTextObjFontRef = lua_ref(1);
+		lua_pushstring("width");
+		_luaTextObjWidthRef = lua_ref(1);
+		lua_pushstring("height");
+		_luaTextObjHeightRef = lua_ref(1);
+		lua_pushstring("fgcolor");
+		_luaTextObjFGColorRef = lua_ref(1);
+		lua_pushstring("bgcolor");
+		_luaTextObjBGColorRef = lua_ref(1);
+		lua_pushstring("fxcolor");
+		_luaTextObjFXColorRef = lua_ref(1);
+		lua_pushstring("hicolor");
+		_luaTextObjHIColorRef = lua_ref(1);
+		lua_pushstring("duration");
+		_luaTextObjDurationRef = lua_ref(1);
+		lua_pushstring("center");
+		_luaTextObjCenterRef = lua_ref(1);
+		lua_pushstring("ljustify");
+		_luaTextObjLJustifyRef = lua_ref(1);
+		lua_pushstring("rjustify");
+		_luaTextObjRJustifyRef = lua_ref(1);
+		lua_pushstring("volume");
+		_luaTextObjVolumeRef = lua_ref(1);
+		lua_pushstring("pan");
+		_luaTextObjBufferRef = lua_ref(1);
+		lua_pushstring("background");
+		_luaTextObjBackgroundRef = lua_ref(1);
 	}
 
 	_started = 1;
@@ -475,30 +512,48 @@ int SputText::shutdown() {
 	_normalText->shutdown();
 	_text->sysShutdown();
 
-	lua_unref(_luaTextObjXRef);
-	lua_unref(_luaTextObjYRef);
-	lua_unref(_luaTextObjFontRef);
-	lua_unref(_luaTextObjWidthRef);
-	lua_unref(_luaTextObjHeightRef);
-	lua_unref(_luaTextObjFGColorRef);
-	lua_unref(_luaTextObjBGColorRef);
-	lua_unref(_luaTextObjFXColorRef);
-	lua_unref(_luaTextObjHIColorRef);
-	lua_unref(_luaTextObjDurationRef);
-	lua_unref(_luaTextObjCenterRef);
-	lua_unref(_luaTextObjLJustifyRef);
-	lua_unref(_luaTextObjRJustifyRef);
-	lua_unref(_luaTextObjVolumeRef);
-	lua_unref(_luaTextObjBufferRef);
-	lua_unref(_luaTextObjBackgroundRef);
-
 	if (_grim->isRemastered()) {
-		lua_unref(_luaTextObjCoordsRef);
+		lua_unref(_luaTextObjXRef);
+		lua_unref(_luaTextObjYRef);
+		lua_unref(_luaTextObjFontRef);
+		lua_unref(_luaTextObjWidthRef);
 		lua_unref(_luaTextObjLeftClipRef);
+		lua_unref(_luaTextObjHeightRef);
+		lua_unref(_luaTextObjFGColorRef);
+		lua_unref(_luaTextObjBGColorRef);
+		lua_unref(_luaTextObjFXColorRef);
+		lua_unref(_luaTextObjHIColorRef);
+		lua_unref(_luaTextObjDurationRef);
+		lua_unref(_luaTextObjCenterRef);
 		lua_unref(_luaTextObjAlphaRef);
-		lua_unref(_luaTextObjLayerRef);
 		lua_unref(_luaTextObjFadeRef);
+		lua_unref(_luaTextObjLJustifyRef);
+		lua_unref(_luaTextObjRJustifyRef);
+		lua_unref(_luaTextObjLayerRef);
 		lua_unref(_luaTextObjHighlightRef);
+		lua_unref(_luaTextObjCoordsRef);
+		lua_unref(_luaTextObjCacheRef);
+		lua_unref(_luaTextObjVolumeRef);
+		lua_unref(_luaTextObjBufferRef);
+		lua_unref(_luaTextObjBackgroundRef);
+		lua_unref(_luaTextObjMirrorModeRef);
+	} else {
+		lua_unref(_luaTextObjXRef);
+		lua_unref(_luaTextObjYRef);
+		lua_unref(_luaTextObjFontRef);
+		lua_unref(_luaTextObjWidthRef);
+		lua_unref(_luaTextObjHeightRef);
+		lua_unref(_luaTextObjFGColorRef);
+		lua_unref(_luaTextObjBGColorRef);
+		lua_unref(_luaTextObjFXColorRef);
+		lua_unref(_luaTextObjHIColorRef);
+		lua_unref(_luaTextObjDurationRef);
+		lua_unref(_luaTextObjCenterRef);
+		lua_unref(_luaTextObjLJustifyRef);
+		lua_unref(_luaTextObjRJustifyRef);
+		lua_unref(_luaTextObjVolumeRef);
+		lua_unref(_luaTextObjBufferRef);
+		lua_unref(_luaTextObjBackgroundRef);
 	}
 
 	while (_textQueue)

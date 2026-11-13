@@ -109,6 +109,7 @@ private:
 	static bool parseSlotName(const Common::String &name, int *slot);
 	static uint32 adler32(const byte *data, uint32 size);
 	static bool writeFile(const Common::FSNode &node, const byte *data, uint32 size);
+	static bool eraseFile(const Common::FSNode &file);
 };
 
 } // End of namespace Grim

@@ -130,6 +130,7 @@ public:
 	int close();
 	void flush();
 	void reset();
+	int toggleMouse();
 	int pressButton(uint button);
 	void readControls();
 	float readAxis(int axis);

@@ -227,19 +227,39 @@ int SaveStore::readSlot(int slot, Common::Array<byte> &compressed) {
 	return kStatusOk;
 }
 
-// The files cannot be removed through the file system nodes: they are emptied, which takes the slot
-// out of the list because it needs a meta.gsv of the exact size
+// The file system nodes cannot remove a file: it is emptied, and a file without data counts as removed,
+// like readSlot and listSlots see it
+bool SaveStore::eraseFile(const Common::FSNode &file) {
+	if (!file.exists() || file.isDirectory())
+		return false;
+
+	Common::SeekableReadStream *stream = file.createReadStream();
+
+	if (!stream)
+		return false;
+
+	int64 size = stream->size();
+
+	delete stream;
+
+	if (size <= 0)
+		return false;
+
+	return writeFile(file, nullptr, 0);
+}
+
+// The game file goes first and then the metadata. Nothing else is touched after a file that cannot be
+// removed, and a file that is not there is one of those. The folder stays, empty, because it cannot be removed.
 int SaveStore::eraseSlot(int slot) {
 	Common::FSNode folder = getRootNode().getChild(getSlotName(slot));
 
-	if (!folder.exists() || !folder.isDirectory())
+	if (!eraseFile(folder.getChild(gameFileName)))
 		return kStatusUnknownError;
 
-	bool erased = writeFile(folder.getChild(gameFileName), nullptr, 0);
+	if (!eraseFile(folder.getChild(metaFileName)))
+		return kStatusUnknownError;
 
-	erased = writeFile(folder.getChild(metaFileName), nullptr, 0) && erased;
-
-	return erased ? kStatusOk : kStatusUnknownError;
+	return kStatusOk;
 }
 
 void SaveStore::listSlots(Common::Array<SlotInfo> &slots) {

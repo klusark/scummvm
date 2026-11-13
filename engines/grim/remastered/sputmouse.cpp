@@ -27,6 +27,7 @@
 #include "engines/grim/actor/sputactor.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/remastered/overlay.h"
+#include "engines/grim/remastered/pathfinder.h"
 #include "engines/grim/remastered/sputmouse.h"
 #include "engines/grim/render/sputrender.h"
 #include "engines/grim/sputroom.h"
@@ -93,6 +94,7 @@ void SputMouse::shutdown() {
 		_cursorNames[i].clear();
 
 	_hotspots.clear();
+	_walkSystem->getPathFinder()->freePolygons();
 	_started = false;
 }
 

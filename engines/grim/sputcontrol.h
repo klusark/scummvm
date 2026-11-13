@@ -36,7 +36,7 @@ class StdControl;
 enum {
 	kNumControlSymbols = 167,
 	kNumControlSymbolsRemastered = 163,
-	kMaxControlCallbacks = 8
+	kMaxControlCallbacks = 9
 };
 
 struct ControlSymbol {
@@ -67,6 +67,7 @@ public:
 	int open();
 	int close();
 	int addCallback(SputControlCallback *callback);
+	void clearCallbacks();
 	void update(float frameTime);
 	int terminate();
 	int startup();

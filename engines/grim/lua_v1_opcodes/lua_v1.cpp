@@ -51,6 +51,7 @@
 #include "engines/grim/wuregistry.h"
 #include "engines/grim/lua/lauxlib.h"
 #include "engines/grim/lua/luadebug.h"
+#include "engines/grim/lua/lualib.h"
 
 namespace Grim {
 
@@ -1764,7 +1765,7 @@ struct luaL_reg grimDemoCostumeOpcodes[] = {
 	{ "GetKeyLength", LUA_OPCODE(Lua_V1, GetKeyLength) }
 };
 
-Lua_V1::Lua_V1(bool isEmi) : LuaBase(isEmi), _hs(nullptr), _initialized(0), _debugToggleFunc(nullptr), _totSaveBytes(0), _nextImageHandle(1), _nextObjectStateHandle(1),
+Lua_V1::Lua_V1(bool isEmi, bool openState) : LuaBase(isEmi, openState), _hs(nullptr), _initialized(0), _debugToggleFunc(nullptr), _totSaveBytes(0), _nextImageHandle(1), _nextObjectStateHandle(1),
 		_resolutionScaling(0.0f), _advancedLighting(0), _controlEventCount(0), _lastInputMode(0) {
 	for (int i = 0; i < kMaxImages; i++) {
 		_imageHandles[i] = 0;
@@ -1832,6 +1833,14 @@ int Lua_V1::terminate() {
 }
 
 int Lua_V1::startup() {
+	// The state of the remastered is made here, so that it can be made again for a new game
+	if (g_grim->isRemastered()) {
+		lua_open(false);
+		lua_iolibopen();
+		lua_strlibopen();
+		lua_mathlibopen();
+	}
+
 	registerMainOpcodes();
 	recognizeOpcodes();
 	makeSystemTable();
@@ -1852,11 +1861,22 @@ int Lua_V1::startup() {
 }
 
 int Lua_V1::shutdown() {
+	bool remastered = g_grim->isRemastered();
+
+	if (remastered)
+		g_grim->_sputControl->clearCallbacks();
+
 	FileFindDispose();
 
 	lua_unref(_refSystemTable);
 	lua_savehook = nullptr;
 	lua_restorehook = nullptr;
+
+	if (remastered) {
+		lua_close();
+		lua_removelibslists();
+		lua_iolibclose();
+	}
 
 	return 0;
 }

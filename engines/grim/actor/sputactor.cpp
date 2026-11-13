@@ -112,6 +112,10 @@ int SputActorModule::startup() {
 	if (_started)
 		return 1;
 
+	// A new game starts with the size of the table that the first game started with
+	if (_grim->isRemastered())
+		_maxActors = 1024;
+
 	_actors = new SputActor[_maxActors]();
 	publishActors();
 
@@ -126,25 +130,24 @@ void SputActorModule::shutdown() {
 	for (int i = 0; i < _maxActors; i++)
 		freeActor(&_actors[i]);
 
+	bool remastered = _grim->isRemastered();
+
+	if (remastered)
+		_numActorsTalking = 0;
+
 	delete[] _actors;
 	_actors = nullptr;
 	publishActors();
 
 	_started = 0;
-}
 
-// No actor is left, not even the camera: the render module allocates it again
-void SputActorModule::reset() {
-	for (int i = 0; i < 4; i++)
-		_talkingActors[i] = nullptr;
+	if (remastered) {
+		for (int i = 0; i < 4; i++)
+			_talkingActors[i] = nullptr;
 
-	_numActorsTalking = 0;
-
-	for (int i = 0; i < _maxActors; i++)
-		freeActor(&_actors[i]);
-
-	_numActors = 0;
-	_selectedActor = nullptr;
+		// The table is made again, the actor that was selected is not there any more
+		_selectedActor = nullptr;
+	}
 }
 
 int SputActorModule::getNumActorsTalking() {
@@ -740,6 +743,16 @@ void SputActorModule::freeActor(SputActor *actor) {
 		_res->removeReference(actor->colorMap);
 		delete actor->colorMap;
 		actor->colorMap = nullptr;
+	}
+
+	// The count goes down only for an actor that was in use
+	if (_grim->isRemastered()) {
+		if (actor->inUse) {
+			actor->inUse = 0;
+			_numActors--;
+		}
+
+		return;
 	}
 
 	actor->inUse = 0;

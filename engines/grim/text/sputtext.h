@@ -184,6 +184,8 @@ private:
 	int _luaTextObjLayerRef;
 	int _luaTextObjFadeRef;
 	int _luaTextObjHighlightRef;
+	int _luaTextObjCacheRef;
+	int _luaTextObjMirrorModeRef;
 };
 
 } // End of namespace Grim

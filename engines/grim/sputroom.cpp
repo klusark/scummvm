@@ -839,14 +839,16 @@ int SputRoom::shutdown() {
 
 	_actorNodeList = nullptr;
 
-	if (_started) {
-		while (_soundList) {
-			RoomSound *nextSound = _soundList->next;
+	while (_soundList) {
+		RoomSound *nextSound = _soundList->next;
 
-			delete _soundList;
-			_soundList = nextSound;
-		}
+		delete _soundList;
+		_soundList = nextSound;
 	}
+
+	// The room can be gone already: the resources that were freed have invalidated the reference
+	if (_grim->isRemastered() && _currentRoomRef.valid)
+		_res->removeReference(&_currentRoomRef);
 
 	_started = 0;
 

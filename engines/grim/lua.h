@@ -92,7 +92,8 @@ class LuaBase {
 public:
 	typedef LuaBase LuaClass;
 
-	LuaBase(bool isEmi);
+	// With openState false the Lua state is made later, by the startup of the module
+	LuaBase(bool isEmi, bool openState = true);
 	virtual ~LuaBase();
 	inline static LuaBase *instance() { return _instance; }
 
