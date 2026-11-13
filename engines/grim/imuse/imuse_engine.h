@@ -389,6 +389,8 @@ public:
 
 	void soundsRestoreLegacy(int32 stateIndex, int32 seqIndex);
 	void soundsPeriodic();
+	void soundsShutdown();
+	void soundsStartup();
 	int soundsPause();
 	int soundsResume();
 	int soundStartVoiceStream(const char *filename, int volume, int pan);

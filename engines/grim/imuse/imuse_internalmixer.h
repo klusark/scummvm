@@ -55,6 +55,7 @@ private:
 	int _sampleRate = 0;
 	bool _lowLatencyMode = false;
 	bool _demo = false;
+	int _outputChannelVolume = Audio::Mixer::kMaxChannelVolume;
 
 	void mix16(const int16 *srcBuf, int32 inFrameCount, uint32 feedSize, int32 mixBufStartIndex, int volume);
 	void mix16Swap(const int16 *srcBuf, int32 inFrameCount, uint32 feedSize, int32 mixBufStartIndex, int volume);
@@ -62,11 +63,13 @@ private:
 	void mix16ToStereoSwap(const int16 *srcBuf, int32 inFrameCount, uint32 feedSize, int32 mixBufStartIndex, int leftAmp, int rightAmp);
 
 public:
-	IMuseInternalMixer(Audio::Mixer *mixer, int sampleRate, bool lowLatencyMode = false, bool demo = false);
+	IMuseInternalMixer(Audio::Mixer *mixer, int sampleRate, bool lowLatencyMode = false, bool demo = false, bool remastered = false);
 	~IMuseInternalMixer();
 	int  init(int numChannels, int mixBufSize, int mixChannelsNum);
 	int  terminate();
 	int  clearMixerBuffer();
+	void openOutput();
+	void closeOutput();
 
 	void mix(uint8 *srcBuf, int32 inFrameCount, int wordSize, int channelCount, int swapEndiannessFlag, int feedSize, int32 mixBufStartIndex, int volume, int pan);
 	int  loop(uint8 **destBuffer, int len);

@@ -38,11 +38,16 @@ namespace Grim {
 #define DEMO_VOLTABLES16_POS  4352
 #define DEMO_SOFTTABLE_POS    90368
 
-IMuseInternalMixer::IMuseInternalMixer(Audio::Mixer *mixer, int sampleRate, bool lowLatencyMode, bool demo) {
+IMuseInternalMixer::IMuseInternalMixer(Audio::Mixer *mixer, int sampleRate, bool lowLatencyMode, bool demo, bool remastered) {
 	_mixer = mixer;
 	_sampleRate = sampleRate;
 	_lowLatencyMode = lowLatencyMode;
 	_demo = demo;
+
+	// In the remastered the plain sound type of the mixer is neutral (the HD movies use it), so the
+	// level of the output of iMUSE is the volume of its channels: 256 * 192 / 255 gives 192
+	if (remastered)
+		_outputChannelVolume = 192;
 
 	// Mark all separate streams for low latency mode as available...
 	for (int i = 0; i < ARRAYSIZE(_separateStreams); i++) {
@@ -133,16 +138,42 @@ int IMuseInternalMixer::init(int numChannels, int mixBufSize, int mixChannelsNum
 		}
 	}
 
-	if (!_lowLatencyMode) {
-		_mixer->playStream(
-			Audio::Mixer::kPlainSoundType,
-			&_channelHandle,
-			_stream,
-			-1,
-			Audio::Mixer::kMaxChannelVolume);
-	}
+	openOutput();
 
 	return 0;
+}
+
+// The output device of the original: opened by DwInitialize, closed by DwTerminate
+void IMuseInternalMixer::openOutput() {
+	if (_lowLatencyMode)
+		return;
+
+	// After closeOutput() the stream is gone with its mixer channel
+	if (!_stream)
+		_stream = Audio::makeQueuingAudioStream(_sampleRate, _mixer->getOutputStereo());
+
+	_mixer->playStream(
+		Audio::Mixer::kPlainSoundType,
+		&_channelHandle,
+		_stream,
+		-1,
+		_outputChannelVolume);
+}
+
+void IMuseInternalMixer::closeOutput() {
+	if (!_lowLatencyMode) {
+		// The channel owns the stream: stopping it also frees the queued buffers
+		_mixer->stopHandle(_channelHandle);
+		_stream = nullptr;
+		return;
+	}
+
+	for (int i = 0; i < ARRAYSIZE(_separateStreams); i++) {
+		if (_separateStreams[i]) {
+			_mixer->stopHandle(_separateChannelHandles[i]);
+			_separateStreams[i] = nullptr;
+		}
+	}
 }
 
 int IMuseInternalMixer::clearMixerBuffer() {
@@ -644,7 +675,7 @@ Audio::QueuingAudioStream *IMuseInternalMixer::getStream(int idx) {
 			&_separateChannelHandles[idx],
 			_separateStreams[idx],
 			-1,
-			Audio::Mixer::kMaxChannelVolume);
+			_outputChannelVolume);
 
 		return _separateStreams[idx];
 	} else {

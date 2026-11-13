@@ -84,7 +84,7 @@ IMuse::IMuse(int sampleRate, Audio::Mixer *mixer, Common::Mutex *mutex, bool low
 	_underrunCooldown = 0;
 
 	_emptyMarker[0] = '\0';
-	_internalMixer = new IMuseInternalMixer(mixer, _internalSampleRate, _lowLatencyMode, _demo);
+	_internalMixer = new IMuseInternalMixer(mixer, _internalSampleRate, _lowLatencyMode, _demo, _remastered);
 	_groupsHandler = new IMuseGroupsHandler(this, mutex);
 	_fadesHandler = new IMuseFadesHandler(this, mutex);
 	_triggersHandler = new IMuseTriggersHandler(this, mutex);
@@ -191,6 +191,55 @@ IMuse::~IMuse() {
 
 	free(_waveOutLowLatencyOutputBuffer);
 	_waveOutLowLatencyOutputBuffer = nullptr;
+}
+
+// What a new game needs from the sounds: everything stops and all the memory of the engine is given back
+void IMuse::soundsShutdown() {
+	g_system->getTimerManager()->removeTimerProc(timer_handler);
+
+	imStopAllSounds();
+	imRefreshScript();
+	imHeartbeat();
+
+	free(_voiceSrcBuf);
+	_voiceSrcBuf = nullptr;
+	_maxChunkRequested = 0;
+	free(_voiceRemainderBuf);
+	_voiceRemainderBuf = nullptr;
+	_voiceRemainderSize = 0;
+	_voiceRemainderCapacity = 0;
+	_voiceRemainderPos = 0;
+
+	soundsDeallocateBuffer(IMUSE_BUFFER_SPEECH);
+	soundsDeallocateBuffer(IMUSE_BUFFER_MUSIC);
+
+	imTerminate();
+
+	free(_waveOutOutputBuffer);
+	_waveOutOutputBuffer = nullptr;
+	free(_waveOutLowLatencyOutputBuffer);
+	_waveOutLowLatencyOutputBuffer = nullptr;
+
+	cacheReset();
+}
+
+void IMuse::soundsStartup() {
+	memset(_soundCache, 0, sizeof(_soundCache));
+	memset(_openAudioFiles, 0, sizeof(_openAudioFiles));
+
+	imInitialize();
+
+	// The output stream is a new one: the underrun check starts again as after the first startup
+	_checkForUnderrun = false;
+	_underrunCooldown = _maxQueuedStreams;
+
+	int timerPeriodUsec = _remastered ? IMUSE_REMASTERED_TIMER_PERIOD_USEC : 1000000 / _callbackFps;
+
+	g_system->getTimerManager()->installTimerProc(timer_handler, timerPeriodUsec, this, "IMuse");
+
+	soundsAllocateBuffer(IMUSE_BUFFER_MUSIC, 440000, 44000, 352000);
+	soundsAllocateBuffer(IMUSE_BUFFER_SPEECH, 88000, 44000, 88000);
+	imInitializeScript();
 }
 
 void IMuse::adaptBufferCount() {
@@ -363,6 +412,8 @@ bool IMuse::queryMusicStream(int32 &bufSize, int32 &criticalSize, int32 &freeSpa
 }
 
 int IMuse::imTerminate() {
+	_initialized = false;
+
 	return tracksDeinit();
 }
 
