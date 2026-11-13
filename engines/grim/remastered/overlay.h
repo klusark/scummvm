@@ -85,6 +85,9 @@ public:
 	explicit OverlayManager(HdCanvas *canvas);
 	~OverlayManager();
 
+	// Back to the state of a new manager: no image and no overlay
+	void reset();
+
 	// An empty name makes an overlay without image. The image is loaded at once.
 	int create(const Common::String &name, int x, int y, const OverlayProps &props);
 	void move(int handle, int x, int y);

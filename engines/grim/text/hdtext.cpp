@@ -39,6 +39,7 @@
 #include FT_IMAGE_H
 #include FT_OUTLINE_H
 
+#include "engines/grim/remastered/hdcanvas.h"
 #include "engines/grim/text/blasttext.h"
 #include "engines/grim/text/hdtext.h"
 
@@ -432,8 +433,9 @@ void HdText::layout(const HdTextInfo &info, HdTextCache *cache) {
 		const HdFont::Glyph *glyph = font->getGlyph(*p);
 		HdTextQuad quad;
 
-		quad.x = floorf(glyph->xOffset + penX + 0.5f) - 2.0f;
-		quad.y = (float)(baseLine - 2) + floorf(glyph->yOffset + 0.5f);
+		// The sums are done in double and stored to float once
+		quad.x = floorf((float)(((double)glyph->xOffset + (double)penX) + 0.5)) - 2.0f;
+		quad.y = (float)(baseLine - 2) + floorf((float)((double)glyph->yOffset + 0.5));
 		quad.width = glyph->width + 4;
 		quad.height = glyph->height + 4;
 		quad.character = *p;
@@ -558,9 +560,13 @@ void HdText::align(HdTextCache *cache, float alignX, float alignY) const {
 	float height = cache->pixelSize;
 
 	// The block is one line high plus 1.2 lines for every other line (not rounded here)
-	float firstLine = numRows > 1 ? 1.0f : (float)numRows;
-	float otherLines = numRows - 1 > 0 ? (float)(numRows - 1) : 0.0f;
-	float shiftY = ceilf(-((firstLine * height + (height * 1.2f) * otherLines) * alignY));
+	int firstLines = numRows > 1 ? 1 : numRows;
+	int otherLines = numRows - 1 > 0 ? numRows - 1 : 0;
+	float firstHeight = (float)((double)firstLines * (double)height);
+
+	// 1.2f widened to double; the sum is stored to float once, then the product with the alignment
+	float blockHeight = (float)(((double)height * 1.2000000476837158) * (double)otherLines + (double)firstHeight);
+	float shiftY = ceilf((float)((double)(-alignY) * (double)blockHeight));
 	float blockMinX = 999999.0f;
 	float blockMinY = 999999.0f;
 
@@ -605,30 +611,21 @@ void HdText::buildDraw(const HdTextInfo &info, const HdTextCache *cache, const H
 	if (numRows == 0)
 		return;
 
+	// The origin is computed in double and rounded to float once. The text canvas is centered by the 1920 - width shift.
 	bool stretch = canvas.stretched && !canvas.boxingHD;
-	float backWidth = (float)kCanvasWidth;
-	float backHeight = (float)kCanvasHeight;
-	float canvasWidth = (float)canvas.width;
-	float canvasHeight = 1080.0f;
-	float scaleX = backWidth / canvasWidth;
+	float scaleX;
 	float scaleY;
-	float offsetX = 0.0f;
-	float offsetY = 0.0f;
+	float offsetX;
+	float offsetY;
 
-	if (stretch) {
-		scaleY = backHeight / canvasHeight;
-	} else {
-		scaleY = MIN(backHeight / canvasHeight, scaleX);
-		offsetY = (backHeight - canvasHeight * scaleY) * 0.5f;
-		scaleX = scaleY;
-		offsetX = (backWidth - canvasWidth * scaleY) * 0.5f;
-	}
+	HdCanvas::computeScaling(stretch, canvas.width, 1080, &scaleX, &scaleY, &offsetX, &offsetY);
 
-	float shiftX = (float)(kCanvasWidth - canvas.width);
-	float baseX = (shiftX * scaleX) * -0.5f;
+	double shiftWidth = (double)(uint32)(kCanvasWidth - canvas.width);
 
-	draw->originX = (baseX + offsetX) + scaleX * (float)info.x;
-	draw->originY = offsetY + scaleY * (float)info.y;
+	offsetX = (float)((double)offsetX - (shiftWidth * (double)scaleX) * 0.5);
+
+	draw->originX = (float)((double)info.x * (double)scaleX + (double)offsetX);
+	draw->originY = (float)((double)info.y * (double)scaleY + (double)offsetY);
 
 	// The first line is clamped to the last one, the count to the lines there are, and the
 	// block always has at least its first line
@@ -657,38 +654,44 @@ void HdText::buildDraw(const HdTextInfo &info, const HdTextCache *cache, const H
 	if (lastRow < numRows)
 		endQuad = cache->rows[lastRow].firstQuad + cache->rows[lastRow].numQuads;
 
+	// 1.21f widened to double
 	if (firstRow != 0)
-		draw->originY = (((float)firstRow * cache->pixelSize) * -1.21f) + draw->originY;
+		draw->originY = (float)((double)draw->originY - ((double)cache->pixelSize * (double)firstRow) * 1.2100000381469727);
 
 	for (int i = firstQuad; i < endQuad; i++)
 		draw->quads.push_back(cache->quads[i]);
 
 	float alpha = info.alpha;
 
-	draw->textRed = ((float)(info.color & 0xFF) / 255.0f) * alpha;
-	draw->textGreen = ((float)((info.color >> 8) & 0xFF) / 255.0f) * alpha;
-	draw->textBlue = ((float)((info.color >> 16) & 0xFF) / 255.0f) * alpha;
+	draw->textRed = (float)(((double)(info.color & 0xFF) / 255.0) * (double)alpha);
+	draw->textGreen = (float)(((double)((info.color >> 8) & 0xFF) / 255.0) * (double)alpha);
+	draw->textBlue = (float)(((double)((info.color >> 16) & 0xFF) / 255.0) * (double)alpha);
 	draw->alpha = alpha;
 }
 
 void HdText::queryText(const HdTextInfo &info, const HdTextCache *cache, const HdTextCanvas &canvas, int *x, int *y,
 		int *width, int *height) {
 	bool stretch = canvas.stretched && !canvas.boxingHD;
-	float scaleX = (float)kCanvasWidth / (float)canvas.width;
-	float scaleY = (float)kCanvasHeight / 1080.0f;
-	float uniform = MIN(scaleY, scaleX);
+	float scaleX = (float)((double)(uint32)kCanvasWidth / (double)(uint32)canvas.width);
+	float scaleY = (float)((double)(uint32)kCanvasHeight / 1080.0);
+	float uniform = scaleX > scaleY ? scaleY : scaleX;
 
 	if (!stretch) {
 		scaleX = uniform;
 		scaleY = uniform;
 	}
 
-	*x = (int)floorf(((float)(int)((float)info.x * scaleX) + cache->minX) / scaleX);
-	*y = (int)floorf((float)(int)((float)info.y * scaleY) / scaleY);
+	// The position is cut from the exact product, the sum and the quotients are rounded to float
+	int textX = (int)((double)info.x * (double)scaleX);
+	int textY = (int)((double)info.y * (double)scaleY);
+	float sumX = (float)((double)cache->minX + (double)textX);
+
+	*x = (int)floorf((float)((double)sumX / (double)scaleX));
+	*y = (int)floorf((float)((double)textY / (double)scaleY));
 
 	// With the stretch the size of the text keeps the shape: both axes use the smaller scale
 	if (stretch) {
-		uniform = MIN(scaleX, scaleY);
+		uniform = scaleY > scaleX ? scaleX : scaleY;
 		scaleX = uniform;
 		scaleY = uniform;
 	}

@@ -202,6 +202,8 @@ public:
 	void setSkipPrimitives(int skip) { _skipPrimitives = skip; }
 	int getCamActorIndex() const { return _camActorIndex; }
 	RoomCamera *getCamera() const { return _camera; }
+	// For the moment after the rooms are freed and before the next one is set
+	void forgetRoom() { _lastRoom = nullptr; _camera = nullptr; }
 	const uint16 *getColorLookup() const { return _colorLookup; }
 
 private:

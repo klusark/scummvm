@@ -372,16 +372,35 @@ void SputRender::drawProgressBar(float progress) {
 	if (barWidth > 0.0)
 		filled = (int)barWidth;
 
-	_stdDisplay->vBufferLock(_mainGfxBuffer);
+	// In the Remastered the bar is drawn into the front surface, which is the picture that the next flip shows
+	HdCanvas *canvas = _grim->getHdCanvas();
+	bool inFrontScene = _grim->isRemastered() && canvas && canvas->isActive();
+	byte *pixels = nullptr;
+	int pitch = _mainGfxBuffer->tex.pitchInBytes;
 
-	byte *rowPointer = _mainGfxBuffer->pixels + 455 * _mainGfxBuffer->tex.pitchInBytes;
+	if (inFrontScene) {
+		int frontWidth = 0;
+		int frontHeight = 0;
+
+		pixels = canvas->getFrontScene(_mainGfxBuffer, &pitch, &frontWidth, &frontHeight);
+
+		if (!pixels || frontWidth < 590 || frontHeight < 468) {
+			warning("SputRender::drawProgressBar(): unsupported front surface");
+			return;
+		}
+	} else {
+		_stdDisplay->vBufferLock(_mainGfxBuffer);
+		pixels = _mainGfxBuffer->pixels;
+	}
+
+	byte *rowPointer = pixels + 455 * pitch;
 	uint16 *pixel = (uint16 *)(rowPointer + 100);
 
 	for (int i = 0; i < 540; i++)
 		*pixel++ = color;
 
 	for (int row = 0; row < 12; row++) {
-		rowPointer += 2 * ((uint)_mainGfxBuffer->tex.pitchInBytes >> 1);
+		rowPointer += 2 * ((uint)pitch >> 1);
 		pixel = (uint16 *)(rowPointer + 100);
 		((uint16 *)rowPointer)[589] = 0xFFE0;
 		((uint16 *)rowPointer)[50] = 0xFFE0;
@@ -395,7 +414,8 @@ void SputRender::drawProgressBar(float progress) {
 	for (int i = 0; i < 540; i++)
 		*pixel++ = color;
 
-	_stdDisplay->vBufferUnlock(_mainGfxBuffer);
+	if (!inFrontScene)
+		_stdDisplay->vBufferUnlock(_mainGfxBuffer);
 }
 
 void SputRender::allowLoadImage(int enable) {

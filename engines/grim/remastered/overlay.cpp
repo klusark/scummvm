@@ -130,6 +130,20 @@ OverlayManager::~OverlayManager() {
 	_numImages = 0;
 }
 
+void OverlayManager::reset() {
+	for (int i = 0; i < _numImages; i++) {
+		freePixels(_images[i]);
+		delete _images[i];
+		_images[i] = nullptr;
+	}
+
+	_numImages = 0;
+	_numOverlays = 0;
+	_serial = 0;
+	_spinnerHandle = kNoHandle;
+	memset(_overlays, 0, sizeof(_overlays));
+}
+
 int OverlayManager::findOverlay(int handle) const {
 	for (int i = 0; i < _numOverlays; i++) {
 		if (_overlays[i].handle == handle)
@@ -777,16 +791,18 @@ void OverlayManager::drawOverlay(const Overlay &overlay, int boxing) {
 		heightScale = scaleY;
 	} else {
 		_canvas->computeScaling(_canvas->isStretched(), 1440, 1080, &scaleX, &scaleY, &offsetX, &offsetY);
-		offsetX = (-240.0f * scaleX) + offsetX;
+		offsetX = (float)((double)offsetX - 240.0 * (double)scaleX);
 		widthScale = scaleX < scaleY ? scaleX : scaleY;
 		heightScale = widthScale;
 	}
 
-	float pixelX = (float)x * scaleX + offsetX;
-	float pixelY = (float)y * scaleY + offsetY;
+	// The position is a double expression rounded to float once; so is the size
+	float pixelX = (float)((double)scaleX * (double)x + (double)offsetX);
+	float pixelY = (float)((double)scaleY * (double)y + (double)offsetY);
 
-	_canvas->queueOverlay(image->pixels, image->width, image->height, pixelX, pixelY, (float)width * widthScale,
-			(float)height * heightScale, overlay.mirror, overlay.alpha, overlay.desaturate);
+	_canvas->queueOverlay(image->pixels, image->width, image->height, pixelX, pixelY,
+			(float)((double)width * (double)widthScale), (float)((double)height * (double)heightScale), overlay.mirror,
+			overlay.alpha, overlay.desaturate);
 }
 
 // Moves the fade of an overlay one frame on: the end is tested before the step, and the ends snap.

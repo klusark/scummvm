@@ -96,8 +96,13 @@ public:
 	// The canvas of the text: its width is the one of the engine, a width of the menus has the boxing
 	HdTextCanvas getTextCanvas() const;
 
-	void computeScaling(bool stretch, int referenceWidth, int referenceHeight, float *scaleX, float *scaleY,
-			float *offsetX, float *offsetY) const;
+	// The scaling of an area of the given size over the output (the back buffer of the renderer is the output)
+	static void computeScaling(bool stretch, int referenceWidth, int referenceHeight, float *scaleX, float *scaleY,
+			float *offsetX, float *offsetY);
+
+	// The front surface of the scene, the picture that the next present shows. The surface is made like the one of
+	// the engine when there is none yet. The pixels, the pitch in bytes, the width and the height are returned.
+	byte *getFrontScene(const StdVBuffer *engineScene, int *pitchInBytes, int *width, int *height);
 
 private:
 	enum ItemKind {
@@ -171,7 +176,6 @@ private:
 		int blueShift;
 		bool stretched;
 		float gamma;
-		float alpha;
 		size_t sourceSize;
 		byte *source;
 		uint32 *frame;
@@ -193,6 +197,7 @@ private:
 	};
 
 	void updateSoftwareAlpha();
+	void prepareFrontScene(const StdVBuffer *scene);
 	void swapScene(const StdVBuffer *scene);
 	void buildPowTable(PowTable *table, float exponent);
 	byte lookupPow(const PowTable &table, float value) const;

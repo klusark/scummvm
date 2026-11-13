@@ -50,7 +50,7 @@ HdCanvas::PowTable::PowTable() : valid(false), exponent(1.0f) {
 
 HdCanvas::SceneCache::SceneCache() : valid(false), hasFrame(false), serial(0), lastUse(0), width(0), height(0), pitch(0), bpp(0),
 		redBits(0), greenBits(0), blueBits(0), redShift(0), greenShift(0), blueShift(0), stretched(false), gamma(1.0f),
-		alpha(0.0f), sourceSize(0), source(nullptr), frame(nullptr) {
+		sourceSize(0), source(nullptr), frame(nullptr) {
 }
 
 HdCanvas::SceneCache::~SceneCache() {
@@ -220,29 +220,32 @@ void HdCanvas::queueOverlay(const byte *premultipliedRgba, int srcWidth, int src
 	_items.push_back(item);
 }
 
-// The rectangle of the primitives: the scale is the same on both axes and the text canvas is centered
+// The rectangle of the primitives: the scale is the same on both axes and the text canvas is centered. Every value
+// is computed in double and rounded to float once.
 void HdCanvas::queueFilledRectangle(int left, int top, int right, int bottom, uint colour, float alpha) {
-	float backWidth = (float)kWidth;
-	float backHeight = (float)kHeight;
-	float canvasWidth = (float)g_grim->getTextCanvasWidth();
-	float canvasHeight = 1080.0f;
-	float scaleX = backWidth / canvasWidth;
-	float scaleY = backHeight / canvasHeight;
-	float scale = scaleY < scaleX ? scaleY : scaleX;
-	float offsetY = (backHeight - canvasHeight * scale) * 0.5f;
-	float offsetX = (backWidth - canvasWidth * scale) * 0.5f - (((float)(kWidth - g_grim->getTextCanvasWidth()) * scale) * 0.5f);
+	int canvasWidth = g_grim->getTextCanvasWidth();
+	float scaleX;
+	float scaleY;
+	float offsetX;
+	float offsetY;
+
+	computeScaling(false, canvasWidth, 1080, &scaleX, &scaleY, &offsetX, &offsetY);
+
+	double shiftWidth = (double)(uint32)(kWidth - canvasWidth);
+
+	offsetX = (float)((double)offsetX - (shiftWidth * (double)scaleX) * 0.5);
 
 	Item item;
 
 	item.kind = kItemFill;
-	item.x = (float)left * scale + offsetX;
-	item.y = (float)top * scale + offsetY;
-	item.width = (float)(right - left) * scale;
-	item.height = (float)(bottom - top) * scale;
+	item.x = (float)((double)left * (double)scaleX + (double)offsetX);
+	item.y = (float)((double)top * (double)scaleY + (double)offsetY);
+	item.width = (float)((double)scaleX * (double)(right - left));
+	item.height = (float)((double)scaleY * (double)(bottom - top));
 	item.alpha = alpha;
-	item.fillRed = ((float)(colour & 0xFF) / 255.0f) * alpha;
-	item.fillGreen = ((float)((colour >> 8) & 0xFF) / 255.0f) * alpha;
-	item.fillBlue = ((float)((colour >> 16) & 0xFF) / 255.0f) * alpha;
+	item.fillRed = (float)(((double)(colour & 0xFF) / 255.0) * (double)alpha);
+	item.fillGreen = (float)(((double)((colour >> 8) & 0xFF) / 255.0) * (double)alpha);
+	item.fillBlue = (float)(((double)((colour >> 16) & 0xFF) / 255.0) * (double)alpha);
 	_items.push_back(item);
 }
 
@@ -350,12 +353,17 @@ HdTextCanvas HdCanvas::getTextCanvas() const {
 }
 
 // The scale of an area of the given size over the output: one scale on both axes, centered, or one per axis
+// The sizes are converted to float first. The offsets are the half of what is left, computed in double and rounded
+// to float once.
 void HdCanvas::computeScaling(bool stretch, int referenceWidth, int referenceHeight, float *scaleX, float *scaleY,
-		float *offsetX, float *offsetY) const {
-	float width = (float)referenceWidth;
-	float height = (float)referenceHeight;
-	float xScale = (float)kWidth / width;
-	float yScale = (float)kHeight / height;
+		float *offsetX, float *offsetY) {
+	float backWidth = (float)(uint32)kWidth;
+	float backHeight = (float)(uint32)kHeight;
+	float width = (float)(uint32)referenceWidth;
+	float height = (float)(uint32)referenceHeight;
+	float xScale = (float)((double)backWidth / (double)width);
+	float yScale = (float)((double)backHeight / (double)height);
+	float scale = xScale > yScale ? yScale : xScale;
 
 	if (stretch) {
 		*scaleX = xScale;
@@ -363,12 +371,10 @@ void HdCanvas::computeScaling(bool stretch, int referenceWidth, int referenceHei
 		*offsetX = 0.0f;
 		*offsetY = 0.0f;
 	} else {
-		float scale = yScale < xScale ? yScale : xScale;
-
 		*scaleX = scale;
 		*scaleY = scale;
-		*offsetX = ((float)kWidth - width * scale) * 0.5f;
-		*offsetY = ((float)kHeight - height * scale) * 0.5f;
+		*offsetX = (float)(((double)backWidth - (double)width * (double)scale) * 0.5);
+		*offsetY = (float)(0.5 * ((double)backHeight - (double)height * (double)scale));
 	}
 }
 
@@ -424,16 +430,48 @@ void HdCanvas::updateSoftwareAlpha() {
 		_softwareAlphaBlendTime = blend < 0.75f ? blend : 0.75f;
 
 		float t = _softwareAlphaBlendTime / 0.75f;
-		float value = t * _softwareAlphaEnd + (1.0f - t) * _softwareAlphaStart;
+
+		// The mix is one float store of a double expression, then the smoothstep: 3 - 2x, times x squared
+		float value = (float)(((double)t * (double)_softwareAlphaEnd) + ((1.0 - (double)t) * (double)_softwareAlphaStart));
 		float clamped = 0.0f;
 
 		if (!(0.0f > value))
 			clamped = 1.0f < value ? 1.0f : value;
 
-		_softwareAlpha = (clamped * -2.0f + 3.0f) * (clamped * clamped);
+		_softwareAlpha = (float)((3.0 - (double)(clamped + clamped)) * ((double)clamped * (double)clamped));
 	} else {
 		_softwareAlpha = _softwareAlphaEnd;
 	}
+}
+
+// The front surface has the shape of the surface of the engine; a new one is black
+void HdCanvas::prepareFrontScene(const StdVBuffer *scene) {
+	int pitch = scene->tex.pitchInBytes;
+	int height = scene->tex.height;
+
+	if (!_frontScene || _scenePitch != pitch || _sceneHeight != height) {
+		delete[] _frontScene;
+		_frontScene = new byte[(size_t)pitch * (size_t)height]();
+	}
+
+	_scenePitch = pitch;
+	_sceneWidth = scene->tex.width;
+	_sceneHeight = height;
+	_sceneFormat = scene->tex.format;
+}
+
+// The picture that the next present shows, for the code that draws into it (the progress bar)
+byte *HdCanvas::getFrontScene(const StdVBuffer *engineScene, int *pitchInBytes, int *width, int *height) {
+	if (!engineScene || !engineScene->pixels)
+		return nullptr;
+
+	prepareFrontScene(engineScene);
+
+	*pitchInBytes = _scenePitch;
+	*width = _sceneWidth;
+	*height = _sceneHeight;
+
+	return _frontScene;
 }
 
 // The surface the engine drew is shown by the next flip, and it gets the one that was shown
@@ -441,20 +479,9 @@ void HdCanvas::swapScene(const StdVBuffer *scene) {
 	if (!scene || !scene->pixels)
 		return;
 
-	int pitch = scene->tex.pitchInBytes;
-	int height = scene->tex.height;
-	size_t size = (size_t)pitch * (size_t)height;
+	prepareFrontScene(scene);
 
-	if (!_frontScene || _scenePitch != pitch || _sceneHeight != height) {
-		delete[] _frontScene;
-		_frontScene = new byte[size]();
-	}
-
-	_scenePitch = pitch;
-	_sceneWidth = scene->tex.width;
-	_sceneHeight = height;
-	_sceneFormat = scene->tex.format;
-
+	size_t size = (size_t)_scenePitch * (size_t)_sceneHeight;
 	byte block[4096];
 
 	for (size_t offset = 0; offset < size; offset += sizeof(block)) {
@@ -525,7 +552,7 @@ void HdCanvas::present(const StdVBuffer *scene, float gamma) {
 	int sceneToken = 0;
 	bool reusable = true;
 
-	if (firstItem < 0 && _frontScene && _softwareAlpha > 0.000001f) {
+	if (firstItem < 0 && _frontScene) {
 		if (isSceneSupported()) {
 			entry = findSceneCache(&matched);
 			sceneToken = entry->serial;
@@ -599,8 +626,7 @@ bool HdCanvas::sceneCacheMatches(const SceneCache &entry) const {
 			entry.pitch != _scenePitch || entry.bpp != _sceneFormat.bpp || entry.redBits != _sceneFormat.redBits ||
 			entry.greenBits != _sceneFormat.greenBits || entry.blueBits != _sceneFormat.blueBits ||
 			entry.redShift != _sceneFormat.redShift || entry.greenShift != _sceneFormat.greenShift ||
-			entry.blueShift != _sceneFormat.blueShift || entry.stretched != _stretched || !sameFloat(entry.gamma, _gamma) ||
-			!sameFloat(entry.alpha, _softwareAlpha))
+			entry.blueShift != _sceneFormat.blueShift || entry.stretched != _stretched || !sameFloat(entry.gamma, _gamma))
 		return false;
 
 	return memcmp(entry.source, _frontScene, size) == 0;
@@ -654,7 +680,6 @@ HdCanvas::SceneCache *HdCanvas::findSceneCache(bool *matched) {
 	entry.blueShift = _sceneFormat.blueShift;
 	entry.stretched = _stretched;
 	entry.gamma = _gamma;
-	entry.alpha = _softwareAlpha;
 	*matched = false;
 
 	return &entry;
@@ -800,7 +825,7 @@ const float *HdCanvas::getHorizontalRow(int row, int keepRow) {
 
 // The surface of the scene is a 16-bit texture with a bilinear filter, shown with the gamma 0.8 * g
 void HdCanvas::drawScene() {
-	if (!_frontScene || !(_softwareAlpha > 0.000001f))
+	if (!_frontScene)
 		return;
 
 	const StdColorFormat *format = &_sceneFormat;
@@ -863,11 +888,9 @@ void HdCanvas::drawScene() {
 	_horizontalRowIndex[0] = -1;
 	_horizontalRowIndex[1] = -1;
 
-	float exponent = 0.8f * _gamma;
-	bool opaque = _softwareAlpha >= 1.0f;
-
-	if (opaque)
-		buildPowTable(&_scenePow, exponent);
+	// The scene is always opaque, whatever the opacity: below 0.999999 the deferred renderer draws the front surface
+	// opaque, and the software layer over it with the opacity gives the same picture
+	buildPowTable(&_scenePow, 0.8f * _gamma);
 
 	for (int y = top; y < bottom; y++) {
 		double position = (((double)y + 0.5 - (double)offsetY) * (double)srcHeight) / (double)quadHeight - 0.5;
@@ -885,18 +908,7 @@ void HdCanvas::drawScene() {
 			float green = upper[i * 3 + 1] * inverse + lower[i * 3 + 1] * fraction;
 			float blue = upper[i * 3 + 2] * inverse + lower[i * 3 + 2] * fraction;
 
-			if (opaque) {
-				destination[i] = packPixel(lookupPow(_scenePow, red), lookupPow(_scenePow, green), lookupPow(_scenePow, blue));
-			} else {
-				float redOut = powf(red, exponent) * _softwareAlpha;
-				float greenOut = powf(green, exponent) * _softwareAlpha;
-				float blueOut = powf(blue, exponent) * _softwareAlpha;
-
-				if (_softwareAlpha < 0.99999899f)
-					blendPixel(left + i, y, redOut, greenOut, blueOut, _softwareAlpha);
-				else
-					writePixel(left + i, y, toByte(redOut), toByte(greenOut), toByte(blueOut));
-			}
+			destination[i] = packPixel(lookupPow(_scenePow, red), lookupPow(_scenePow, green), lookupPow(_scenePow, blue));
 		}
 	}
 }
@@ -1059,10 +1071,58 @@ void HdCanvas::drawOverlay(const Item &item) {
 	int srcWidth = item.srcWidth;
 	int srcHeight = item.srcHeight;
 	int columns = right - left;
-	double columnStart = (item.mirror & 1) ? (double)srcWidth : 0.0;
-	double columnEnd = (item.mirror & 1) ? 0.0 : (double)srcWidth;
-	double rowStart = (item.mirror & 2) ? (double)srcHeight : 0.0;
-	double rowEnd = (item.mirror & 2) ? 0.0 : (double)srcHeight;
+	double columnStart;
+	double columnEnd;
+	double rowStart;
+	double rowEnd;
+
+	// The mirror modes are 0 to 3; any other value has all the texture coordinates at the size of the quad
+	switch (item.mirror) {
+	case 0:
+		columnStart = 0.0;
+		columnEnd = (double)srcWidth;
+		rowStart = 0.0;
+		rowEnd = (double)srcHeight;
+		break;
+	case 1:
+		columnStart = (double)srcWidth;
+		columnEnd = 0.0;
+		rowStart = 0.0;
+		rowEnd = (double)srcHeight;
+		break;
+	case 2:
+		columnStart = 0.0;
+		columnEnd = (double)srcWidth;
+		rowStart = (double)srcHeight;
+		rowEnd = 0.0;
+		break;
+	case 3:
+		columnStart = (double)srcWidth;
+		columnEnd = 0.0;
+		rowStart = (double)srcHeight;
+		rowEnd = 0.0;
+		break;
+	default:
+		columnStart = (double)item.width;
+		columnEnd = columnStart;
+		rowStart = (double)item.height;
+		rowEnd = rowStart;
+
+		// The position goes through an int below
+		if (columnStart > 1000000000.0) {
+			warning("HdCanvas::drawOverlay(): quad too wide for the mirror mode %d", item.mirror);
+			columnStart = 1000000001.0;
+			columnEnd = columnStart;
+		}
+
+		if (rowStart > 1000000000.0) {
+			warning("HdCanvas::drawOverlay(): quad too high for the mirror mode %d", item.mirror);
+			rowStart = 1000000001.0;
+			rowEnd = rowStart;
+		}
+
+		break;
+	}
 
 	bool aligned = true;
 
