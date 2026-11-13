@@ -1795,6 +1795,12 @@ void Actor::draw() {
 		}
 	}
 
+	placeTalkText();
+}
+
+// Puts the text of the line the actor says over its costume on the screen, once after the line started. Part of draw(); the
+// test data's frames that are not drawn call it alone, so that the text's position does not wait for a drawn frame.
+void Actor::placeTalkText() {
 	if (_mustPlaceText) {
 		Common::Point p1, p2;
 		if (g_grim->getGameType() == GType_GRIM) {

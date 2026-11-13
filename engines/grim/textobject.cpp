@@ -383,15 +383,22 @@ void TextObject::draw() {
 	if (!_lines)
 		return;
 
-	if (!_created) {
-		g_driver->createTextObject(this);
-		_created = true;
-	}
+	create();
 
 	if (_justify > 3 || _justify < 0)
 		warning("TextObject::draw: Unknown justification code (%d)", _justify);
 
 	g_driver->drawTextObject(this);
+}
+
+// The renderer's copy of the text is made the first time it is drawn, and the time it is shown counts from then (update).
+// The test data's frames that are not drawn make it too, so that the time does not wait for a drawn frame.
+void TextObject::create() {
+	if (!_lines || _created)
+		return;
+
+	g_driver->createTextObject(this);
+	_created = true;
 }
 
 void TextObject::update() {

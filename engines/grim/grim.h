@@ -227,6 +227,7 @@ protected:
 	virtual void updateNormalMode();
 	virtual void updateDrawMode();
 	virtual void drawNormalMode();
+	void updateUndrawnFrame();
 
 	void savegameSave();
 	void saveGRIM();
@@ -266,6 +267,8 @@ protected:
 	unsigned _testFrameMs = 0;
 	EngineMode _testLastMode = NormalMode;
 	Set *_testLastSet = nullptr;
+	/** Test data: one frame in this many is drawn (sim_render_every; 0 = only the frames that must be: a change of setup, mode or set) */
+	int _testRenderEvery = 8;
 	bool _showFps;
 	bool _softRenderer;
 

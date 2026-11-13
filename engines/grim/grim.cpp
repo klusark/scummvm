@@ -84,6 +84,9 @@
 #include "engines/grim/emi/sound/emisound.h"
 #include "engines/grim/lua/lua.h"
 
+// (engines/engine.cpp: the ScummVM logo has been shown)
+extern bool splash;
+
 namespace Grim {
 
 GrimEngine *g_grim = nullptr;
@@ -357,6 +360,10 @@ Common::Error GrimEngine::run() {
 		// original with the simtime patch of grimlaunch, so that what a test measures per frame is the same every run)
 		if (ConfMan.hasKey("sim_frame_ms"))
 			_testFrameMs = CLIP(ConfMan.getInt("sim_frame_ms"), 1, 1000);
+		if (ConfMan.hasKey("sim_render_every"))
+			_testRenderEvery = MAX(ConfMan.getInt("sim_render_every"), 0);
+		// (no ScummVM logo: it waits 0.6 s at the start of every game, and the tests start a game per file)
+		splash = true;
 	}
 
 	// Try to see if we have the EMI Mac installer present
@@ -940,6 +947,38 @@ void GrimEngine::updateDrawMode() {
 	_movieTime = 0;
 }
 
+// Test data, a frame that is not drawn: what updateDisplayScene would have changed besides the picture. The movie time the
+// scripts get is taken there, the text of a line an actor says is placed when the actor is drawn, and a text's time
+// counts from its first drawing.
+void GrimEngine::updateUndrawnFrame() {
+	if (_mode == SmushMode) {
+		if (g_movie->isPlaying())
+			_movieTime = g_movie->getMovieTime();
+		if (_movieSubtitle)
+			_movieSubtitle->create();
+	} else if (_mode == NormalMode || _mode == OverworldMode) {
+		if (!_currSet || !_flipEnable)
+			return;
+		if (getGameType() == GType_GRIM) {
+			_prevSmushFrame = 0;
+			_movieTime = 0;
+			if (g_movie->isPlaying() && _movieSetup == _currSet->getCurrSetup()->_name)
+				_movieTime = g_movie->getMovieTime();
+		}
+		_currSet->setupCamera();
+		g_driver->set3DMode();
+		buildActiveActorsList();
+		for (Actor *a : _activeActors) {
+			if (a->isVisible())
+				a->placeTalkText();
+		}
+		for (TextObject *t : TextObject::getPool())
+			t->create();
+	} else if (_mode == DrawMode) {
+		updateDrawMode();
+	}
+}
+
 void GrimEngine::drawNormalMode() {
 	_prevSmushFrame = 0;
 	_movieTime = 0;
@@ -1198,11 +1237,12 @@ void GrimEngine::mainLoop() {
 		}
 
 		// (test data with a fixed frame time: the frames go as fast as they can, and drawing them all is most of what a run
-		// costs. One frame in 8 is drawn, by the count of frames so that a run is the same every time, and the frame of a
-		// change of setup, mode or set)
+		// costs. One frame in sim_render_every (8) is drawn, by the count of frames so that a run is the same every time, and the
+		// frame of a change of setup, mode or set; the others keep what drawing changes besides the picture: updateUndrawnFrame)
 		bool renderFrame = true;
 		if (_testFrameMs) {
-			if (_setupChanged || _mode != _testLastMode || _currSet != _testLastSet || _frameCounter % 8 == 0) {
+			if (_setupChanged || _mode != _testLastMode || _currSet != _testLastSet ||
+			    (_testRenderEvery > 0 && _frameCounter % _testRenderEvery == 0)) {
 				_testLastMode = _mode;
 				_testLastSet = _currSet;
 			} else {
@@ -1218,6 +1258,8 @@ void GrimEngine::mainLoop() {
 			// Now, it will queue all the OpenGL commands and draw them on the
 			// GPU while the CPU is busy updating the game world.
 			updateDisplayScene();
+		} else if (_mode != PauseMode) {
+			updateUndrawnFrame();
 		}
 
 		if (renderFrame)

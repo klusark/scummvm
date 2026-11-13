@@ -504,6 +504,7 @@ public:
 	 */
 	bool updateTalk();
 	void draw();
+	void placeTalkText();
 
 	bool isLookAtVectorZero() {
 		return _lookAtVector.isZero();

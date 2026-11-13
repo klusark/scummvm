@@ -111,6 +111,7 @@ public:
 
 	const Common::String &getName() const { return _textID; }
 	void draw();
+	void create();
 	void update();
 
 	void invalidate();
