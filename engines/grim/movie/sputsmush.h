@@ -46,6 +46,8 @@ namespace Grim {
 class LegacyImporter;
 class Res;
 class SputRender;
+class TheoraAudioConverter;
+class TheoraConverter;
 class WuRegistry;
 
 class SputSmush : public SmushPlayVideo {
@@ -88,14 +90,13 @@ public:
 	void setCommentaryDucking(bool ducking) { _commentaryDucking = ducking; }
 
 protected:
-	// Layer number of the HD movie frame in the 1920x1080 canvas
-	enum {
-		kHdMovieLayer = 30
-	};
-
 	bool videoPlay(const char *name, bool playFromMenu);
 	void videoStop();
 	void videoUpdate(int force);
+	const Graphics::Surface *videoGetNextFrame();
+	const Graphics::Surface *videoDecodeNextFrame();
+	float videoFrameStartTime(int frame) const;
+	bool videoAudioDone();
 	int videoGetMovieTimeMs() const;
 	static int getVideoDurationMs(const char *name);
 	static bool isHdMovieName(const char *name);
@@ -122,13 +123,11 @@ protected:
 	uint _startTime;
 	uint _lastPeriodicTime;
 
-	// HD movie (remastered): the Theora decoder, the surface that holds the last frame, the surface
-	// of a stopped movie (freed later, the canvas may still read it in the current frame) and the
-	// scaled copy of the frame queued last
+	// HD movie (remastered): the Theora decoder, the surface that holds the last frame and the surface
+	// of a stopped movie (freed later, the canvas may still read it in the current frame)
 	Video::TheoraDecoder *_videoClip;
 	Graphics::Surface *_movieSurface;
 	Graphics::Surface *_releasedSurface;
-	Graphics::Surface *_scaledSurface;
 	float _frameTime;
 	bool _isVideoVisible;
 	bool _playFromMenu;
@@ -138,8 +137,23 @@ protected:
 	bool _wasPlayingMovie;
 	bool _commentaryDucking;
 
+	// Pacing of the clip: the frame decoded but not shown yet, the frame rate of the stream,
+	// and the time at which the decoder ran out of video and audio
+	const Graphics::Surface *_videoPendingFrame;
+	int _videoFpsNumerator;
+	int _videoFpsDenominator;
+	float _videoFrameDuration;
+	bool _videoEnded;
+	uint32 _videoEndedTime;
+
 	// Changes every time the pixels of the movie surface change, so the canvas knows when a frame is the same
 	int _movieSerial;
+
+	// YCbCr to RGBX conversion of the HD movie frames, created with the first movie
+	TheoraConverter *_theoraConverter;
+
+	// Volume gain and 16 bit conversion of the audio of the HD movie playing, created with each movie
+	TheoraAudioConverter *_theoraAudioConverter;
 };
 
 } // End of namespace Grim

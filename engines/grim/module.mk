@@ -283,6 +283,7 @@ MODULE_OBJS := \
 	movie/sputsmush.o \
 	movie/sputsmush_save_remastered.o \
 	movie/sputsmush_demo.o \
+	movie/theoraconverter.o \
 	remastered/commentary.o \
 	remastered/dialoglog.o \
 	remastered/hdcanvas.o \

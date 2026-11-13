@@ -34,6 +34,7 @@
 #include "audio/mixer.h"
 #include "video/theora_decoder.h"
 
+#include "engines/grim/movie/theoraconverter.h"
 #include "engines/grim/remastered/hdcanvas.h"
 #endif
 
@@ -49,9 +50,10 @@ SputSmush::SputSmush(Res *res, StdDisplay *stdDisplay, SputRender *sputRender, S
 		_res(res), _stdDisplay(stdDisplay), _sputRender(sputRender), _mainGfxBuffer(mainGfxBuffer),
 		_wuRegistry(wuRegistry), _hs(nullptr), _started(0), _presentBuf(nullptr), _buf(0), _playing(0), _paused(0), _abort(0),
 		_looping(0), _x(0), _y(0), _startTime(0), _lastPeriodicTime(0), _videoClip(nullptr), _movieSurface(nullptr),
-		_releasedSurface(nullptr), _scaledSurface(nullptr), _frameTime(0.0f), _isVideoVisible(false), _playFromMenu(false),
+		_releasedSurface(nullptr), _frameTime(0.0f), _isVideoVisible(false), _playFromMenu(false),
 		_videoExtraFramesLeft(0), _videoDuration(0), _playingMovie(false), _wasPlayingMovie(false), _commentaryDucking(false),
-		_movieSerial(0) {
+		_videoPendingFrame(nullptr), _videoFpsNumerator(0), _videoFpsDenominator(1), _videoFrameDuration(0.0f),
+		_videoEnded(false), _videoEndedTime(0), _movieSerial(0), _theoraConverter(nullptr), _theoraAudioConverter(nullptr) {
 	memset(_curMovieFile, 0, sizeof(_curMovieFile));
 
 	_smushPlay = new SmushPlay(g_grim->isRemastered());
@@ -150,10 +152,10 @@ int SputSmush::startup() {
 }
 
 int SputSmush::shutdown() {
-	freeVideoResources();
-
-	if (_started)
+	if (_started) {
+		freeVideoResources();
 		_smushPlay->sysShutdown();
+	}
 
 	return 0;
 }
@@ -416,6 +418,7 @@ bool SputSmush::videoPlay(const char *name, bool playFromMenu) {
 
 	delete _videoClip;
 	_videoClip = nullptr;
+	_videoPendingFrame = nullptr;
 
 	const char *extension = strstr(name, ".snm");
 
@@ -444,11 +447,30 @@ bool SputSmush::videoPlay(const char *name, bool playFromMenu) {
 	if (language >= 1 && language <= 5)
 		hint = languageHint[language - 1];
 
+	if (!_theoraConverter)
+		_theoraConverter = new TheoraConverter();
+
+	if (!_theoraAudioConverter)
+		_theoraAudioConverter = new TheoraAudioConverter();
+
+	// A new clip starts with the gain of 1.0 until the first update
+	_theoraAudioConverter->setAudioGain(1.0f);
+
 	Video::TheoraDecoder *decoder = new Video::TheoraDecoder();
 
-	// The audio of the movies follows the voice volume
-	decoder->setSoundType(Audio::Mixer::kSpeechSoundType);
+	// The mixer must not scale the audio: the volume is the gain of the converter, set in videoUpdate
+	decoder->setSoundType(Audio::Mixer::kPlainSoundType);
 	decoder->setAudioLanguage(languageCodes, ARRAYSIZE(languageCodes), hint);
+
+#ifdef USE_TREMOR
+	warning("SputSmush::videoPlay(): the decoder uses integer samples, the voice volume does not apply to the movies");
+#else
+	decoder->setSampleConverter(_theoraAudioConverter);
+#endif
+
+	// The original decodes without post-processing and converts the frames with its own tables
+	decoder->setPostProcessing(false);
+	decoder->setFrameConverter(_theoraConverter);
 
 	if (!decoder->loadStream(stream) || !decoder->setOutputPixelFormat(Graphics::PixelFormat::createFormatRGBA32())) {
 		warning("SputSmush::videoPlay(): cannot play %s, using the classic movie", hdName.c_str());
@@ -456,9 +478,27 @@ bool SputSmush::videoPlay(const char *name, bool playFromMenu) {
 		return false;
 	}
 
+	Common::Rational frameRate = decoder->getFrameRate();
+
+	if (frameRate.getNumerator() <= 0 || frameRate.getDenominator() <= 0) {
+		warning("SputSmush::videoPlay(): %s has no frame rate, using the classic movie", hdName.c_str());
+		delete decoder;
+		return false;
+	}
+
+	_videoFpsNumerator = frameRate.getNumerator();
+	_videoFpsDenominator = frameRate.getDenominator();
+
+	float framesPerSecond = (float)((double)_videoFpsNumerator / (double)_videoFpsDenominator);
+
+	_videoFrameDuration = (float)(1.0 / (double)framesPerSecond);
+
 	decoder->start();
 
 	_videoClip = decoder;
+	_videoPendingFrame = nullptr;
+	_videoEnded = false;
+	_videoEndedTime = 0;
 	_frameTime = 0.0f;
 	_isVideoVisible = true;
 	_playFromMenu = playFromMenu;
@@ -484,6 +524,7 @@ void SputSmush::videoStop() {
 	if (_videoClip) {
 		delete _videoClip;
 		_videoClip = nullptr;
+		_videoPendingFrame = nullptr;
 
 		// The canvas may still read the frame of the last update, so the surface is freed later
 		if (_movieSurface) {
@@ -516,6 +557,14 @@ void SputSmush::freeVideoResources() {
 #ifdef USE_THEORADEC
 	delete _videoClip;
 	_videoClip = nullptr;
+	_videoPendingFrame = nullptr;
+
+	// The clip uses the converter, so it goes after the clip
+	delete _theoraConverter;
+	_theoraConverter = nullptr;
+
+	delete _theoraAudioConverter;
+	_theoraAudioConverter = nullptr;
 
 	if (_movieSurface) {
 		_movieSurface->free();
@@ -528,58 +577,47 @@ void SputSmush::freeVideoResources() {
 		delete _releasedSurface;
 		_releasedSurface = nullptr;
 	}
-
-	if (_scaledSurface) {
-		_scaledSurface->free();
-		delete _scaledSurface;
-		_scaledSurface = nullptr;
-	}
 #endif
 }
 
 void SputSmush::videoUpdate(int force) {
 #ifdef USE_THEORADEC
 	if (_videoClip || _videoExtraFramesLeft || force) {
-		// The speech sound type of the decoder already applies the voice volume, so the
-		// volume of the decoder only has to bring the gain down to 5% while a commentary plays
-		float gain = _wuRegistry->getFloat("VoiceVolume", 127.0f) / 127.0f;
-		float volumeScale = 1.0f;
+		float gain = (float)((double)_wuRegistry->getFloat("VoiceVolume", 127.0f) / 127.0);
 
 		if (_commentaryDucking && gain > 0.05f)
-			volumeScale = 0.05f / gain;
+			gain = 0.05f;
 
-		if (_videoClip)
-			_videoClip->setVolume((byte)CLIP((int)(Audio::Mixer::kMaxChannelVolume * volumeScale + 0.5f), 0, (int)Audio::Mixer::kMaxChannelVolume));
+		// Applied to the audio decoded from now on, as in the original
+		if (_videoClip && _theoraAudioConverter)
+			_theoraAudioConverter->setAudioGain(gain);
 
 		if (_movieSurface && _videoClip) {
 			float timePosition = (float)_videoClip->getTime() / 1000.0f;
-			float elapsedMs = timePosition * 1000.0f;
 
-			if (elapsedMs >= (float)(uint32)_videoDuration) {
+			if ((double)(uint32)_videoDuration <= (double)timePosition * 1000.0) {
 				if (_isVideoVisible)
 					_videoExtraFramesLeft = 1;
 
 				_isVideoVisible = false;
 			}
 
-			if (_videoClip->endOfVideo()) {
+			if (videoAudioDone()) {
 				_isVideoVisible = false;
 				_playingMovie = false;
 			}
 
-			// The decoder has to be read in every call, also when the frame is not shown, to feed the audio
-			if (_videoClip->needsUpdate()) {
-				const Graphics::Surface *frame = _videoClip->decodeNextFrame();
+			// The decoder is read in every call, also when the frame is not shown, to feed the audio
+			const Graphics::Surface *frame = videoGetNextFrame();
 
-				if (frame && _isVideoVisible) {
-					int rows = MIN<int>(frame->h, _movieSurface->h);
-					int rowBytes = MIN<int>(frame->w, _movieSurface->w) * 4;
+			if (frame && _isVideoVisible) {
+				int rows = MIN<int>(frame->h, _movieSurface->h);
+				int rowBytes = MIN<int>(frame->w, _movieSurface->w) * 4;
 
-					for (int y = 0; y < rows; y++)
-						memcpy(_movieSurface->getBasePtr(0, y), frame->getBasePtr(0, y), rowBytes);
+				for (int y = 0; y < rows; y++)
+					memcpy(_movieSurface->getBasePtr(0, y), frame->getBasePtr(0, y), rowBytes);
 
-					_movieSerial++;
-				}
+				_movieSerial++;
 			}
 
 			if (_isVideoVisible || _videoExtraFramesLeft) {
@@ -587,13 +625,95 @@ void SputSmush::videoUpdate(int force) {
 					_videoExtraFramesLeft--;
 
 				queueHdFrame();
-			} else if (_playFromMenu && force) {
+			} else if (_playFromMenu && (force & 1)) {
 				queueHdFrame();
 			}
 
 			_frameTime = (float)_videoClip->getTime() / 1000.0f;
 		}
 	}
+#endif
+}
+
+const Graphics::Surface *SputSmush::videoGetNextFrame() {
+#ifdef USE_THEORADEC
+	float clipTime = (float)_videoClip->getTime() / 1000.0f;
+
+	for (;;) {
+		if (!_videoPendingFrame) {
+			_videoPendingFrame = videoDecodeNextFrame();
+
+			if (!_videoPendingFrame)
+				return nullptr;
+		}
+
+		float start = videoFrameStartTime(_videoClip->getCurFrame());
+
+		// Not due yet
+		if (clipTime < start)
+			return nullptr;
+
+		const Graphics::Surface *frame = _videoPendingFrame;
+
+		// A frame is late when the clock is more than one frame duration past its start
+		if (!((double)start + (double)_videoFrameDuration < (double)clipTime)) {
+			_videoPendingFrame = nullptr;
+
+			return frame;
+		}
+
+		// A late frame is dropped when another one follows, the last one is shown anyway
+		const Graphics::Surface *next = videoDecodeNextFrame();
+
+		if (!next) {
+			_videoPendingFrame = nullptr;
+
+			return frame;
+		}
+
+		_videoPendingFrame = next;
+	}
+#else
+	return nullptr;
+#endif
+}
+
+const Graphics::Surface *SputSmush::videoDecodeNextFrame() {
+#ifdef USE_THEORADEC
+	int lastFrame = _videoClip->getCurFrame();
+	const Graphics::Surface *frame = _videoClip->decodeNextFrame();
+
+	// Without a further frame the decoder returns the picture it already has
+	if (_videoClip->getCurFrame() == lastFrame)
+		frame = nullptr;
+
+	return frame;
+#else
+	return nullptr;
+#endif
+}
+
+float SputSmush::videoFrameStartTime(int frame) const {
+	float granuleTime = (float)((double)(frame + 1) * ((double)_videoFpsDenominator / (double)_videoFpsNumerator));
+
+	return granuleTime - _videoFrameDuration;
+}
+
+bool SputSmush::videoAudioDone() {
+#ifdef USE_THEORADEC
+	if (!_videoClip->endOfVideo())
+		return false;
+
+	uint32 now = g_system->getMillis();
+
+	if (!_videoEnded) {
+		_videoEnded = true;
+		_videoEndedTime = now;
+	}
+
+	return now - _videoEndedTime > 500;
+#else
+	return false;
 #endif
 }
 
