@@ -233,7 +233,54 @@ void WalkPlane::setType(int newType) {
 	}
 }
 
+int WalkPlane::withinRemastered(float *point, uint flags) {
+	if (flags) {
+		if (!_enabled)
+			return 0;
+
+		if (!_active)
+			return 0;
+	}
+
+	if (_numVerts < 2) {
+		warning("WalkPlane::withinRemastered(): plane with %d vertices", _numVerts);
+		return 0;
+	}
+
+	float planeDistance = (float)((((double)point[1] - _verts[1]->y) * _normal[1] + ((double)point[0] - _verts[1]->x) * _normal[0]) + ((double)point[2] - _verts[1]->z) * _normal[2]);
+	float absDistance = planeDistance < 0.0f ? -planeDistance : planeDistance;
+	float distance = (0.00001f < absDistance) ? absDistance : 0.0f;
+
+	if (_tolerance < distance)
+		return 0;
+
+	if (_numVerts > 0) {
+		float *prevVert = &_verts[_numVerts - 1]->x;
+
+		for (int i = 0; i < _numVerts; i++) {
+			float *vert = &_verts[i]->x;
+			float edgeU = (float)(-((double)vert[_axisU] - prevVert[_axisU]));
+			float edgeV = (float)((double)vert[_axisV] - prevVert[_axisV]);
+			float side = (float)(((double)point[_axisU] - prevVert[_axisU]) * edgeV + ((double)point[_axisV] - prevVert[_axisV]) * edgeU);
+
+			side = (float)((double)side + 0.00001f);
+
+			float absSide = side < 0.0f ? -side : side;
+
+			if (0.00001f < absSide && side < 0.0f)
+				return 0;
+
+			prevVert = vert;
+		}
+	}
+
+	return 1;
+}
+
 int WalkPlane::within(float *point, uint flags) {
+	if (_system->_remastered)
+		return withinRemastered(point, flags);
+
 	if (flags) {
 		if (!_enabled)
 			return 0;
@@ -398,7 +445,90 @@ double WalkPlane::intersection(float *a, float *b, float *out) {
 	return intersection(a, b, out, edge);
 }
 
+double WalkPlane::intersectionRemastered(float *a, float *b, float *out, float *edge) {
+	float *hitVert = nullptr;
+	RdVector3 hitVec = { 0.0f, 0.0f, 0.0f };
+
+	_hitEdge = -1;
+
+	if (within(b, 1))
+		return 0.0;
+
+	edge[0] = 0.0f;
+	edge[1] = 0.0f;
+	edge[2] = 0.0f;
+	out[0] = b[0];
+	out[1] = b[1];
+	out[2] = b[2];
+
+	if (_numVerts > 0) {
+		float *prevVert = &_verts[_numVerts - 1]->x;
+
+		for (int i = 0; i < _numVerts; i++) {
+			float *vert = &_verts[i]->x;
+			float edgeNormal[2];
+
+			edgeNormal[0] = (float)(-((double)vert[_axisU] - prevVert[_axisU]));
+			edgeNormal[1] = (float)((double)vert[_axisV] - prevVert[_axisV]);
+
+			float side = (float)(((double)out[_axisU] - prevVert[_axisU]) * edgeNormal[1] + ((double)out[_axisV] - prevVert[_axisV]) * edgeNormal[0]);
+			float absSide = side < 0.0f ? -side : side;
+
+			if (0.00001f < absSide && side < 0.0f) {
+				float deltaV = (float)((double)out[_axisV] - a[_axisV]);
+				float deltaU = (float)((double)out[_axisU] - a[_axisU]);
+				float denominator = (float)(-((double)edgeNormal[0] * deltaV) - (double)deltaU * edgeNormal[1]);
+				float absDenominator = denominator < 0.0f ? -denominator : denominator;
+
+				if (0.00001f < absDenominator && denominator != 0.0f) {
+					float t = (float)((double)side / denominator);
+
+					hitVert = prevVert;
+					out[_axisV] = (float)((double)deltaV * t + out[_axisV]);
+					out[_axisU] = (float)((double)deltaU * t + out[_axisU]);
+
+					hitVec[0] = (float)((double)prevVert[0] - vert[0]);
+					hitVec[1] = (float)((double)prevVert[1] - vert[1]);
+					hitVec[2] = (float)((double)prevVert[2] - vert[2]);
+					edge[0] = (float)((double)vert[0] - prevVert[0]);
+					edge[1] = (float)((double)vert[1] - prevVert[1]);
+					edge[2] = (float)((double)vert[2] - prevVert[2]);
+					_hitEdge = i;
+				}
+			}
+
+			prevVert = vert;
+		}
+	}
+
+	project(out);
+
+	if (!hitVert) {
+		snapTo(out);
+		return 0.0;
+	}
+
+	RdVector3 toA;
+	toA[0] = (float)((double)a[0] - b[0]);
+	toA[1] = (float)((double)a[1] - b[1]);
+	toA[2] = (float)((double)a[2] - b[2]);
+
+	_system->_rd->normalize3Acc(hitVec);
+	_system->_rd->normalize3Acc(toA);
+
+	float value = _system->_rd->dot3(hitVec, toA);
+	float angle = _system->_stdMath->arcSin3(value);
+
+	if (angle > 0.0f)
+		return (float)((double)90.2f - angle);
+
+	return (float)((double)-90.2f - angle);
+}
+
 double WalkPlane::intersection(float *a, float *b, float *out, float *edge) {
+	if (_system->_remastered)
+		return intersectionRemastered(a, b, out, edge);
+
 	float *hitVert = nullptr;
 	RdVector3 hitVec = { 0.0f, 0.0f, 0.0f };
 
@@ -478,6 +608,15 @@ double WalkPlane::intersection(float *a, float *b, float *out, float *edge) {
 }
 
 void WalkPlane::snapTo(float *point) {
+	if (_system->_remastered) {
+		float planeDistance = (float)((((double)point[1] - _verts[0]->y) * _normal[1] + ((double)point[0] - _verts[0]->x) * _normal[0]) + ((double)point[2] - _verts[0]->z) * _normal[2]);
+
+		point[0] = (float)((double)point[0] - (double)planeDistance * _normal[0]);
+		point[1] = (float)((double)point[1] - _normal[1] * (double)planeDistance);
+		point[2] = (float)((double)point[2] - _normal[2] * (double)planeDistance);
+		return;
+	}
+
 	double distance = ((double)point[0] - _verts[0]->x) * _normal[0] + ((double)point[2] - _verts[0]->z) * _normal[2] + ((double)point[1] - _verts[0]->y) * _normal[1];
 
 	point[0] = (float)(point[0] - distance * _normal[0]);

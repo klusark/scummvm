@@ -34,6 +34,14 @@ float RenderDroid::dot2(RdVector2 a, RdVector2 b) {
 }
 
 float RenderDroid::dot3(RdVector3 a, RdVector3 b) {
+	if (_remastered) {
+		float productY = (float)((double)a[1] * b[1]);
+		float productX = (float)((double)a[0] * b[0]);
+		float productZ = (float)((double)a[2] * b[2]);
+
+		return (float)(((double)productY + productX) + productZ);
+	}
+
 	return (float)((double)b[1] * a[1] + (double)b[2] * a[2] + (double)a[0] * b[0]);
 }
 
@@ -60,6 +68,20 @@ float RenderDroid::normalize3(RdVector3 out, RdVector3 in) {
 }
 
 float RenderDroid::normalize3Acc(RdVector3 vec) {
+	if (_remastered) {
+		float length = (float)sqrt(((double)vec[1] * vec[1] + (double)vec[0] * vec[0]) + (double)vec[2] * vec[2]);
+
+		if (length != 0.0f) {
+			float inverse = (float)(1.0 / length);
+
+			vec[0] = (float)(vec[0] * inverse);
+			vec[1] = (float)(inverse * vec[1]);
+			vec[2] = (float)(inverse * vec[2]);
+		}
+
+		return length;
+	}
+
 	double length = sqrt((double)vec[1] * vec[1] + (double)vec[2] * vec[2] + (double)vec[0] * vec[0]);
 
 	if (length != 0.0) {

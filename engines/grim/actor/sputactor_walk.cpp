@@ -37,7 +37,6 @@ static const int kRetailPathPoints = 30;
 // Actors that the scripts allocate as not being the main character walk on the walk boxes only
 static const int kActorFlagNotMain = 0x80;
 static const int kPlaneTypeWalk = 0x1000;
-static const float kMouseRayLength = 100.0f;
 
 static int clampPoints(int numOut, int count, int capacity) {
 	if (numOut + count > capacity) {
@@ -843,104 +842,6 @@ void SputActorModule::getCollisionBoxes(SputActor *actor, int *count, int maxPoi
 			break;
 		}
 	}
-}
-
-// The pointer axes give a ray from the camera. The actor walks to the nearest walk plane that the ray
-// crosses, or to the closest point of that plane when the ray misses its polygon.
-void SputActorModule::walkActorToMouseTarget(SputActor *actor, float axisX, float axisY) {
-	RdCamera *camera = _rd->_camera.getCurrent();
-
-	if (!camera || !camera->canvas || camera->focalLen == 0.0f)
-		return;
-
-	RdVector3 direction;
-	RdVector3 world;
-	RdVector3 start;
-	RdVector3 end;
-	RdMatrix34 cameraMatrix;
-	float screenX = axisX * camera->canvas->xCenter + camera->canvas->xCenter;
-	float screenY = axisY * camera->canvas->yCenter + camera->canvas->yCenter;
-
-	direction[0] = (screenX - camera->canvas->xCenter) / camera->focalLen;
-	direction[1] = 1.0f;
-	direction[2] = -(screenY - camera->canvas->yCenter) / camera->focalLen;
-	_rd->normalize3Acc(direction);
-
-	_rd->invertOrtho34(cameraMatrix, camera->viewMatrix);
-	_rd->transformVector34(world, direction, cameraMatrix);
-	_rd->_camera.getPosition(start);
-
-	for (int i = 0; i < 3; i++)
-		end[i] = start[i] + world[i] * kMouseRayLength;
-
-	RdVector3 point;
-	RdVector3 nearHit;
-	WalkPlane *nearPlane = nullptr;
-	double nearT = 2.0;
-	double hitT = 2.0;
-	bool found = false;
-
-	for (WalkPlane *plane = _walkSystem->getHead(); plane; plane = plane->_next) {
-		if ((plane->_type & kPlaneTypeWalk) == 0 || !plane->_active || plane->_numVerts <= 0)
-			continue;
-
-		const WpVertex *vertex = plane->_verts[0];
-		double vertexPos[3];
-		double denominator = 0.0;
-		double numerator = 0.0;
-
-		vertexPos[0] = vertex->x;
-		vertexPos[1] = vertex->y;
-		vertexPos[2] = vertex->z;
-
-		for (int i = 0; i < 3; i++) {
-			denominator += (double)plane->_normal[i] * ((double)end[i] - start[i]);
-			numerator += (double)plane->_normal[i] * (vertexPos[i] - start[i]);
-		}
-
-		if (fabs(denominator) < 0.000001)
-			continue;
-
-		double t = numerator / denominator;
-
-		if (t < 0.0 || t > 1.0)
-			continue;
-
-		RdVector3 hit;
-
-		for (int i = 0; i < 3; i++)
-			hit[i] = (float)(start[i] + t * ((double)end[i] - start[i]));
-
-		if (t < nearT) {
-			nearT = t;
-			nearPlane = plane;
-			nearHit[0] = hit[0];
-			nearHit[1] = hit[1];
-			nearHit[2] = hit[2];
-		}
-
-		if (t < hitT && plane->within(hit, 0)) {
-			hitT = t;
-			point[0] = hit[0];
-			point[1] = hit[1];
-			point[2] = hit[2];
-			found = true;
-		}
-	}
-
-	if (!found) {
-		if (!nearPlane)
-			return;
-
-		point[0] = nearHit[0];
-		point[1] = nearHit[1];
-		point[2] = nearHit[2];
-		nearPlane->closestPoint(point);
-	}
-
-	RdVector3 goal = { 0.0f, 0.0f, 0.0f };
-
-	actorWalkTo(actor, point, goal, nullptr);
 }
 
 } // End of namespace Grim

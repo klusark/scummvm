@@ -27,7 +27,7 @@
 
 namespace Grim {
 
-RenderDroid::RenderDroid(StdMath *stdMath, StdDisplay *stdDisplay, StdConffile *stdConffile, StdFile *stdFile, bool isDemo) :
+RenderDroid::RenderDroid(StdMath *stdMath, StdDisplay *stdDisplay, StdConffile *stdConffile, StdFile *stdFile, bool isDemo, bool isRemastered) :
 		_camera(this), _canvas(this), _clip(this), _colormap(this, isDemo), _colorEffects(this),
 		_face(this), _keyframe(this), _light(this), _material(this), _model3(this),
 		_primit2(this), _primit3(this, isDemo), _puppet(this, isDemo), _sprite(this), _thing(this),
@@ -36,7 +36,7 @@ RenderDroid::RenderDroid(StdMath *stdMath, StdDisplay *stdDisplay, StdConffile *
 		_hs(nullptr), _started(0), _opened(0),
 		_frameTrue(0), _curAcceleration(0), _curRenderOptions(0), _curGeometryMode(0),
 		_curLightingMode(0), _curTextureMode(0), _curSortingMethod(0), _curOcclusionMethod(0),
-		_curZBufferMethod(0), _curVertexColorMode(0), _curCullFlags(0), _curProcFaceUserData(0), _demo(isDemo) {
+		_curZBufferMethod(0), _curVertexColorMode(0), _curCullFlags(0), _curProcFaceUserData(0), _demo(isDemo), _remastered(isRemastered) {
 	memset(&_colorInfo, 0, sizeof(StdColorFormat));
 	memset(&_curColorEffects, 0, sizeof(RdColorEffects));
 

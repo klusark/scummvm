@@ -37,6 +37,32 @@ float StdMath::rint(float value) {
 float StdMath::normalizeAngle(float angle) {
 	float result;
 
+	if (_remastered) {
+		if (!(angle < 0.0f)) {
+			if (angle < 360.0f)
+				return angle;
+
+			float turns = (float)floor((double)angle / 360.0);
+
+			result = (float)((double)angle - (double)turns * 360.0);
+		} else {
+			float positive = -angle;
+
+			if (!(positive < 360.0f)) {
+				float turns = (float)floor((double)positive / 360.0);
+
+				result = (float)(360.0 - ((double)positive - (double)turns * 360.0));
+			} else {
+				result = (float)(360.0 - (double)positive);
+			}
+		}
+
+		if (result == 360.0)
+			return 0.0f;
+
+		return result;
+	}
+
 	if (angle >= 0.0) {
 		if (angle < 360.0)
 			return angle;
@@ -191,7 +217,31 @@ float StdMath::sqrtImpl(float value) {
 	return (float)sqrt((double)value);
 }
 
+float StdMath::arcSin3Remastered(float value) {
+	bool negative = value < 0.0;
+	float absValue = negative ? (float)(-(double)value) : value;
+	float result;
+
+	if (!(absValue > 0.70710677f)) {
+		double first = (double)flexPower(absValue, 3) / 6.0 + absValue;
+		double second = (double)flexPower(absValue, 5) * 0.075f + first;
+
+		result = (float)(((double)flexPower(absValue, 7) * 0.066797f + second) * 57.295784f);
+	} else {
+		float root = (float)sqrt(1.0 - (double)absValue * absValue);
+		double first = (double)flexPower(root, 3) / 6.0 + root;
+		double second = (double)flexPower(root, 5) * 0.075f + first;
+
+		result = (float)(90.0 - ((double)flexPower(root, 7) * 0.066797f + second) * 57.295784f);
+	}
+
+	return negative ? -result : result;
+}
+
 float StdMath::arcSin3(float value) {
+	if (_remastered)
+		return arcSin3Remastered(value);
+
 	bool negative = value < 0.0;
 	float absValue = (value >= 0.0) ? value : (float)(-(double)value);
 	float result;

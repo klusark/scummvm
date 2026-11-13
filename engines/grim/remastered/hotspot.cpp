@@ -336,6 +336,8 @@ void HotspotManager::parseSetup(StdConffile *conffile, int setup) {
 	int numRead = 0;
 
 	for (int k = 0; k < num; k++) {
+		numRead = 0;
+
 		if (_numHotspots >= kMaxHotspots) {
 			warning("HotspotManager::parseSetup(): more than %d hotspots", (int)kMaxHotspots);
 			return;

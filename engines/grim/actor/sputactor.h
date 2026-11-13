@@ -213,7 +213,6 @@ public:
 	int terminate();
 	int startup();
 	void shutdown();
-	void reset();
 	void updateCostumes3(SputActor *actor);
 	void updatePuck(SputActor *actor);
 	int alignToPuck(SputActor *actor, Puck *puck);
@@ -221,8 +220,6 @@ public:
 	void actorWalkTo(SputActor *actor, float *pos, float *goal, SputActor *target);
 	int actorWalkToImpl(SputActor *actor, SputActor *target, float *path, int numPoints, float *outPath);
 	int actorWalkToImplRemastered(SputActor *actor, SputActor *target, float *path, int numPoints, float *outPath);
-	// The remastered: walk to the point under the pointer, given as mouse axes from -1 to 1
-	void walkActorToMouseTarget(SputActor *actor, float axisX, float axisY);
 	void setPathfinderMode(int mode);
 	void getCollisionBoxes(SputActor *actor, int *count, int maxPoints, float (*points)[3], SputActor *avoid);
 	void getOuttaTheBox(float *point, const RdBound3 &box, RdMatrix34 matrix, float *origin);

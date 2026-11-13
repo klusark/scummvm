@@ -49,7 +49,7 @@ static const float kCircleRadius = 0.02f;
 static const float kArcStep = 0.3490658700466156f;
 static const double kTwoPi = 6.2831854820251465;
 static const double kArcHeightTolerance = 0.0001;
-static const double kArcRadiusDouble = 0.01999999955296516;
+static const double kArcRadiusDouble = (double)0.02f;
 
 PathFinder::PathFinder(WalkSystem *walkSystem) : _walkSystem(walkSystem), _numPolygons(0), _dirty(1), _numVertices(0),
 		_graphCount(0), _direct(0), _numBoxPoints(0) {
@@ -61,6 +61,10 @@ PathFinder::PathFinder(WalkSystem *walkSystem) : _walkSystem(walkSystem), _numPo
 }
 
 PathFinder::~PathFinder() {
+	freePolygons();
+}
+
+void PathFinder::freePolygons() {
 	for (int i = 0; i < _numPolygons; i++) {
 		delete _polygons[i];
 		_polygons[i] = nullptr;
@@ -76,10 +80,6 @@ float PathFinder::sseMin(float a, float b) {
 
 float PathFinder::sseMax(float a, float b) {
 	return (a > b) ? a : b;
-}
-
-float PathFinder::sqrtFloat(float value) {
-	return (float)sqrt((double)value);
 }
 
 PathFinder::Polygon *PathFinder::newPolygon() const {
@@ -106,11 +106,9 @@ int PathFinder::vertIndex(const float *pos) {
 			float xx = dx * dx;
 			float yy = dy * dy;
 			float zz = dz * dz;
-			float sum = yy + xx;
+			double sum = ((double)xx + yy) + zz;
 
-			sum = zz + sum;
-
-			if (kVertexMergeSquared > sum)
+			if ((double)kVertexMergeSquared > sum)
 				return i;
 		}
 
@@ -280,10 +278,13 @@ float PathFinder::getSectorHeight(const Polygon *poly, const float *point) const
 
 	for (int i = 0; i < poly->numSegments; i++) {
 		const float *pos = _vertices[poly->segments[i].v0].pos;
-		float dx = point[0] - pos[0];
-		float dy = point[1] - pos[1];
-		float dz = point[2] - pos[2];
-		float distance = sqrtFloat(dz * dz + (dy * dy + dx * dx));
+		double dx = (double)point[0] - pos[0];
+		double dy = (double)point[1] - pos[1];
+		double dz = (double)point[2] - pos[2];
+		float xx = (float)(dx * dx);
+		float yy = (float)(dy * dy);
+		float zz = (float)(dz * dz);
+		float distance = (float)sqrt(((double)xx + yy) + zz);
 
 		if (bestDistance > distance) {
 			height = pos[2];
@@ -346,10 +347,8 @@ int PathFinder::projectIntoPolygons(float *point, Polygon **polys, int count, in
 			continue;
 
 		float height = getSectorHeight(poly, point);
-		float difference = height - point[2];
-
-		if (difference < 0.0f)
-			difference = -difference;
+		double heightDifference = (double)height - point[2];
+		float difference = (float)(heightDifference < 0.0 ? -heightDifference : heightDifference);
 
 		if (bestHeight > difference) {
 			best = i;
@@ -380,16 +379,34 @@ int PathFinder::projectIntoPolygons(float *point, Polygon **polys, int count, in
 			float wx = point[0] - a[0];
 			float wy = point[1] - a[1];
 			float wz = point[2] - a[2];
-			float numerator = wz * dz + (wy * dy + wx * dx);
-			float denominator = dz * dz + (dy * dy + dx * dx);
-			float t = sseMin(1.0f, sseMax(0.0f, numerator / denominator));
-			float ux = dx * t + a[0];
-			float uy = dy * t + a[1];
-			float uz = t * dz + a[2];
-			float ex = ux - point[0];
-			float ey = uy - point[1];
-			float ez = uz - point[2];
-			float distance = sqrtFloat(ez * ez + (ey * ey + ex * ex));
+			float productY = (float)((double)dy * wy);
+			float productX = (float)((double)dx * wx);
+			float productZ = (float)((double)wz * dz);
+			double numerator = ((double)productY + productX) + productZ;
+			float squareX = (float)((double)dx * dx);
+			float squareY = (float)((double)dy * dy);
+			float squareZ = (float)((double)dz * dz);
+			double denominator = ((double)squareX + squareY) + squareZ;
+			float t = (float)(numerator / denominator);
+
+			if (t < 0.0f)
+				t = 0.0f;
+			else if (1.0f < t)
+				t = 1.0f;
+
+			float stepX = t * dx;
+			float stepY = t * dy;
+			float stepZ = t * dz;
+			float ux = a[0] + stepX;
+			float uy = a[1] + stepY;
+			float uz = stepZ + a[2];
+			double ex = (double)ux - point[0];
+			double ey = (double)uy - point[1];
+			double ez = (double)uz - point[2];
+			float exSquared = (float)(ex * ex);
+			float eySquared = (float)(ey * ey);
+			float ezSquared = (float)(ez * ez);
+			float distance = (float)sqrt(((double)exSquared + eySquared) + ezSquared);
 
 			if (bestDistance > distance) {
 				result = i;
@@ -590,11 +607,24 @@ bool PathFinder::linearSplit(Polygon *poly, int index, const float *first, const
 	float ex = p1[0] - p0[0];
 	float ey = p1[1] - p0[1];
 	float ez = p1[2] - p0[2];
-	float length = ez * ez + (ey * ey + ex * ex);
-	float secondPart = ez * (second[2] - p0[2]) + (ey * (second[1] - p0[1]) + ex * (second[0] - p0[0]));
-	float firstPart = ez * (first[2] - p0[2]) + (ey * (first[1] - p0[1]) + ex * (first[0] - p0[0]));
-	float tSecond = secondPart / length;
-	float tFirst = firstPart / length;
+	float exSquared = (float)((double)ex * ex);
+	float eySquared = (float)((double)ey * ey);
+	float ezSquared = (float)((double)ez * ez);
+	float length = (float)(((double)exSquared + eySquared) + ezSquared);
+	float firstX = first[0] - p0[0];
+	float firstY = first[1] - p0[1];
+	float firstZ = first[2] - p0[2];
+	float secondX = second[0] - p0[0];
+	float secondY = second[1] - p0[1];
+	float secondZ = second[2] - p0[2];
+	float firstProductY = (float)((double)firstY * ey);
+	float firstProductX = (float)((double)firstX * ex);
+	float firstProductZ = (float)((double)firstZ * ez);
+	float tFirst = (float)((((double)firstProductY + firstProductX) + firstProductZ) / length);
+	float secondProductY = (float)((double)secondY * ey);
+	float secondProductX = (float)((double)secondX * ex);
+	float secondProductZ = (float)((double)secondZ * ez);
+	float tSecond = (float)((((double)secondProductY + secondProductX) + secondProductZ) / length);
 	float tMin = sseMin(tSecond, tFirst);
 	int current = index;
 
@@ -673,6 +703,55 @@ bool PathFinder::linearSplit(Polygon *poly, int index, const float *first, const
 	return current != index;
 }
 
+// True when the segments cross or, when they are parallel, lie on one line and overlap. Gives the
+// position of the crossing on both segments.
+bool PathFinder::crossSegments(const float *a0, const float *a1, const float *b0, const float *b1, float *tA, float *tB) const {
+	float ex = a1[0] - a0[0];
+	float ey = a1[1] - a0[1];
+	float dx = b1[0] - b0[0];
+	float dy = b1[1] - b0[1];
+	float wx = a0[0] - b0[0];
+	float wy = a0[1] - b0[1];
+	float den = (float)((double)dy * ex - (double)dx * ey);
+	float absDen = den < 0.0f ? -den : den;
+
+	if (!(kCrossLimit > absDen)) {
+		float inverse = (float)(1.0 / (double)den);
+
+		*tA = (float)(((double)dx * wy - (double)dy * wx) * inverse);
+		*tB = (float)(((double)ex * wy - (double)ey * wx) * inverse);
+
+		return -kSplitLow < *tB && -kSplitLow < *tA && *tA < kCombineHigh && *tB < kCombineHigh;
+	}
+
+	float cross = (float)((double)wy * ex - (double)wx * ey);
+	float eySquared = (float)((double)ey * ey);
+	float exSquared = (float)((double)ex * ex);
+	double distanceSquared = ((double)cross * cross) / ((double)eySquared + exSquared);
+
+	if (distanceSquared > (double)kParallelDistanceSquared)
+		return false;
+
+	float dxSquared = (float)((double)dx * dx);
+	float dySquared = (float)((double)dy * dy);
+	float length = (float)((double)dxSquared + dySquared);
+	float startPart = (float)(((double)(float)((double)wy * dy) + (float)((double)wx * dx)) / length);
+	float vx = a1[0] - b0[0];
+	float vy = a1[1] - b0[1];
+	float endPart = (float)(((double)(float)((double)dy * vy) + (float)((double)dx * vx)) / length);
+
+	*tA = 0.0f;
+	*tB = startPart;
+
+	if (-kSplitLow > startPart && -kSplitLow > endPart)
+		return false;
+
+	if (startPart > kCombineHigh && endPart > kCombineHigh)
+		return false;
+
+	return true;
+}
+
 // The union (mode 1) of two polygons or the first one without the second (mode 0). Null when they do
 // not touch, are on different floors or do not fit. The polygons get the cuts at the crossings.
 PathFinder::Polygon *PathFinder::combinePolygons(Polygon *a, Polygon *b, unsigned mode) {
@@ -707,73 +786,19 @@ PathFinder::Polygon *PathFinder::combinePolygons(Polygon *a, Polygon *b, unsigne
 				const float *a1 = _vertices[a->segments[i].v1].pos;
 				const float *b0 = _vertices[b->segments[j].v0].pos;
 				const float *b1 = _vertices[b->segments[j].v1].pos;
-				float wx = a0[0] - b0[0];
-				float wy = a0[1] - b0[1];
-				float dx = b1[0] - b0[0];
-				float dy = b1[1] - b0[1];
-				float ex = a1[0] - a0[0];
-				float ey = a1[1] - a0[1];
-				float dyEx = dy * ex;
-				float dxEy = dx * ey;
-				float den = dyEx - dxEy;
-				float absDen = den;
-				bool hit = true;
 				float tA = 0.0f;
 				float tB = 0.0f;
-
-				if (0.0f > den)
-					absDen = -den;
-
-				if (!(kCrossLimit > absDen)) {
-					float inverse = 1.0f / den;
-					float exWy = ex * wy;
-					float eyWx = ey * wx;
-
-					tB = (exWy - eyWx) * inverse;
-
-					if (!(tB > -kSplitLow)) {
-						hit = false;
-					} else {
-						float dxWy = dx * wy;
-						float wxDy = wx * dy;
-
-						tA = (dxWy - wxDy) * inverse;
-
-						if (!(tA > -kSplitLow) || !(kCombineHigh > tA) || !(kCombineHigh > tB))
-							hit = false;
-					}
-				} else {
-					float exWy = ex * wy;
-					float eyWx = ey * wx;
-					float cross = exWy - eyWx;
-					float crossSquared = cross * cross;
-					float lengthSquared = ey * ey + ex * ex;
-
-					if (crossSquared / lengthSquared > kParallelDistanceSquared) {
-						hit = false;
-					} else {
-						float length = dy * dy + dx * dx;
-						float startPart = (dy * wy + dx * wx) / length;
-						float endPart = ((a1[1] - b0[1]) * dy + (a1[0] - b0[0]) * dx) / length;
-
-						if (-kSplitLow > startPart && -kSplitLow > endPart) {
-							hit = false;
-						} else if (startPart > kCombineHigh && endPart > kCombineHigh) {
-							hit = false;
-						} else {
-							tA = 0.0f;
-							tB = startPart;
-						}
-					}
-				}
+				bool hit = crossSegments(a0, a1, b0, b1, &tA, &tB);
 
 				if (!hit) {
 					j++;
 					continue;
 				}
 
-				float heightA = (a1[2] - a0[2]) * tA + a0[2];
-				float heightB = (b1[2] - b0[2]) * tB + b0[2];
+				double heightDeltaA = (double)a1[2] - a0[2];
+				double heightDeltaB = (double)b1[2] - b0[2];
+				float heightA = (float)((double)a0[2] + (double)tA * heightDeltaA);
+				float heightB = (float)((double)b0[2] + (double)tB * heightDeltaB);
 				float heightDifference = fabsf(heightA - heightB);
 
 				if ((double)heightDifference > tolerance && a->flag == 0 && b->flag == 0 && mode != 0)
@@ -781,22 +806,28 @@ PathFinder::Polygon *PathFinder::combinePolygons(Polygon *a, Polygon *b, unsigne
 
 				float e3x = a1[0] - a0[0];
 				float e3y = a1[1] - a0[1];
-				float e3z = a1[2] - a0[2];
+				float e3z = (float)heightDeltaA;
 				float d3x = b1[0] - b0[0];
 				float d3y = b1[1] - b0[1];
-				float d3z = b1[2] - b0[2];
-				float dot = e3z * d3z + (d3y * e3y + d3x * e3x);
-				float lengthE = sqrtFloat(e3z * e3z + (e3y * e3y + e3x * e3x));
-				float lengthD = sqrtFloat(d3z * d3z + (d3y * d3y + d3x * d3x));
-				float limit = (lengthE * kSplitHigh) * lengthD;
+				float d3z = (float)heightDeltaB;
+				float productY = (float)((double)e3y * d3y);
+				float productX = (float)((double)e3x * d3x);
+				float productZ = (float)((double)e3z * d3z);
+				double dot = fabs(((double)productY + productX) + productZ);
+				float squareEX = (float)((double)e3x * e3x);
+				float squareEY = (float)((double)e3y * e3y);
+				float squareEZ = (float)((double)e3z * e3z);
+				float lengthE = (float)sqrt(((double)squareEX + squareEY) + squareEZ);
+				double lengthEScaled = (double)lengthE * kSplitHigh;
+				float squareDX = (float)((double)d3x * d3x);
+				float squareDY = (float)((double)d3y * d3y);
+				float squareDZ = (float)((double)d3z * d3z);
+				float lengthD = (float)sqrt(((double)squareDX + squareDY) + squareDZ);
 				unsigned fail = 0;
 				int firstResult;
 				int secondResult;
 
-				if (0.0f > dot)
-					dot = -dot;
-
-				if (!(dot > limit)) {
+				if (!((double)lengthD * lengthEScaled < dot)) {
 					firstResult = splitSegment(a, i, tA, &fail);
 					secondResult = splitSegment(b, j, tB, &fail);
 				} else {
@@ -997,10 +1028,10 @@ int PathFinder::separatePolygons(Polygon **polys, int *count) {
 			for (int j = 0; j < numSegments; j++) {
 				const float *start = _vertices[poly->segments[j].v0].pos;
 				const float *end = _vertices[poly->segments[j].v1].pos;
-				float product = end[1] * start[1];
-				float term = product * (end[0] - start[0]);
+				double span = (double)end[0] - start[0];
+				double product = (double)start[1] * end[1];
 
-				sum[label[j]] = term + sum[label[j]];
+				sum[label[j]] = (float)(span * product + sum[label[j]]);
 			}
 
 			bool anyNegative = false;
@@ -1175,9 +1206,11 @@ int PathFinder::getCCWverts(Vertex *graph, Polygon **polys, int count, int first
 		if (vertex.next != -2 && vertex.prev != -2) {
 			const Vertex &next = _vertices[vertex.next];
 			const Vertex &prev = _vertices[vertex.prev];
-			float left = (prev.pos[1] - next.pos[1]) * (vertex.pos[0] - next.pos[0]);
-			float right = (prev.pos[0] - next.pos[0]) * (vertex.pos[1] - next.pos[1]);
-			float cross = left - right;
+			float previousY = prev.pos[1] - next.pos[1];
+			float previousX = prev.pos[0] - next.pos[0];
+			float vertexX = vertex.pos[0] - next.pos[0];
+			float vertexY = vertex.pos[1] - next.pos[1];
+			float cross = (float)((double)previousY * vertexX - (double)previousX * vertexY);
 
 			keep = cross > 0.0f;
 		}
@@ -1238,25 +1271,18 @@ void PathFinder::visibilityGraphNaive(int from, int to) {
 							float wy = vi->pos[1] - s0[1];
 							float dx = s1[0] - s0[0];
 							float dy = s1[1] - s0[1];
-							float dyEx = dy * ex;
-							float dxEy = dx * ey;
-							float den = dyEx - dxEy;
+							float den = (float)((double)dy * ex - (double)dx * ey);
 							float absDen = den;
 
 							if (0.0f > den)
 								absDen = -den;
 
 							if (!(kCrossLimit > absDen)) {
-								float inverse = 1.0f / den;
-								float exWy = ex * wy;
-								float eyWx = ey * wx;
-								float tS = (exWy - eyWx) * inverse;
+								float inverse = (float)(1.0 / (double)den);
+								float tE = (float)(((double)dx * wy - (double)dy * wx) * inverse);
+								float tS = (float)(((double)wy * ex - (double)wx * ey) * inverse);
 
 								if (tS > kSplitLow) {
-									float dxWy = dx * wy;
-									float dyWx = dy * wx;
-									float tE = (dxWy - dyWx) * inverse;
-
 									if (tE > kSplitLow && kSplitHigh > tE && kSplitHigh > tS) {
 										blocked = true;
 										break;
@@ -1284,10 +1310,13 @@ void PathFinder::visibilityGraphNaive(int from, int to) {
 				}
 
 				if (!blocked && visible) {
-					float dz = vi->pos[2] - vj->pos[2];
-					float dy = vi->pos[1] - vj->pos[1];
-					float dx = vi->pos[0] - vj->pos[0];
-					float distance = sqrtFloat(dz * dz + (dy * dy + dx * dx));
+					double dz = (double)vi->pos[2] - vj->pos[2];
+					double dy = (double)vi->pos[1] - vj->pos[1];
+					double dx = (double)vi->pos[0] - vj->pos[0];
+					float xx = (float)(dx * dx);
+					float yy = (float)(dy * dy);
+					float zz = (float)(dz * dz);
+					float distance = (float)sqrt(((double)yy + xx) + zz);
 
 					weight = (kMinWeight > distance) ? kMinWeight : distance;
 				}
@@ -1322,11 +1351,14 @@ int PathFinder::findPath(int from, int to, float (*outPath)[3], int maxPoints) c
 	cost[from] = 0.0f;
 
 	{
-		float dz = _graph[from].pos[2] - targetZ;
-		float dy = _graph[from].pos[1] - targetY;
-		float dx = _graph[from].pos[0] - targetX;
+		double dz = (double)_graph[from].pos[2] - targetZ;
+		double dy = (double)_graph[from].pos[1] - targetY;
+		double dx = (double)_graph[from].pos[0] - targetX;
+		float xx = (float)(dx * dx);
+		float yy = (float)(dy * dy);
+		float zz = (float)(dz * dz);
 
-		estimate[from] = sqrtFloat(dz * dz + (dy * dy + dx * dx));
+		estimate[from] = (float)sqrt(((double)xx + yy) + zz);
 	}
 
 	open[0] = from;
@@ -1368,13 +1400,16 @@ int PathFinder::findPath(int from, int to, float (*outPath)[3], int maxPoints) c
 
 				if (state[j] != 1 || cost[j] > newCost) {
 					int oldState = state[j];
-					float dz = _graph[j].pos[2] - targetZ;
-					float dy = _graph[j].pos[1] - targetY;
-					float dx = _graph[j].pos[0] - targetX;
+					double dz = (double)_graph[j].pos[2] - targetZ;
+					double dy = (double)_graph[j].pos[1] - targetY;
+					double dx = (double)_graph[j].pos[0] - targetX;
+					float xx = (float)(dx * dx);
+					float yy = (float)(dy * dy);
+					float zz = (float)(dz * dz);
 
 					parent[j] = current;
 					cost[j] = newCost;
-					estimate[j] = newCost + sqrtFloat(dz * dz + (dy * dy + dx * dx));
+					estimate[j] = (float)sqrt(((double)xx + yy) + zz) + newCost;
 
 					if (oldState != 1) {
 						state[j] = 1;
@@ -1654,10 +1689,13 @@ int PathFinder::buildPath(SputActorModule *actorModule, SputActor *actor, float 
 	}
 
 	for (int i = 0; i < numPoints; i++) {
-		float dz = points[i][2] - _boxPoints[i][2];
-		float dy = points[i][1] - _boxPoints[i][1];
-		float dx = points[i][0] - _boxPoints[i][0];
-		float distance = sqrtFloat(dz * dz + (dy * dy + dx * dx));
+		double dz = (double)points[i][2] - _boxPoints[i][2];
+		double dy = (double)points[i][1] - _boxPoints[i][1];
+		double dx = (double)points[i][0] - _boxPoints[i][0];
+		float yy = (float)(dy * dy);
+		float xx = (float)(dx * dx);
+		float zz = (float)(dz * dz);
+		float distance = (float)sqrt(((double)yy + xx) + zz);
 
 		if ((double)distance > 0.001)
 			_dirty = 1;
@@ -1699,10 +1737,8 @@ int PathFinder::buildPath(SputActorModule *actorModule, SputActor *actor, float 
 
 		for (int i = 0; i < _numPolygons; i++) {
 			if (pointInPoly2D(_polygons[i], _graph[0].pos) || onEdge(_polygons[i], _graph[0].pos)) {
-				float difference = getSectorHeight(_polygons[i], _graph[0].pos) - _graph[0].pos[2];
-
-				if (difference < 0.0f)
-					difference = -difference;
+				double heightDifference = (double)getSectorHeight(_polygons[i], _graph[0].pos) - _graph[0].pos[2];
+				float difference = (float)(heightDifference < 0.0 ? -heightDifference : heightDifference);
 
 				if (best > difference) {
 					_graph[0].polygons[0] = i;
@@ -1716,10 +1752,8 @@ int PathFinder::buildPath(SputActorModule *actorModule, SputActor *actor, float 
 
 		for (int i = 0; i < _numPolygons; i++) {
 			if (pointInPoly2D(_polygons[i], _graph[1].pos) || onEdge(_polygons[i], _graph[1].pos)) {
-				float difference = getSectorHeight(_polygons[i], _graph[1].pos) - _graph[1].pos[2];
-
-				if (difference < 0.0f)
-					difference = -difference;
+				double heightDifference = (double)getSectorHeight(_polygons[i], _graph[1].pos) - _graph[1].pos[2];
+				float difference = (float)(heightDifference < 0.0 ? -heightDifference : heightDifference);
 
 				if (best > difference) {
 					_graph[1].polygons[0] = i;

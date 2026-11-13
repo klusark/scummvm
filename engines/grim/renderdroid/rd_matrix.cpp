@@ -30,6 +30,27 @@ void RenderDroid::build34(RdMatrix34 out, RdVector3 pyr, RdVector3 pos) {
 	_stdMath->sinCos(pyr[1], &sinY, &cosY);
 	_stdMath->sinCos(pyr[2], &sinR, &cosR);
 
+	if (_remastered) {
+		float sinRsinYStored = (float)((double)sinR * sinY);
+		float cosRcosYStored = (float)((double)cosR * cosY);
+		float sinRcosYStored = (float)((double)sinR * cosY);
+		float cosRsinYStored = (float)((double)cosR * sinY);
+
+		out[0][0] = (float)(-(double)sinRsinYStored * sinP + cosRcosYStored);
+		out[0][1] = (float)((double)sinRcosYStored * sinP + cosRsinYStored);
+		out[0][2] = (float)(-(double)sinR * cosP);
+		out[1][0] = (float)(-(double)sinY * cosP);
+		out[1][1] = (float)((double)cosY * cosP);
+		out[1][2] = sinP;
+		out[2][0] = (float)((double)cosRsinYStored * sinP + sinRcosYStored);
+		out[2][1] = (float)(-(double)sinP * cosRcosYStored + sinRsinYStored);
+		out[2][2] = (float)((double)cosR * cosP);
+		out[3][0] = pos[0];
+		out[3][1] = pos[1];
+		out[3][2] = pos[2];
+		return;
+	}
+
 	double sinRsinY = (double)sinR * sinY;
 	double sinRcosY = (double)sinR * cosY;
 	double cosRcosY = (double)cosR * cosY;

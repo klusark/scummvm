@@ -44,6 +44,9 @@ public:
 	explicit PathFinder(WalkSystem *walkSystem);
 	~PathFinder();
 
+	// Drops the polygons, the flag that asks for a rebuild is not touched
+	void freePolygons();
+
 	void markDirty() { _dirty = 1; }
 	void setDirect(bool direct) { _direct = direct ? 1 : 0; }
 
@@ -87,7 +90,6 @@ private:
 
 	static float sseMin(float a, float b);
 	static float sseMax(float a, float b);
-	static float sqrtFloat(float value);
 
 	Polygon *newPolygon() const;
 	int vertIndex(const float *pos);
@@ -96,6 +98,7 @@ private:
 	int addSegment(Polygon *poly, const Segment &segment) const;
 	int splitSegment(Polygon *poly, int index, float t, unsigned *fail);
 	bool linearSplit(Polygon *poly, int index, const float *first, const float *second, unsigned *fail);
+	bool crossSegments(const float *a0, const float *a1, const float *b0, const float *b1, float *tA, float *tB) const;
 	Polygon *combinePolygons(Polygon *a, Polygon *b, unsigned mode);
 	void alignSegmentDirection(Polygon *poly) const;
 	int separatePolygons(Polygon **polys, int *count);

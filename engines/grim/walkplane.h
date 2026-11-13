@@ -104,6 +104,8 @@ public:
 
 private:
 	int closestPointRemastered(float *point);
+	int withinRemastered(float *point, uint flags);
+	double intersectionRemastered(float *a, float *b, float *out, float *edge);
 
 	WalkSystem *_system;
 };

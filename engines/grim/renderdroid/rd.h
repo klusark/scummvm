@@ -466,7 +466,7 @@ typedef RdNRasterEdge RdZRasterEdge;
 
 class RenderDroid {
 public:
-	RenderDroid(StdMath *stdMath, StdDisplay *stdDisplay, StdConffile *stdConffile, StdFile *stdFile, bool isDemo);
+	RenderDroid(StdMath *stdMath, StdDisplay *stdDisplay, StdConffile *stdConffile, StdFile *stdFile, bool isDemo, bool isRemastered = false);
 	~RenderDroid();
 
 	int startup(SysStruct *hs);
@@ -1822,6 +1822,7 @@ private:
 	int _curCullFlags;
 	int _curProcFaceUserData;
 	bool _demo;
+	bool _remastered;
 	StdColorFormat _colorInfo;
 	RdColorEffects _curColorEffects;
 	float _mipDistances[4];

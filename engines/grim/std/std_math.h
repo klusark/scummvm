@@ -28,6 +28,8 @@ namespace Grim {
 
 class StdMath {
 public:
+	explicit StdMath(bool isRemastered = false) : _remastered(isRemastered) {}
+
 	float flexPower(float base, int exponent);
 	float rint(float value);
 	float normalizeAngle(float angle);
@@ -40,8 +42,12 @@ public:
 	float arcTan4(float y, float x);
 
 private:
+	float arcSin3Remastered(float value);
+
 	static const float kSinCosTable[4096];
 	static const float kTanTable[4096];
+
+	bool _remastered;
 };
 
 } // End of namespace Grim
