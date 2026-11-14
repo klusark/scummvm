@@ -116,6 +116,11 @@ static void internaldostring() {
 }
 
 static const char *to_string(lua_Object obj) {
+	// (tostring() with no argument: there is no object to look at; the original raises "internal error")
+	if (obj == LUA_NOOBJECT) {
+		lua_error("internal error");
+		return nullptr;
+	}
 	char *buff = luaL_openspace(30);
 	TObject *o = luaA_Address(obj);
 
