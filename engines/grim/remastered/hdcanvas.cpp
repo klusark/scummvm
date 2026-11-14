@@ -27,9 +27,11 @@
 #include "engines/util.h"
 
 #include "graphics/pixelformat.h"
+#include "graphics/renderer.h"
 
 #include "engines/grim/grim.h"
 #include "engines/grim/remastered/hdcanvas.h"
+#include "engines/grim/remastered/look/look_renderer.h"
 #include "engines/grim/remastered/overlay.h"
 #include "engines/grim/std/std_display.h"
 
@@ -58,7 +60,7 @@ HdCanvas::SceneCache::~SceneCache() {
 	delete[] frame;
 }
 
-HdCanvas::HdCanvas() : _active(false), _stretched(false), _frame(nullptr), _redShift(16), _greenShift(8), _blueShift(0), _opaqueMask(0xFF000000),
+HdCanvas::HdCanvas() : _active(false), _stretched(false), _gpu(false), _remasteredLookRenderer(nullptr), _overlayFrame(nullptr), _frame(nullptr), _redShift(16), _greenShift(8), _blueShift(0), _opaqueMask(0xFF000000),
 		_gamma(1.0f), _frontScene(nullptr), _sceneWidth(0), _sceneHeight(0), _scenePitch(0), _softwareAlpha(0.0f),
 		_softwareAlphaEnd(0.0f), _softwareAlphaStart(0.0f), _softwareAlphaBlendTime(0.75f), _previousFrameTime(0.0),
 		_hasPreviousFrame(false), _redMax(0), _greenMax(0), _blueMax(0), _sceneUseCounter(0), _sceneSerial(0),
@@ -85,7 +87,42 @@ HdCanvas::~HdCanvas() {
 	_overlays = nullptr;
 }
 
-void HdCanvas::open() {
+bool HdCanvas::openGpu(RemasteredLookRenderer *remasteredLookRenderer) {
+	if (!remasteredLookRenderer ||!(Graphics::Renderer::getAvailableTypes() & Graphics::kRendererTypeOpenGLShaders))
+		return false;
+
+	initGraphics3d(kWidth, kHeight);
+
+	if (!g_system->hasFeature(OSystem::kFeatureOpenGLForGame) || !remasteredLookRenderer->open(kWidth, kHeight)) {
+		warning("HdCanvas::openGpu(): the Remastered look is not available, using the software scene");
+		return false;
+	}
+
+	_redShift = 0;
+	_greenShift = 8;
+	_blueShift = 16;
+	_opaqueMask = 0xFF000000;
+
+	if (!_frame)
+		_frame = new uint32[kWidth * kHeight]();
+
+	if (!_overlayFrame)
+		_overlayFrame = new uint32[kWidth * kHeight]();
+
+	releaseSceneCaches();
+	_composedItems.clear();
+	_composedValid = false;
+	_remasteredLookRenderer = remasteredLookRenderer;
+	_gpu = true;
+	_active = true;
+
+	return true;
+}
+
+void HdCanvas::open(RemasteredLookRenderer *remasteredLookRenderer) {
+	if (openGpu(remasteredLookRenderer))
+		return;
+
 	Common::List<Graphics::PixelFormat> supported = g_system->getSupportedFormats();
 	Graphics::PixelFormat wanted = Graphics::PixelFormat::createFormatBGRA32();
 
@@ -122,6 +159,13 @@ void HdCanvas::open() {
 }
 
 void HdCanvas::close() {
+	if (_gpu && _remasteredLookRenderer)
+		_remasteredLookRenderer->close();
+
+	_gpu = false;
+	_remasteredLookRenderer = nullptr;
+	delete[] _overlayFrame;
+	_overlayFrame = nullptr;
 	_active = false;
 	_items.clear();
 	_composedItems.clear();
@@ -138,6 +182,9 @@ void HdCanvas::close() {
 
 void HdCanvas::beginFrame() {
 	_items.resize(0);
+
+	if (_gpu && _remasteredLookRenderer)
+		_remasteredLookRenderer->beginFrame();
 }
 
 void HdCanvas::releaseSceneCaches() {
@@ -525,6 +572,12 @@ void HdCanvas::present(const StdVBuffer *scene, float gamma) {
 		return;
 
 	_gamma = gamma;
+
+	if (_gpu) {
+		presentGpu(scene);
+		return;
+	}
+
 	updateSoftwareAlpha();
 
 	int firstItem = findCoveringItem();
@@ -559,6 +612,68 @@ void HdCanvas::present(const StdVBuffer *scene, float gamma) {
 
 		g_system->copyRectToScreen(_frame, kWidth * 4, 0, 0, kWidth, kHeight);
 		g_system->updateScreen();
+	}
+
+	swapScene(scene);
+
+	_stretched = g_grim->isWidescreenStretched();
+}
+
+void HdCanvas::buildOverlayFrame() {
+	for (int i = 0; i < kWidth * kHeight; i++)
+		_frame[i] = _opaqueMask;
+
+	for (uint i = 0; i < _items.size(); i++)
+		drawItem(_items[i]);
+
+	memcpy(_overlayFrame, _frame, (size_t)kWidth * (size_t)kHeight * sizeof(uint32));
+
+	for (int i = 0; i < kWidth * kHeight; i++)
+		_frame[i] = 0xFFFFFFFF;
+
+	for (uint i = 0; i < _items.size(); i++)
+		drawItem(_items[i]);
+
+	for (int i = 0; i < kWidth * kHeight; i++) {
+		uint32 dark = _overlayFrame[i];
+		uint32 light = _frame[i];
+		int darkGreen = (int)((dark >> 8) & 0xFF);
+		int lightGreen = (int)((light >> 8) & 0xFF);
+		int alpha = 255 - (lightGreen - darkGreen);
+
+		if (alpha < 0)
+			alpha = 0;
+		else if (alpha > 255)
+			alpha = 255;
+
+		int red = MIN((int)(dark & 0xFF), alpha);
+		int green = MIN(darkGreen, alpha);
+		int blue = MIN((int)((dark >> 16) & 0xFF), alpha);
+
+		_overlayFrame[i] = (uint32)red | ((uint32)green << 8) | ((uint32)blue << 16) | ((uint32)alpha << 24);
+	}
+}
+
+void HdCanvas::presentGpu(const StdVBuffer *scene) {
+	bool changing = hasChangingItem();
+	bool changed = !(!changing && _composedValid && sameQueue(_items, _composedItems));
+
+	if (changed)
+		buildOverlayFrame();
+
+	const byte *software = nullptr;
+
+	if (_frontScene && isSceneSupported())
+		software = _frontScene;
+
+	_remasteredLookRenderer->present(software, _scenePitch, _overlayFrame ? (const byte *)_overlayFrame : nullptr, changed);
+	g_system->updateScreen();
+
+	_composedValid = false;
+
+	if (!changing) {
+		_composedItems = _items;
+		_composedValid = true;
 	}
 
 	swapScene(scene);

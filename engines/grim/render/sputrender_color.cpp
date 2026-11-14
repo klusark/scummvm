@@ -24,6 +24,7 @@
 
 #include "engines/grim/grim.h"
 #include "engines/grim/remastered/hdcanvas.h"
+#include "engines/grim/remastered/look/look_renderer.h"
 #include "engines/grim/renderdroid/rd.h"
 #include "engines/grim/sputobjectstate.h"
 #include "engines/grim/render/sputprimitive.h"
@@ -195,6 +196,9 @@ void SputRender::dim(int force, char shift) {
 		}
 	}
 
+	if (_rd->getRemasteredLookRenderer())
+		_rd->getRemasteredLookRenderer()->notifyChange(buffer->pixels);
+
 	_stdDisplay->vBufferUnlock(buffer);
 
 	StdRect rect;
@@ -249,6 +253,9 @@ void SputRender::dimRegion(int x, int y, int width, int height, float scale) {
 
 		rowPointer += _backBuffer->tex.pitchInBytes;
 	}
+
+	if (_rd->getRemasteredLookRenderer())
+		_rd->getRemasteredLookRenderer()->notifyChange(_backBuffer->pixels);
 
 	_stdDisplay->vBufferUnlock(_backBuffer);
 }
@@ -414,6 +421,9 @@ void SputRender::drawProgressBar(float progress) {
 
 	for (int i = 0; i < 540; i++)
 		*pixel++ = color;
+
+	if (_rd->getRemasteredLookRenderer())
+		_rd->getRemasteredLookRenderer()->notifyChange(_mainGfxBuffer->pixels);
 
 	if (!inFrontScene)
 		_stdDisplay->vBufferUnlock(_mainGfxBuffer);

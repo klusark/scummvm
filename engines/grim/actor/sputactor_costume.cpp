@@ -191,7 +191,7 @@ void SputActorModule::drawCostumeImpl(CostumeNode *node, RdMatrix34 matrix) {
 				_rd->_model3.setClipPlane(actor->orientMatrix[1], actor->actorPos);
 			}
 
-			if (_rd->_thing.draw(modelInst->thing, parentThing->jointMatrices[modelInst->parentMeshIdx]))
+			if (_rd->_thing.draw(modelInst->thing, parentThing->jointMatrices[modelInst->parentMeshIdx], parentThing))
 				actor->onScreen = 1;
 
 			if (actor->extra && actor->extra->subClipNode == modelInst->parentMeshIdx)

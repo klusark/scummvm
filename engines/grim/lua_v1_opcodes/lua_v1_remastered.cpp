@@ -222,7 +222,7 @@ void Lua_V1::SetAdvancedLighting() {
 	if (!lua_isnumber(valueObj) || g_grim->getLibMode() == GrimEngine::kLibModeUser)
 		return;
 
-	_advancedLighting = (uint32)luaFtol(lua_getnumber(valueObj));
+	g_grim->_sputRender->setAdvancedLighting((uint32)luaFtol(lua_getnumber(valueObj)));
 }
 
 void Lua_V1::SetGameRenderMode() {

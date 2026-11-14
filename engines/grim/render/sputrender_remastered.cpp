@@ -236,4 +236,27 @@ void SputRender::drawPrimitivesCanvas(int layerMask) {
 	}
 }
 
+void SputRender::getIrisParameters(float *size, float *centerX, float *centerY) {
+	uint elapsed = (uint)_sputTime->getGameTime() - (uint)_irisStart;
+
+	*centerX = (float)((double)_irisCenterX / 640.0);
+	*centerY = (float)((double)_irisCenterY / 480.0);
+
+	if (_irisDuration == 0.0f) {
+		*size = 0.0f;
+		return;
+	}
+
+	float ratio = (float)elapsed / _irisDuration;
+	float magnitude = ratio < 0.0f ? -ratio : ratio;
+
+	if (_irisDuration < 0.0f) {
+		float value = 1.0f - magnitude;
+
+		*size = value <= 0.0f ? 0.0f : (value < 1.0f ? value : 1.0f);
+	} else {
+		*size = magnitude <= 0.0f ? 0.0f : (magnitude < 1.0f ? magnitude : 1.0f);
+	}
+}
+
 } // End of namespace Grim

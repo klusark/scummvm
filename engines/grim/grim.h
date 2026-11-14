@@ -48,6 +48,7 @@ class Commentary;
 class DialogLog;
 class HdCanvas;
 class IMuse;
+class RemasteredLookRenderer;
 class NormalText;
 class Polyglot;
 class RenderDroid;
@@ -175,7 +176,7 @@ public:
 	void setLanguage(int language);
 	const char *getLanguageCode() const;
 	static int getLanguageCount() { return kNumLanguages; }
-	int getRenderingMode() const { return _renderingMode; }
+	int getRenderingMode() const;
 	void setRenderingMode(int mode);
 
 	void clearEventQueue();
@@ -406,6 +407,7 @@ protected:
 	Res *_res = nullptr;
 	StdDisplay *_stdDisplay = nullptr;
 	HdCanvas *_hdCanvas = nullptr;
+	RemasteredLookRenderer *_remasteredLookRenderer = nullptr;
 	SputResource *_sputResource = nullptr;
 	SputRoom *_sputRoom = nullptr;
 	SputTime *_sputTime = nullptr;

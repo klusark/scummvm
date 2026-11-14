@@ -25,6 +25,7 @@
 #include "engines/grim/actor/sputactor.h"
 #include "engines/grim/costume/sputcostume.h"
 #include "engines/grim/costume/sputcostume_components.h"
+#include "engines/grim/remastered/look/look_renderer.h"
 #include "engines/grim/render/sputrender.h"
 #include "engines/grim/std/std_3d.h"
 #include "engines/grim/std/std_3d_config.h"
@@ -129,6 +130,9 @@ void SputActorModule::resetShadows(SputActor *actor) {
 }
 
 void SputActorModule::loadShadowResources(SputActor *actor) {
+	if (_rd->getRemasteredLookRenderer() && !_rd->getRemasteredLookRenderer()->isSoftwareEnabled())
+		return;
+
 	if (!actor->extra)
 		return;
 
@@ -279,7 +283,11 @@ void SputActorModule::drawShadowPolygon(const float *poly, int numPoly, float *m
 		int numClipped = plane->clipPoly(poly, numPoly, clipped[0]);
 
 		if (numClipped > 2) {
-			RdProcFace *face = _rd->_primit3.drawPolygon(clipped, numClipped, _shadowMaterial);
+			RdProcFace *face = nullptr;
+			RemasteredLookRenderer *remasteredLookRenderer = _rd->getRemasteredLookRenderer();
+
+			if (!remasteredLookRenderer || !remasteredLookRenderer->drawShadowGeometry(clipped[0], numClipped, 0))
+				face = _rd->_primit3.drawPolygon(clipped, numClipped, _shadowMaterial);
 
 			if (face) {
 				double xMin = (double)(uint)face->xMin;

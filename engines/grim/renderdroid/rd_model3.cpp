@@ -24,7 +24,10 @@
 #include "common/stream.h"
 #include "common/textconsole.h"
 
+#include "engines/grim/remastered/look/look_renderer.h"
 #include "engines/grim/renderdroid/rd.h"
+
+#include <string.h>
 
 namespace Grim {
 
@@ -1307,6 +1310,9 @@ void RenderDroid::Model3Module::freeEntry(RdModel3 *model3) {
 		for (uint m = 0; m < geo->numMeshes; m++) {
 			RdModel3Mesh *mesh = &geo->meshes[m];
 
+			if (_rd->_remasteredLookRenderer)
+				_rd->_remasteredLookRenderer->notifyFree(mesh->vertices);
+
 			delete[] mesh->vertices;
 			mesh->vertices = nullptr;
 
@@ -1352,9 +1358,10 @@ void RenderDroid::Model3Module::freeEntry(RdModel3 *model3) {
 	}
 }
 
-int RenderDroid::Model3Module::draw(RdThing *thing, RdMatrix34 mat) {
+int RenderDroid::Model3Module::draw(RdThing *thing, RdMatrix34 mat, RdThing *parentThing) {
 	RdCamera *camera = _rd->_camera.getCurrent();
 	RdVector3 center;
+	RdVector3 worldCenter = { 0.0f, 0.0f, 0.0f };
 
 	_curThing = thing;
 	_curModel3 = thing->data.model3;
@@ -1363,6 +1370,7 @@ int RenderDroid::Model3Module::draw(RdThing *thing, RdMatrix34 mat) {
 		_rd->transformPoint34(center, mat[3], camera->viewMatrix);
 	} else {
 		_rd->transformPoint34(center, _curModel3->geomCenter, mat);
+		memcpy(worldCenter, center, sizeof(worldCenter));
 		_rd->transformPoint34Acc(center, camera->viewMatrix);
 	}
 
@@ -1376,6 +1384,12 @@ int RenderDroid::Model3Module::draw(RdThing *thing, RdMatrix34 mat) {
 
 	if (_thingFrustrumCull == 2)
 		return 0;
+
+	if (_rd->_remasteredLookRenderer) {
+		const char *parentName = parentThing ? parentThing->data.model3->name : nullptr;
+
+		_rd->_remasteredLookRenderer->drawBeginModel3(_curModel3, worldCenter, _curModel3->radius, &mat[0][0], parentName);
+	}
 
 	_thingFrustrumCull = 1;
 
@@ -1416,7 +1430,9 @@ int RenderDroid::Model3Module::draw(RdThing *thing, RdMatrix34 mat) {
 	if (_curTextureMode >= _rd->_curTextureMode)
 		_curTextureMode = _rd->_curTextureMode;
 
-	if (_curLightingMode > 1) {
+	if (_rd->_remasteredLookRenderer && !_rd->_remasteredLookRenderer->isSoftwareEnabled())
+		_curLightingMode = 1;
+	else if (_curLightingMode > 1) {
 		_numGeoLights = 0;
 
 		for (uint i = 0; i < camera->numLights; i++) {
@@ -1454,6 +1470,9 @@ int RenderDroid::Model3Module::draw(RdThing *thing, RdMatrix34 mat) {
 	drawHNode(_curModel3->hNodes);
 	_numDrawnModels++;
 
+	if (_rd->_remasteredLookRenderer)
+		_rd->_remasteredLookRenderer->drawEndModel3();
+
 	return 1;
 }
 
@@ -1471,7 +1490,14 @@ void RenderDroid::Model3Module::drawHNode(RdModel3HNode *hNode) {
 			_curGeo->meshes[hNode->meshNodeIndex].userLightValue = _curGeo->meshes[ancestor->meshNodeIndex].userLightValue;
 		}
 
-		drawMesh(&_curGeo->meshes[hNode->meshNodeIndex], _curThing->jointMatrices[hNode->num]);
+		if (_rd->_remasteredLookRenderer) {
+			_rd->_remasteredLookRenderer->drawModel3Mesh(&_curGeo->meshes[hNode->meshNodeIndex], &_curThing->jointMatrices[hNode->num][0][0]);
+
+			if (_rd->_remasteredLookRenderer->isSoftwareEnabled())
+				drawMesh(&_curGeo->meshes[hNode->meshNodeIndex], _curThing->jointMatrices[hNode->num]);
+		} else {
+			drawMesh(&_curGeo->meshes[hNode->meshNodeIndex], _curThing->jointMatrices[hNode->num]);
+		}
 	}
 
 	if (hNode->numChildren) {

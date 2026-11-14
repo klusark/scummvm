@@ -28,6 +28,7 @@ namespace Grim {
 
 class StdBitmap;
 class Std3D;
+class RemasteredLookRenderer;
 struct Std3DSurface;
 
 enum StdDisplayLimits {
@@ -136,6 +137,8 @@ public:
 	void setStdBitmap(StdBitmap *stdBitmap) { _stdBitmap = stdBitmap; }
 	void setStd3D(Std3D *std3D) { _std3D = std3D; }
 	void setBuffers(StdVBuffer *mainGfxBuffer, StdVBuffer *backBuffer) { _mainGfxBuffer = mainGfxBuffer; _backBuffer = backBuffer; }
+	void notifyBufferWritten(StdVBuffer *buffer);
+	void setRemasteredLookRenderer(RemasteredLookRenderer *remasteredLookRenderer) { _remasteredLookRenderer = remasteredLookRenderer; }
 
 	int isDisplayOpen() { return _displayOpen; }
 	int isSurfacesCreated() { return _surfacesCreated; }
@@ -213,6 +216,7 @@ private:
 	Std3D *_std3D;
 	StdVBuffer *_mainGfxBuffer;
 	StdVBuffer *_backBuffer;
+	RemasteredLookRenderer *_remasteredLookRenderer = nullptr;
 	int _startup;
 	int _enumerated;
 	int _displayOpen;

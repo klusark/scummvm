@@ -352,6 +352,7 @@ int SputSmush::unlockMovieBuffer(LecBitmap *bitmap, StdRect *rect) {
 		return 1;
 	}
 
+	_stdDisplay->notifyBufferWritten(_presentBuf);
 	_stdDisplay->vBufferUnlock(_presentBuf);
 
 	return 0;

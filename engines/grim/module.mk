@@ -288,6 +288,18 @@ MODULE_OBJS := \
 	remastered/dialoglog.o \
 	remastered/hdcanvas.o \
 	remastered/hotspot.o \
+	remastered/look/look_consts.o \
+	remastered/look/look_device_gl2.o \
+	remastered/look/look_forward.o \
+	remastered/look/look_glsl.o \
+	remastered/look/look_lightprobe.o \
+	remastered/look/look_math.o \
+	remastered/look/look_pipeline.o \
+	remastered/look/look_programs.o \
+	remastered/look/look_renderer.o \
+	remastered/look/look_scene.o \
+	remastered/look/look_textures.o \
+	remastered/look/look_types.o \
 	remastered/look/materialpath.o \
 	remastered/look/mcb.o \
 	remastered/look/s3tc.o \

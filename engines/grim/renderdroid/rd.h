@@ -58,6 +58,7 @@ struct RdActiveFace;
 struct RdActiveSpan;
 
 class Std3D;
+class RemasteredLookRenderer;
 struct Std3DVertex;
 struct Std3DTri;
 
@@ -483,6 +484,9 @@ public:
 	int advanceFrame();
 	int getFrameTrue() const { return _frameTrue; }
 	bool isDemo() const { return _demo; }
+	SysStruct *getHs() const { return _hs; }
+	RemasteredLookRenderer *getRemasteredLookRenderer() const { return _remasteredLookRenderer; }
+	void setRemasteredLookRenderer(RemasteredLookRenderer *remasteredLookRenderer) { _remasteredLookRenderer = remasteredLookRenderer; }
 	void finishFrame();
 	void clearPreStatistics();
 	int beginHardwareScene();
@@ -737,7 +741,7 @@ public:
 		void calcFaceNormals(RdModel3 *model3);
 		void calcVertexNormals(RdModel3 *model3);
 		int getMeshMatrix(RdThing *thing, RdMatrix34 orient, uint nodeNum, RdMatrix34 meshOrient);
-		int draw(RdThing *thing, RdMatrix34 mat);
+		int draw(RdThing *thing, RdMatrix34 mat, RdThing *parentThing = nullptr);
 		void drawHNode(RdModel3HNode *hNode);
 		void drawMesh(RdModel3Mesh *mesh, RdMatrix34 mat);
 		int drawFace(RdFace3 *face, int backface);
@@ -860,7 +864,7 @@ public:
 		int setModel3(RdThing *thing, RdModel3 *model3);
 		int setCamera(RdThing *thing, RdCamera *camera);
 		int setSprite3(RdThing *thing, RdSprite *sprite);
-		int draw(RdThing *thing, RdMatrix34 mat);
+		int draw(RdThing *thing, RdMatrix34 mat, RdThing *parentThing = nullptr);
 		void accumulateMatrices(RdThing *thing, RdModel3HNode *hNode, RdMatrix34 parent);
 	};
 
@@ -1840,6 +1844,7 @@ private:
 	int _curProcFaceUserData;
 	bool _demo;
 	bool _remastered;
+	RemasteredLookRenderer *_remasteredLookRenderer = nullptr;
 	StdColorFormat _colorInfo;
 	RdColorEffects _curColorEffects;
 	float _mipDistances[4];

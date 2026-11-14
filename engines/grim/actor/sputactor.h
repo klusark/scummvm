@@ -166,6 +166,7 @@ public:
 	void setStd3D(Std3D *std3D) { _std3D = std3D; }
 	SputActor *getActors() { return _actors; }
 	int getNumActors() const { return _numActors; }
+	int getMaxActors() const { return _maxActors; }
 	SputActor *getSelectedActor() { return _selectedActor; }
 	void clearShadowMaterial() { _shadowMaterial = nullptr; }
 

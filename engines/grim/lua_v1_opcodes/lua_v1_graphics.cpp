@@ -23,6 +23,7 @@
 #include "engines/grim/lua_v1_opcodes/lua_v1.h"
 #include "engines/grim/remastered/sputmouse.h"
 #include "engines/grim/render/sputprimitive.h"
+#include "engines/grim/remastered/look/look_renderer.h"
 #include "engines/grim/render/sputrender.h"
 #include "engines/grim/movie/sputsmush.h"
 #include "engines/grim/std/std_3d.h"
@@ -574,6 +575,9 @@ void Lua_V1::BlastRect() {
 		g_grim->_stdDisplay->vBufferUnlock(buffer);
 		return;
 	}
+
+	if (g_grim->_remasteredLookRenderer)
+		g_grim->_remasteredLookRenderer->notifyChange(buffer->pixels);
 
 	int pitch = buffer->tex.pitchInBytes;
 	byte *rowPointer = buffer->pixels + pitch * y1 + x1 * 2;

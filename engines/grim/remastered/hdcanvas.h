@@ -30,6 +30,7 @@
 
 namespace Grim {
 
+class RemasteredLookRenderer;
 class OverlayManager;
 struct StdVBuffer;
 
@@ -44,7 +45,7 @@ public:
 	HdCanvas();
 	~HdCanvas();
 
-	void open();
+	void open(RemasteredLookRenderer *remasteredLookRenderer = nullptr);
 	void close();
 	bool isActive() const { return _active; }
 	void present(const StdVBuffer *scene, float gamma);
@@ -165,6 +166,9 @@ private:
 		byte cell[kPowCells + 1];
 	};
 
+	bool openGpu(RemasteredLookRenderer *remasteredLookRenderer);
+	void presentGpu(const StdVBuffer *scene);
+	void buildOverlayFrame();
 	void updateSoftwareAlpha();
 	void prepareFrontScene(const StdVBuffer *scene);
 	void swapScene(const StdVBuffer *scene);
@@ -205,6 +209,9 @@ private:
 
 	bool _active;
 	bool _stretched;
+	bool _gpu;
+	RemasteredLookRenderer *_remasteredLookRenderer;
+	uint32 *_overlayFrame;
 	uint32 *_frame;
 	int _redShift;
 	int _greenShift;

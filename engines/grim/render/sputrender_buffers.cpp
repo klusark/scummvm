@@ -23,7 +23,9 @@
 #include "common/textconsole.h"
 
 #include "engines/grim/grim.h"
+#include "engines/grim/remastered/look/look_renderer.h"
 #include "engines/grim/render/sputrender.h"
+#include "engines/grim/renderdroid/rd.h"
 #include "engines/grim/std/std_bitmap.h"
 
 namespace Grim {
@@ -218,6 +220,17 @@ void SputRender::fillDrawBuffer(StdVBuffer *src) {
 	int size = src->tex.width * src->tex.height;
 
 	_stdDisplay->vBufferDeCompressTo(src, _cleanBuffer);
+
+	RemasteredLookRenderer *remasteredLookRenderer = _rd->getRemasteredLookRenderer();
+
+	if (remasteredLookRenderer) {
+		if (_cleanBuffer->tex.width == src->tex.width && _cleanBuffer->tex.height == src->tex.height &&
+				_cleanBuffer->tex.format.bpp == src->tex.format.bpp)
+			remasteredLookRenderer->notifyChange(_cleanBuffer->pixels);
+		else
+			remasteredLookRenderer->notifyFree(_cleanBuffer->pixels);
+	}
+
 	_cleanBuffer->tex = src->tex;
 	_cleanBuffer->colorKey = 63519;
 
@@ -283,6 +296,9 @@ StdVBuffer *SputRender::screenShot(int width, int height) {
 
 		y = y + (double)yStep;
 	}
+
+	if (_rd->getRemasteredLookRenderer())
+		_rd->getRemasteredLookRenderer()->notifyChange(shot->pixels);
 
 	_stdDisplay->vBufferUnlock(shot);
 	_stdDisplay->vBufferUnlock(clean);

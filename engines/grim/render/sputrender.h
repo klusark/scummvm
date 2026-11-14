@@ -155,10 +155,13 @@ public:
 	void colorCorrect(uint16 *colors, int count);
 	void setGamma(float gamma);
 	float getGamma() const { return _gammaCorrection; }
+	void setAdvancedLighting(uint32 value) { _advancedLighting = value; }
+	uint32 getAdvancedLighting() const { return _advancedLighting; }
 	void dim(int force, char shift);
 	void dimRegion(int x, int y, int width, int height, float scale);
 
 	void getIris(float percent, int x, int y);
+	void getIrisParameters(float *size, float *centerX, float *centerY);
 	void irisDown(int x, int y, int duration);
 	void irisUp(int x, int y, int duration);
 	int irisComplete();
@@ -253,6 +256,7 @@ private:
 	int _renderVars[7];
 	uint16 _colorLookup[65536];
 	float _gammaCorrection;
+	uint32 _advancedLighting = 1;
 	StdColorFormat *_colorInfo;
 	int _b3DAcceleration;
 	int _acceleratedZBuffers;

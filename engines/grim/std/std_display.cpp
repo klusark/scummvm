@@ -22,6 +22,7 @@
 #include "common/endian.h"
 #include "common/textconsole.h"
 
+#include "engines/grim/remastered/look/look_renderer.h"
 #include "engines/grim/std/std_3d.h"
 #include "engines/grim/std/std_3d_config.h"
 #include "engines/grim/std/std_bitmap.h"
@@ -104,6 +105,9 @@ void StdDisplay::vBufferFree(StdVBuffer *&vBuffer) {
 void StdDisplay::vBufferFreeEntry(StdVBuffer *vBuffer) {
 	if (vBuffer->type == 0 || vBuffer->type == 2) {
 		if (vBuffer->pixels) {
+			if (_remasteredLookRenderer)
+				_remasteredLookRenderer->notifyFree(vBuffer->pixels);
+
 			delete[] vBuffer->pixels;
 			vBuffer->pixels = nullptr;
 		}
@@ -236,7 +240,15 @@ void StdDisplay::vBufferFill(StdVBuffer *vBuffer, int color, StdRect *rect) {
 	}
 }
 
+void StdDisplay::notifyBufferWritten(StdVBuffer *buffer) {
+	if (_remasteredLookRenderer)
+		_remasteredLookRenderer->notifyBufferWritten(buffer);
+}
+
 int StdDisplay::vBufferCopy(StdVBuffer *dst, StdVBuffer *src, int x, int y, StdRect *rect, char colorKey) {
+	if (_remasteredLookRenderer)
+		_remasteredLookRenderer->bufferCopy(dst, src, x, y, rect, colorKey != 0);
+
 	if (src->type == 0 && dst->type == 0) {
 		copyBltA(dst, src, x, y, rect, colorKey);
 		return 1;
@@ -286,6 +298,9 @@ int StdDisplay::vBufferDeCompressTo(StdVBuffer *src, StdVBuffer *dst) {
 	vBufferLock(dst);
 	lzssDecompress(dst->pixels, src->pixels, src->tex.sizeInBytes, dst->allocSize);
 
+	if (_remasteredLookRenderer)
+		_remasteredLookRenderer->notifyChange(dst->pixels);
+
 	return vBufferUnlock(dst);
 }
 
@@ -320,6 +335,9 @@ StdVBuffer *StdDisplay::vBufferConvertColorFormat(StdColorFormat *format, StdVBu
 
 	for (int i = 0; i < result->tex.height; i++)
 		_stdBitmap->convertPixelRow(&result->pixels[result->tex.pitchInBytes * i], format, &vBuffer->pixels[vBuffer->tex.pitchInBytes * i], &vBuffer->tex.format, result->tex.width);
+
+	if (_remasteredLookRenderer)
+		_remasteredLookRenderer->notifyChange(result->pixels);
 
 	vBufferUnlock(vBuffer);
 	vBufferUnlock(result);

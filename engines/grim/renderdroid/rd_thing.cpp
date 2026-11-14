@@ -19,6 +19,7 @@
  *
  */
 
+#include "engines/grim/remastered/look/look_renderer.h"
 #include "engines/grim/renderdroid/rd.h"
 
 namespace Grim {
@@ -160,14 +161,17 @@ void RenderDroid::ThingModule::accumulateMatrices(RdThing *thing, RdModel3HNode 
 	}
 }
 
-int RenderDroid::ThingModule::draw(RdThing *thing, RdMatrix34 mat) {
+int RenderDroid::ThingModule::draw(RdThing *thing, RdMatrix34 mat, RdThing *parentThing) {
 	if (!_rd->_curGeometryMode)
 		return 0;
 
 	switch (thing->type) {
 	case 1:
-		return _rd->_model3.draw(thing, mat);
+		return _rd->_model3.draw(thing, mat, parentThing);
 	case 4:
+		if (_rd->_remasteredLookRenderer)
+			_rd->_remasteredLookRenderer->drawSprite(thing, mat);
+
 		return _rd->_sprite.draw(thing, mat);
 	case 5:
 		return _rd->_model3.drawParticle(thing, mat);

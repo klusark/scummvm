@@ -24,6 +24,7 @@
 #include "common/stream.h"
 #include "common/textconsole.h"
 
+#include "engines/grim/remastered/look/look_renderer.h"
 #include "engines/grim/renderdroid/rd.h"
 #include "engines/grim/std/std_3d.h"
 #include "engines/grim/std/std_3d_config.h"
@@ -195,6 +196,24 @@ int RenderDroid::MaterialModule::loadEntry(char *path, RdMaterial *material, int
 		}
 	}
 
+	if (_rd->_remasteredLookRenderer) {
+		for (uint t = 0; t < numTextures; t++) {
+			RdTexture *texture = &material->textures[t];
+
+			if (!texture->numMips)
+				continue;
+
+			int owner = 0;
+
+			for (uint i = 0; i < numCels; i++) {
+				if ((material->cels[i]->flags & 8) && textureIndices[i] == t)
+					owner = (int)i;
+			}
+
+			_rd->_remasteredLookRenderer->notifyMaterialLoad(texture->mips[0]->pixels, path, owner);
+		}
+	}
+
 	if (material->flags & 1)
 		file->skip(768);
 
@@ -219,6 +238,9 @@ int RenderDroid::MaterialModule::destroy(RdMaterial *&material) {
 }
 
 void RenderDroid::MaterialModule::freeEntry(RdMaterial *material) {
+	if (_rd->_remasteredLookRenderer)
+		_rd->_remasteredLookRenderer->notifyFree(material);
+
 	for (uint i = 0; i < material->numCels; i++) {
 		delete material->cels[i];
 		material->cels[i] = nullptr;

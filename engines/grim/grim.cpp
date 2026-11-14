@@ -65,6 +65,7 @@
 #include "engines/grim/lua_v1_opcodes/lua_v1.h"
 #include "engines/grim/remastered/commentary.h"
 #include "engines/grim/remastered/hdcanvas.h"
+#include "engines/grim/remastered/look/look_renderer.h"
 #include "engines/grim/remastered/dialoglog.h"
 #include "engines/grim/remastered/hotspot.h"
 #include "engines/grim/remastered/lua_remastered.h"
@@ -627,8 +628,10 @@ void GrimEngine::createModules() {
 		_sputSmush = new SputSmush(_res, _stdDisplay, _sputRender, _mainGfxBuffer, _wuRegistry);
 	}
 
-	if (isRemastered())
+	if (isRemastered()) {
 		_hdCanvas = new HdCanvas();
+		_remasteredLookRenderer = new RemasteredLookRenderer(_rd, _sputRoom, _sputActor, _sputRender, _sputTime, _wuRegistry);
+	}
 
 	if (isRemastered())
 		_luaV1 = new Lua_Remastered();
@@ -694,6 +697,14 @@ void GrimEngine::destroyModules() {
 	_dialogLog = nullptr;
 	delete _luaV1;
 	_luaV1 = nullptr;
+	if (_rd)
+		_rd->setRemasteredLookRenderer(nullptr);
+
+	if (_stdDisplay)
+		_stdDisplay->setRemasteredLookRenderer(nullptr);
+
+	delete _remasteredLookRenderer;
+	_remasteredLookRenderer = nullptr;
 	delete _hdCanvas;
 	_hdCanvas = nullptr;
 	delete _sputSmush;
@@ -867,7 +878,7 @@ int GrimEngine::grimStartup() {
 
 	if (isRemastered()) {
 		initLanguage();
-		_wuRegistry->saveInt("RenderingMode", _renderingMode);
+		_wuRegistry->saveInt("RenderingMode", kRenderingModeHd);
 	}
 
 	_rd->startup(this);
@@ -985,6 +996,13 @@ void GrimEngine::setLanguage(int language) {
 
 void GrimEngine::setRenderingMode(int mode) {
 	// Only the classic renderer exists
+}
+
+int GrimEngine::getRenderingMode() const {
+	if (_remasteredLookRenderer && _remasteredLookRenderer->isOpen())
+		return (int)_wuRegistry->getFloat("RenderingMode", 0.0f) == 0 ? kRenderingModeHd : kRenderingModeClassic;
+
+	return _renderingMode;
 }
 
 void GrimEngine::grimMain() {
@@ -1493,7 +1511,7 @@ void GrimEngine::timedPageFlip() {
 	setPerfCounter(8);
 
 	if (isRemastered() && _libMode != kLibModeExiting) {
-		if (_displayPrevMode == kLibModeMenu && _libMode != kLibModeMenu && _renderingMode != kRenderingModeHd) {
+		if (_displayPrevMode == kLibModeMenu && _libMode != kLibModeMenu && getRenderingMode() != kRenderingModeHd) {
 			_sputRender->getIris(1.0f, 320, 240);
 			_hdCanvas->clearBuffer();
 			_hdCanvas->getOverlays()->render(40, 0);
@@ -2397,7 +2415,10 @@ int GrimEngine::selectDisplayMode(int deviceIndex, int modeIndex, int threeDInde
 		Graphics::PixelFormat pixelFormat(2, 5, 6, 5, 0, 11, 5, 0, 0);
 
 		if (_hdCanvas) {
-			_hdCanvas->open();
+			_hdCanvas->open(_remasteredLookRenderer);
+
+			if (_remasteredLookRenderer && !_remasteredLookRenderer->isOpen())
+				_wuRegistry->saveInt("RenderingMode", kRenderingModeClassic);
 		} else {
 			initGraphics(kDisplayWidth, kDisplayHeight, &pixelFormat);
 
@@ -2447,6 +2468,12 @@ int GrimEngine::selectDisplayMode(int deviceIndex, int modeIndex, int threeDInde
 
 	_zBuffer = zBuffer;
 	setDisplay(_backBuffer, _zBuffer);
+
+	if (_remasteredLookRenderer && _remasteredLookRenderer->isOpen()) {
+		_remasteredLookRenderer->setBuffers(_backBuffer, _zBuffer, _mainGfxBuffer);
+		_rd->setRemasteredLookRenderer(_remasteredLookRenderer);
+		_stdDisplay->setRemasteredLookRenderer(_remasteredLookRenderer);
+	}
 	_wuRegistry->saveBinary("LastDisplayDevice", device->guid, sizeof(device->guid));
 	_show = device->type == 0;
 
@@ -2527,6 +2554,9 @@ void GrimEngine::shutdownDisplay() {
 		_mainGfxBuffer->pixels = nullptr;
 		_backBuffer->pixels = nullptr;
 	}
+
+	_rd->setRemasteredLookRenderer(nullptr);
+	_stdDisplay->setRemasteredLookRenderer(nullptr);
 
 	if (_hdCanvas)
 		_hdCanvas->close();

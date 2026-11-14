@@ -21,6 +21,7 @@
 
 #include "common/textconsole.h"
 
+#include "engines/grim/remastered/look/look_renderer.h"
 #include "engines/grim/renderdroid/rd.h"
 #include "engines/grim/std/std_3d.h"
 #include "engines/grim/std/std_3d_config.h"
@@ -96,8 +97,12 @@ int RenderDroid::CameraModule::setCanvas(RdCamera *camera, RdCanvas *canvas) {
 }
 
 int RenderDroid::CameraModule::setCurrent(RdCamera *camera) {
-	if (_curCamera != camera)
+	if (_curCamera != camera) {
 		_curCamera = camera;
+
+		if (_rd->_remasteredLookRenderer)
+			_rd->_remasteredLookRenderer->postCameraChange();
+	}
 
 	return 1;
 }
