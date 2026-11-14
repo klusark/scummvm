@@ -22,10 +22,13 @@ namespace Grim {
 
 static void Openspace(int32 size) {
 	int32 base = Mbuffbase - Mbuffer;
+	int32 oldSize = Mbuffsize;
 	Mbuffsize *= 2;
 	if (Mbuffnext + size > Mbuffsize)  // still not big enough?
 		Mbuffsize = Mbuffnext + size;
 	Mbuffer = (char *)luaM_realloc(Mbuffer, Mbuffsize);
+	// (the whole buffer is written to saves: lua_Save)
+	memset(Mbuffer + oldSize, 0, Mbuffsize - oldSize);
 	Mbuffbase = Mbuffer + base;
 }
 
