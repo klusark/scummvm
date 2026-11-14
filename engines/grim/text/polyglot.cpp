@@ -53,6 +53,17 @@ void Polyglot::shutdown() {
 	_lineCount = 0;
 }
 
+bool Polyglot::tabFileExists(const char *tabFile) {
+	Common::SeekableReadStream *file = _hs->openFile(tabFile);
+
+	if (!file)
+		return false;
+
+	delete file;
+
+	return true;
+}
+
 void Polyglot::configure(const char *tabFile) {
 	Common::SeekableReadStream *file = _hs->openFile(tabFile);
 

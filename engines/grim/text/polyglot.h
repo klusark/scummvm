@@ -37,6 +37,7 @@ public:
 	int startup();
 	virtual void shutdown();
 	virtual void configure(const char *tabFile);
+	bool tabFileExists(const char *tabFile);
 	char *findChar(char *s, int c);
 	virtual const char *getTranslation(const char *msg);
 

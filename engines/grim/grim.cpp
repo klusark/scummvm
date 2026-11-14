@@ -887,8 +887,14 @@ int GrimEngine::grimStartup() {
 	_polyglotV1->initialize(this);
 	_polyglotV1->startup();
 
-	if (!isRemastered())
-		_polyglotV1->configure("grim.tab");
+	if (!isRemastered()) {
+		const char *tabFile = "grim.tab";
+
+		if ((_gameFlags & ADGF_DEMO) && !_polyglotV1->tabFileExists(tabFile))
+			tabFile = "language.tab";
+
+		_polyglotV1->configure(tabFile);
+	}
 
 	_wuRegistry->startup("1.0");
 
