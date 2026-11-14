@@ -1687,7 +1687,7 @@ int IMuse::soundsGetPhoneme(int soundId, int offset) {
 void IMuse::soundsSaveLoad(Common::Serializer &ser) {
 	Common::StackLock lock(*_mutex);
 
-	char effectName[sizeof(_curEffectName)];
+	char effectName[sizeof(_curEffectName)] = {};
 
 	if (ser.isSaving()) {
 		Common::strlcpy(effectName, _curEffectId ? _curEffectName : "OFF", sizeof(effectName));
