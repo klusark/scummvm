@@ -232,6 +232,9 @@ void GLContext::init(int screenW, int screenH, Graphics::PixelFormat pixelFormat
 	current_color_material_type = TGL_AMBIENT_AND_DIFFUSE;
 	color_material_enabled = 0;
 
+	// normals (GL_NORMALIZE is off by default)
+	normalize_enabled = false;
+
 	// textures
 	texture_2d_enabled = false;
 	current_texture = default_texture = alloc_texture(0);
