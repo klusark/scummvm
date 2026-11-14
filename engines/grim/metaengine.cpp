@@ -143,7 +143,7 @@ static const ADExtraGuiOptionsMap gameGuiOptions[] = {
 		}
 	},
 	{
-		GAMEOPTION_REMASTER_DEVELOPER_MODE,
+		GAMEOPTION_DEVELOPER_MODE,
 		{
 			_s("Developer mode"),
 			_s("Enable the developer features of the original game: the debug keys and the cheat menu."),
