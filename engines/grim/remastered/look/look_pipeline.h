@@ -63,6 +63,7 @@ struct LookSpriteDraw {
 };
 
 class RemasteredLookForward;
+class RemasteredLookOverlay;
 
 class RemasteredLookPipeline {
 	friend class RemasteredLookForward;
@@ -97,7 +98,7 @@ public:
 
 	void renderScene();
 	void present(RemasteredLookTexture *software, float softwareAlpha, bool deferredEnabled, bool softwareEnabled,
-			RemasteredLookTexture *overlay, bool frontBufferVisible, bool widescreen, float resolutionScaling);
+			RemasteredLookOverlay *overlay, bool frontBufferVisible, bool widescreen, float resolutionScaling);
 
 	uint getTargetWidth() const { return _targetWidth; }
 	uint getTargetHeight() const { return _targetHeight; }

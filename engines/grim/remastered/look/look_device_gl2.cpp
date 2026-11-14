@@ -262,6 +262,9 @@ bool RemasteredLookDeviceGl2::precompilePrograms() {
 			return false;
 	}
 
+	getProgram(kLookProgramText);
+	getProgram(kLookProgramColorQuad);
+
 	return true;
 }
 
@@ -572,6 +575,9 @@ void RemasteredLookDeviceGl2::uploadLevel(RemasteredLookTextureGl *texture, uint
 	case kLookFormatZ16:
 		glTexImage2D(GL_TEXTURE_2D, level, GL_R16, width, height, 0, GL_RED, GL_UNSIGNED_SHORT, data);
 		break;
+	case kLookFormatR8:
+		glTexImage2D(GL_TEXTURE_2D, level, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, data);
+		break;
 	case kLookFormatDxt1:
 	case kLookFormatDxt3:
 	case kLookFormatDxt5: {
@@ -670,6 +676,41 @@ void RemasteredLookDeviceGl2::updateTexture(RemasteredLookTexture *texture, cons
 		warning("RemasteredLookDeviceGl2::updateTexture(): the upload of %ux%u (format %d, texture %u) failed with error 0x%x", width, height,
 				(int)glTexture->getFormat(), glTexture->id, (uint)error);
 
+	glBindTexture(GL_TEXTURE_2D, previous);
+}
+
+void RemasteredLookDeviceGl2::updateTextureRegion(RemasteredLookTexture *texture, const byte *pixels, uint pitchBytes, uint x, uint y,
+		uint width, uint height) {
+	RemasteredLookTextureGl *glTexture = static_cast<RemasteredLookTextureGl *>(texture);
+
+	if (!glTexture || glTexture->isRenderTarget() || !pixels || width == 0 || height == 0 || x + width > glTexture->getWidth() ||
+			y + height > glTexture->getHeight())
+		return;
+
+	uint bytesPerPixel = 0;
+	int glFormat = GL_RGBA;
+
+	switch (glTexture->getFormat()) {
+	case kLookFormatRgba8:
+		bytesPerPixel = 4;
+		break;
+	case kLookFormatR8:
+		bytesPerPixel = 1;
+		glFormat = GL_RED;
+		break;
+	default:
+		warning("RemasteredLookDeviceGl2::updateTextureRegion(): unsupported texture format %d", (int)glTexture->getFormat());
+		return;
+	}
+
+	GLint previous = 0;
+
+	glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous);
+	glBindTexture(GL_TEXTURE_2D, glTexture->id);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glPixelStorei(GL_UNPACK_ROW_LENGTH, (GLint)(pitchBytes / bytesPerPixel));
+	glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, width, height, glFormat, GL_UNSIGNED_BYTE, pixels);
+	glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 	glBindTexture(GL_TEXTURE_2D, previous);
 }
 
@@ -1144,6 +1185,10 @@ RemasteredLookTexture *RemasteredLookDeviceGl2::createTexture(const LookImage &i
 }
 
 void RemasteredLookDeviceGl2::updateTexture(RemasteredLookTexture *texture, const byte *pixels, uint width, uint height) {
+}
+
+void RemasteredLookDeviceGl2::updateTextureRegion(RemasteredLookTexture *texture, const byte *pixels, uint pitchBytes, uint x, uint y,
+		uint width, uint height) {
 }
 
 void RemasteredLookDeviceGl2::destroyTexture(RemasteredLookTexture *&texture) {

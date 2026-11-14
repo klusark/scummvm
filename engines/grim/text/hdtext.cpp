@@ -40,7 +40,8 @@
 namespace Grim {
 
 HdFont::HdFont(const Common::String &path, float size, int minPixels, float scale) :
-		_path(path), _requestedSize(size), _minPixels(minPixels), _pixelSize(0.0f), _loaded(false), _data(nullptr), _dataSize(0) {
+		_path(path), _requestedSize(size), _minPixels(minPixels), _pixelSize(0.0f), _loaded(false), _data(nullptr), _dataSize(0),
+		_generation(0), _atlasUsedHeight(0) {
 	memset(_glyphs, 0, sizeof(_glyphs));
 	memset(&_emptyGlyph, 0, sizeof(_emptyGlyph));
 
@@ -100,12 +101,23 @@ void HdFont::regenerate(float scale) {
 	if (!_data)
 		return;
 
-	if (_loaded && computePixelSize(scale) == _pixelSize)
-		return;
-
 	freeGlyphs();
 	_loaded = false;
 	loadGlyphs(scale);
+}
+
+void HdFont::writeAtlas(byte *destination) const {
+	memset(destination, 0, (size_t)kAtlasSize * (size_t)kAtlasSize);
+
+	for (int c = 0; c < kNumGlyphs; c++) {
+		const Glyph *glyph = &_glyphs[c];
+
+		if (!glyph->alpha)
+			continue;
+
+		for (int row = 0; row < glyph->height; row++)
+			memcpy(destination + (size_t)(glyph->atlasY + row) * kAtlasSize + glyph->atlasX, glyph->alpha + row * glyph->width, glyph->width);
+	}
 }
 
 void HdFont::loadGlyphs(float scale) {
@@ -129,50 +141,74 @@ void HdFont::loadGlyphs(float scale) {
 
 	float glyphScale = pixels / (float)cell;
 
+	int cursorX = 2;
+	int cursorY = 2;
+	int rowBottom = 2;
+
 	for (int c = 0; c < kNumGlyphs; c++) {
 		Glyph *glyph = &_glyphs[c];
 		Graphics::TTFGlyphs::GlyphInfo info;
+		int left = 0;
+		int bottom = 0;
+		int width = 0;
+		int height = 0;
 
-		if (!face.loadGlyph((uint32)c, &info))
-			continue;
+		if (face.loadGlyph((uint32)c, &info)) {
+			glyph->advance = (float)info.advance * glyphScale;
 
-		glyph->advance = (float)info.advance * glyphScale;
+			if (pixels <= 18.0f)
+				glyph->advance += 1.0f;
 
-		if (pixels <= 18.0f)
-			glyph->advance += 1.0f;
+			if (info.hasOutline) {
+				float scaledXMin = (float)((double)info.xMin * (double)glyphScale);
+				float scaledYMin = (float)((double)info.yMin * (double)glyphScale);
+				float scaledXMax = (float)((double)info.xMax * (double)glyphScale);
+				float scaledYMax = (float)((double)info.yMax * (double)glyphScale);
+				int right = (int)ceil((double)scaledXMax);
+				int top = (int)ceil((double)scaledYMax);
 
-		if (!info.hasOutline)
-			continue;
-
-		float scaledXMin = (float)((double)info.xMin * (double)glyphScale);
-		float scaledYMin = (float)((double)info.yMin * (double)glyphScale);
-		float scaledXMax = (float)((double)info.xMax * (double)glyphScale);
-		float scaledYMax = (float)((double)info.yMax * (double)glyphScale);
-		int left = (int)floor((double)scaledXMin);
-		int bottom = (int)floor((double)scaledYMin);
-		int right = (int)ceil((double)scaledXMax);
-		int top = (int)ceil((double)scaledYMax);
-		int width = right - left;
-		int height = top - bottom;
-
-		glyph->xOffset = (float)left;
-		glyph->yOffset = (float)-top;
-
-		if (width <= 0 || height <= 0)
-			continue;
-
-		if (width > 4096 || height > 4096) {
-			warning("HdFont: the glyph %d of '%s' is too big", c, _path.c_str());
-			continue;
+				left = (int)floor((double)scaledXMin);
+				bottom = (int)floor((double)scaledYMin);
+				width = right - left;
+				height = top - bottom;
+				glyph->xOffset = (float)left;
+				glyph->yOffset = (float)-top;
+			}
 		}
 
-		glyph->alpha = new byte[width * height]();
+		if (width < 0)
+			width = 0;
+
+		if (height < 0)
+			height = 0;
+
+		if ((uint)(cursorX + width + 2) >= (uint)kAtlasSize) {
+			cursorY = rowBottom;
+			cursorX = 2;
+		}
+
+		glyph->atlasX = cursorX;
+		glyph->atlasY = cursorY;
 		glyph->width = width;
 		glyph->height = height;
 
-		face.renderGlyph(glyphScale, left, bottom, width, height, glyph->alpha);
+		if (width > 0 && height > 0) {
+			if (cursorX + width > kAtlasSize || cursorY + height > kAtlasSize) {
+				warning("HdFont: the glyph %d of '%s' does not fit in the %dx%d atlas", c, _path.c_str(), (int)kAtlasSize, (int)kAtlasSize);
+			} else {
+				glyph->alpha = new byte[width * height]();
+				face.renderGlyph(glyphScale, left, bottom, width, height, glyph->alpha);
+			}
+		}
+
+		cursorX += width + 4;
+
+		if ((uint)(height + cursorY + 4) > (uint)rowBottom)
+			rowBottom = height + cursorY + 4;
 	}
 
+	_atlasUsedHeight = rowBottom < (int)kAtlasSize ? (uint)rowBottom : (uint)kAtlasSize;
+	_generation++;
 	_loaded = true;
 }
 
@@ -190,10 +226,10 @@ const HdFont::Glyph *HdFont::getGlyph(int c) const {
 HdTextCache::HdTextCache() : pixelSize(0.0f), minX(0.0f), minY(0.0f), maxRight(0.0f), maxBottom(0.0f) {
 }
 
-HdTextDraw::HdTextDraw() : originX(0.0f), originY(0.0f), textRed(0.0f), textGreen(0.0f), textBlue(0.0f), alpha(0.0f) {
+HdTextDraw::HdTextDraw() : font(nullptr), originX(0.0f), originY(0.0f), textRed(0.0f), textGreen(0.0f), textBlue(0.0f), alpha(0.0f) {
 }
 
-HdText::HdText() : _scale(1.0f), _customFont(nullptr), _customFontTried(false) {
+HdText::HdText() : _scale(1.0f), _customFont(nullptr), _customFontTried(false), _debugFont(nullptr), _debugFontTried(false) {
 }
 
 void HdText::regenerate(float scale) {
@@ -212,7 +248,7 @@ HdText::~HdText() {
 
 const HdFont *HdText::loadFont(const Common::String &path, float size, int minPixels) {
 	for (uint i = 0; i < _fonts.size(); i++) {
-		if (_fonts[i]->getRequestedSize() == size && _fonts[i]->getPath().equalsIgnoreCase(path))
+		if (_fonts[i]->getRequestedSize() == size && _fonts[i]->getPath() == path)
 			return _fonts[i];
 	}
 
@@ -274,6 +310,15 @@ const HdFont *HdText::getCustomFont() {
 	}
 
 	return _customFont;
+}
+
+const HdFont *HdText::getDebugFont() {
+	if (!_debugFontTried) {
+		_debugFontTried = true;
+		_debugFont = loadFont("FontsHD/FuturaStd-Heavy.ttf", 1.0f, 14);
+	}
+
+	return _debugFont;
 }
 
 int HdText::getFontHeight(const HdFont *font, const HdTextCanvas &canvas) {
@@ -502,6 +547,7 @@ void HdText::align(HdTextCache *cache, float alignX, float alignY) const {
 
 void HdText::buildDraw(const HdTextInfo &info, const HdTextCache *cache, const HdTextCanvas &canvas, HdTextDraw *draw) const {
 	draw->quads.clear();
+	draw->font = info.font;
 
 	int numRows = (int)cache->rows.size();
 

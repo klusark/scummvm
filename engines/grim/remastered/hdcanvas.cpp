@@ -31,6 +31,7 @@
 
 #include "engines/grim/grim.h"
 #include "engines/grim/remastered/hdcanvas.h"
+#include "engines/grim/remastered/look/look_overlay.h"
 #include "engines/grim/remastered/look/look_renderer.h"
 #include "engines/grim/remastered/overlay.h"
 #include "engines/grim/std/std_display.h"
@@ -60,14 +61,13 @@ HdCanvas::SceneCache::~SceneCache() {
 	delete[] frame;
 }
 
-HdCanvas::HdCanvas() : _active(false), _stretched(false), _gpu(false), _width(kReferenceWidth), _height(kReferenceHeight),
-		_remasteredLookRenderer(nullptr), _overlayFrame(nullptr), _frame(nullptr), _redShift(16), _greenShift(8), _blueShift(0), _opaqueMask(0xFF000000),
+HdCanvas::HdCanvas() : _active(false), _stretched(false), _gpu(false), _gpuWanted(false), _width(kReferenceWidth),
+		_height(kReferenceHeight), _remasteredLookRenderer(nullptr), _frame(nullptr), _redShift(16), _greenShift(8), _blueShift(0), _opaqueMask(0xFF000000),
 		_gamma(1.0f), _frontScene(nullptr), _sceneWidth(0), _sceneHeight(0), _scenePitch(0), _softwareAlpha(0.0f),
 		_softwareAlphaEnd(0.0f), _softwareAlphaStart(0.0f), _softwareAlphaBlendTime(0.75f), _previousFrameTime(0.0),
 		_hasPreviousFrame(false), _redMax(0), _greenMax(0), _blueMax(0), _sceneUseCounter(0), _sceneSerial(0),
 		_composedSceneToken(0), _composedValid(false), _overlays(nullptr) {
 	memset(&_sceneFormat, 0, sizeof(_sceneFormat));
-	memset(&_overlayDirty, 0, sizeof(_overlayDirty));
 	memset(_redLevels, 0, sizeof(_redLevels));
 	memset(_greenLevels, 0, sizeof(_greenLevels));
 	memset(_blueLevels, 0, sizeof(_blueLevels));
@@ -93,6 +93,7 @@ bool HdCanvas::openGpu(RemasteredLookRenderer *remasteredLookRenderer) {
 	if (!remasteredLookRenderer ||!(Graphics::Renderer::getAvailableTypes() & Graphics::kRendererTypeOpenGLShaders))
 		return false;
 
+	_gpuWanted = true;
 	initGraphics3d(kReferenceWidth, kReferenceHeight);
 
 	int width = g_system->getWidth();
@@ -105,6 +106,7 @@ bool HdCanvas::openGpu(RemasteredLookRenderer *remasteredLookRenderer) {
 
 	if (!g_system->hasFeature(OSystem::kFeatureOpenGLForGame) || !remasteredLookRenderer->open(width, height)) {
 		warning("HdCanvas::openGpu(): the Remastered look is not available, using the software scene");
+		_gpuWanted = false;
 		return false;
 	}
 
@@ -114,12 +116,9 @@ bool HdCanvas::openGpu(RemasteredLookRenderer *remasteredLookRenderer) {
 	_opaqueMask = 0xFF000000;
 
 	delete[] _frame;
-	delete[] _overlayFrame;
+	_frame = nullptr;
 	_width = width;
 	_height = height;
-	_frame = new uint32[(size_t)_width * (size_t)_height]();
-	_overlayFrame = new uint32[(size_t)_width * (size_t)_height]();
-	memset(&_overlayDirty, 0, sizeof(_overlayDirty));
 
 	releaseSceneCaches();
 	_composedItems.clear();
@@ -179,9 +178,9 @@ void HdCanvas::close() {
 		_remasteredLookRenderer->close();
 
 	_gpu = false;
+	_gpuWanted = false;
 	_remasteredLookRenderer = nullptr;
-	delete[] _overlayFrame;
-	_overlayFrame = nullptr;
+	_atlasScratch = Common::Array<byte>();
 	_active = false;
 	_items.clear();
 	_composedItems.clear();
@@ -202,6 +201,9 @@ void HdCanvas::beginFrame() {
 	if (_gpu && _remasteredLookRenderer) {
 		pollSize();
 		_remasteredLookRenderer->beginFrame();
+
+		if (_remasteredLookRenderer->getOverlay())
+			_remasteredLookRenderer->getOverlay()->beginFrame();
 	}
 }
 
@@ -216,17 +218,9 @@ void HdCanvas::pollSize() {
 }
 
 void HdCanvas::resize(int width, int height) {
-	delete[] _frame;
-	delete[] _overlayFrame;
 	_width = width;
 	_height = height;
-	_frame = new uint32[(size_t)_width * (size_t)_height]();
-	_overlayFrame = new uint32[(size_t)_width * (size_t)_height]();
-	memset(&_overlayDirty, 0, sizeof(_overlayDirty));
-	releaseSceneCaches();
 	_items.clear();
-	_composedItems.clear();
-	_composedValid = false;
 	_remasteredLookRenderer->setHostSize(width, height);
 	g_grim->regenerateTextAtlases();
 }
@@ -317,6 +311,16 @@ void HdCanvas::queueOverlay(const byte *premultipliedRgba, int srcWidth, int src
 		item.desaturate = desaturate < 0.0f ? 0.0f : desaturate;
 
 	item.gamma = _gamma;
+
+	if (_gpu) {
+		RemasteredLookOverlay *overlay = _remasteredLookRenderer->getOverlay();
+
+		if (overlay)
+			overlay->queueImage(premultipliedRgba, srcWidth, srcHeight, x, y, width, height, mirror, item.alpha, item.desaturate, item.gamma);
+
+		return;
+	}
+
 	_items.push_back(item);
 }
 
@@ -345,6 +349,17 @@ void HdCanvas::queueFilledRectangle(int left, int top, int right, int bottom, ui
 	item.fillRed = (float)(((double)(colour & 0xFF) / 255.0) * (double)alpha);
 	item.fillGreen = (float)(((double)((colour >> 8) & 0xFF) / 255.0) * (double)alpha);
 	item.fillBlue = (float)(((double)((colour >> 16) & 0xFF) / 255.0) * (double)alpha);
+
+	if (_gpu) {
+		RemasteredLookOverlay *overlay = _remasteredLookRenderer->getOverlay();
+		float color[4] = { item.fillRed, item.fillGreen, item.fillBlue, alpha };
+
+		if (overlay)
+			overlay->queueFill(item.x, item.y, item.width, item.height, color);
+
+		return;
+	}
+
 	_items.push_back(item);
 }
 
@@ -357,12 +372,66 @@ void HdCanvas::clearBuffer() {
 	item.width = (float)_width;
 	item.height = (float)_height;
 	item.alpha = 1.0f;
+
+	if (_gpu) {
+		RemasteredLookOverlay *overlay = _remasteredLookRenderer->getOverlay();
+		float color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+		if (overlay)
+			overlay->queueFill(item.x, item.y, item.width, item.height, color);
+
+		return;
+	}
+
 	_items.push_back(item);
+}
+
+void HdCanvas::queueTextGpu(const HdTextDraw &draw) {
+	RemasteredLookOverlay *overlay = _remasteredLookRenderer->getOverlay();
+	const HdFont *font = draw.font;
+
+	if (!overlay || !font)
+		return;
+
+	if (!overlay->hasFont(font, font->getGeneration())) {
+		size_t atlasBytes = (size_t)HdFont::kAtlasSize * (size_t)HdFont::kAtlasSize;
+
+		if (_atlasScratch.size() != atlasBytes)
+			_atlasScratch.resize(atlasBytes);
+
+		font->writeAtlas(&_atlasScratch[0]);
+		overlay->setFont(font, font->getGeneration(), &_atlasScratch[0], font->getAtlasUsedHeight());
+	}
+
+	Common::Array<LookOverlayTextQuad> quads;
+
+	quads.resize(draw.quads.size());
+
+	for (uint i = 0; i < draw.quads.size(); i++) {
+		const HdTextQuad &quad = draw.quads[i];
+
+		quads[i].x = quad.x;
+		quads[i].y = quad.y;
+		quads[i].width = quad.width;
+		quads[i].height = quad.height;
+		quads[i].atlasX = quad.glyph ? quad.glyph->atlasX : 0;
+		quads[i].atlasY = quad.glyph ? quad.glyph->atlasY : 0;
+	}
+
+	float color[4] = { draw.textRed, draw.textGreen, draw.textBlue, draw.alpha };
+
+	overlay->queueText(font, &quads[0], quads.size(), color, draw.alpha, draw.originX, draw.originY);
 }
 
 void HdCanvas::queueText(const HdTextDraw &draw) {
 	if (draw.quads.empty())
 		return;
+
+	if (_gpu) {
+		queueTextGpu(draw);
+
+		return;
+	}
 
 	_items.push_back(Item());
 
@@ -396,6 +465,15 @@ void HdCanvas::queueMovie(const byte *rgba, int width, int height, int contentSe
 		halfHeight = 1.0f;
 	}
 
+	if (_gpu) {
+		RemasteredLookOverlay *overlay = _remasteredLookRenderer->getOverlay();
+
+		if (overlay)
+			overlay->queueMovie(rgba, width, height, contentSerial, halfWidth, halfHeight, _gamma);
+
+		return;
+	}
+
 	Item item;
 
 	item.kind = kItemMovie;
@@ -413,6 +491,9 @@ void HdCanvas::queueMovie(const byte *rgba, int width, int height, int contentSe
 }
 
 void HdCanvas::dropPixels(const byte *pixels) {
+	if (_gpu && _remasteredLookRenderer && _remasteredLookRenderer->getOverlay())
+		_remasteredLookRenderer->getOverlay()->dropImage(pixels);
+
 	for (uint i = 0; i < _items.size(); i++) {
 		if (_items[i].pixels == pixels)
 			_items[i].pixels = nullptr;
@@ -643,7 +724,7 @@ byte HdCanvas::lookupPow(const PowTable &table, float value) const {
 }
 
 void HdCanvas::present(const StdVBuffer *scene, float gamma) {
-	if (!_active || !_frame)
+	if (!_active)
 		return;
 
 	_gamma = gamma;
@@ -652,6 +733,9 @@ void HdCanvas::present(const StdVBuffer *scene, float gamma) {
 		presentGpu(scene);
 		return;
 	}
+
+	if (!_frame)
+		return;
 
 	updateSoftwareAlpha();
 
@@ -694,156 +778,14 @@ void HdCanvas::present(const StdVBuffer *scene, float gamma) {
 	_stretched = g_grim->isWidescreenStretched();
 }
 
-void HdCanvas::unionBounds(Bounds *bounds, int left, int top, int right, int bottom) const {
-	if (left >= right || top >= bottom)
-		return;
-
-	if (bounds->left >= bounds->right || bounds->top >= bounds->bottom) {
-		bounds->left = left;
-		bounds->top = top;
-		bounds->right = right;
-		bounds->bottom = bottom;
-
-		return;
-	}
-
-	bounds->left = MIN(bounds->left, left);
-	bounds->top = MIN(bounds->top, top);
-	bounds->right = MAX(bounds->right, right);
-	bounds->bottom = MAX(bounds->bottom, bottom);
-}
-
-void HdCanvas::getItemBounds(const Item &item, Bounds *bounds) const {
-	switch (item.kind) {
-	case kItemBitmap:
-		if (item.pixels && item.bitmapAlpha > 0)
-			unionBounds(bounds, MAX(item.bitmapX, 0), MAX(item.bitmapY, 0), MIN(item.bitmapX + item.srcWidth, _width),
-					MIN(item.bitmapY + item.srcHeight, _height));
-
-		break;
-	case kItemOverlay:
-	case kItemMovie:
-		if (!item.pixels || !(item.width > 0.0f) || !(item.height > 0.0f))
-			break;
-
-		unionBounds(bounds, clampPixel(item.x, _width), clampPixel(item.y, _height), clampPixel(item.x + item.width, _width),
-				clampPixel(item.y + item.height, _height));
-		break;
-	case kItemFill:
-		unionBounds(bounds, clampPixel(item.x, _width), clampPixel(item.y, _height), clampPixel(item.x + item.width, _width),
-				clampPixel(item.y + item.height, _height));
-		break;
-	case kItemText: {
-		const HdTextDraw &draw = item.text;
-
-		for (uint q = 0; q < draw.quads.size(); q++) {
-			const HdTextQuad &quad = draw.quads[q];
-
-			if (!quad.glyph || !quad.glyph->alpha)
-				continue;
-
-			float quadLeft = quad.x + draw.originX;
-			float quadTop = quad.y + draw.originY;
-
-			unionBounds(bounds, clampPixel(quadLeft, _width), clampPixel(quadTop, _height),
-					clampPixel(quadLeft + (float)quad.width, _width), clampPixel(quadTop + (float)quad.height, _height));
-		}
-
-		break;
-	}
-	default:
-		break;
-	}
-}
-
-void HdCanvas::buildOverlayFrame() {
-	Bounds area;
-
-	memset(&area, 0, sizeof(area));
-
-	for (uint i = 0; i < _items.size(); i++)
-		getItemBounds(_items[i], &area);
-
-	Bounds region = area;
-
-	unionBounds(&region, _overlayDirty.left, _overlayDirty.top, _overlayDirty.right, _overlayDirty.bottom);
-	_overlayDirty = area;
-
-	if (region.left >= region.right || region.top >= region.bottom)
-		return;
-
-	size_t rowBytes = (size_t)(region.right - region.left) * sizeof(uint32);
-
-	for (int y = region.top; y < region.bottom; y++) {
-		uint32 *row = _frame + (size_t)y * (size_t)_width + region.left;
-
-		for (int x = 0; x < region.right - region.left; x++)
-			row[x] = _opaqueMask;
-	}
-
-	for (uint i = 0; i < _items.size(); i++)
-		drawItem(_items[i]);
-
-	for (int y = region.top; y < region.bottom; y++)
-		memcpy(_overlayFrame + (size_t)y * (size_t)_width + region.left, _frame + (size_t)y * (size_t)_width + region.left, rowBytes);
-
-	for (int y = region.top; y < region.bottom; y++) {
-		uint32 *row = _frame + (size_t)y * (size_t)_width + region.left;
-
-		for (int x = 0; x < region.right - region.left; x++)
-			row[x] = 0xFFFFFFFF;
-	}
-
-	for (uint i = 0; i < _items.size(); i++)
-		drawItem(_items[i]);
-
-	for (int y = region.top; y < region.bottom; y++) {
-		uint32 *overlayRow = _overlayFrame + (size_t)y * (size_t)_width;
-		const uint32 *lightRow = _frame + (size_t)y * (size_t)_width;
-
-		for (int x = region.left; x < region.right; x++) {
-			uint32 dark = overlayRow[x];
-			uint32 light = lightRow[x];
-			int darkGreen = (int)((dark >> 8) & 0xFF);
-			int lightGreen = (int)((light >> 8) & 0xFF);
-			int alpha = 255 - (lightGreen - darkGreen);
-
-			if (alpha < 0)
-				alpha = 0;
-			else if (alpha > 255)
-				alpha = 255;
-
-			int red = MIN((int)(dark & 0xFF), alpha);
-			int green = MIN(darkGreen, alpha);
-			int blue = MIN((int)((dark >> 16) & 0xFF), alpha);
-
-			overlayRow[x] = (uint32)red | ((uint32)green << 8) | ((uint32)blue << 16) | ((uint32)alpha << 24);
-		}
-	}
-}
-
 void HdCanvas::presentGpu(const StdVBuffer *scene) {
-	bool changing = hasChangingItem();
-	bool changed = !(!changing && _composedValid && sameQueue(_items, _composedItems));
-
-	if (changed)
-		buildOverlayFrame();
-
 	const byte *software = nullptr;
 
 	if (_frontScene && isSceneSupported())
 		software = _frontScene;
 
-	_remasteredLookRenderer->present(software, _scenePitch, _overlayFrame ? (const byte *)_overlayFrame : nullptr, changed);
+	_remasteredLookRenderer->present(software, _scenePitch);
 	g_system->updateScreen();
-
-	_composedValid = false;
-
-	if (!changing) {
-		_composedItems = _items;
-		_composedValid = true;
-	}
-
 	swapScene(scene);
 
 	_stretched = g_grim->isWidescreenStretched();

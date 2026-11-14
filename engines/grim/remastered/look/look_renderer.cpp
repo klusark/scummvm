@@ -26,6 +26,7 @@
 #include "engines/grim/remastered/look/look_forward.h"
 #include "engines/grim/remastered/look/look_lightprobe.h"
 #include "engines/grim/remastered/look/look_math.h"
+#include "engines/grim/remastered/look/look_overlay.h"
 #include "engines/grim/remastered/look/look_renderer.h"
 #include "engines/grim/render/sputrender.h"
 #include "engines/grim/renderdroid/rd.h"
@@ -56,7 +57,7 @@ RemasteredLookRenderer::ExtraLightSpec::ExtraLightSpec() : type(0), shadingBias(
 
 RemasteredLookRenderer::RemasteredLookRenderer(RenderDroid *rd, SputRoom *room, SputActorModule *actors, SputRender *render, SputTime *time, WuRegistry *registry) :
 		_rd(rd), _room(room), _actors(actors), _render(render), _time(time), _registry(registry), _remasteredLookDevice(nullptr),
-		_remasteredLookPipeline(nullptr), _remasteredLookTextureCache(nullptr), _softwareTexture(nullptr), _overlayTexture(nullptr), _open(false), _hostWidth(0),
+		_remasteredLookPipeline(nullptr), _remasteredLookTextureCache(nullptr), _softwareTexture(nullptr), _overlay(nullptr), _open(false), _hostWidth(0),
 		_hostHeight(0), _drawBuffer(nullptr), _zBuffer(nullptr), _frontBuffer(nullptr), _frontBufferVisible(false),
 		_previousFrameTime(0.0), _hasPreviousFrame(false), _softwareAlpha(0.0f), _softwareAlphaEnd(0.0f),
 		_softwareAlphaStart(0.0f), _softwareAlphaBlendTime(0.75f), _deferredEnabled(false), _softwareEnabled(true),
@@ -116,9 +117,9 @@ bool RemasteredLookRenderer::open(int hostWidth, int hostHeight) {
 	image.levels[0].height = 480;
 	_softwareTexture = _remasteredLookDevice->createTexture(image);
 
-	_overlayTexture = createOverlayTexture(hostWidth, hostHeight);
+	_overlay = new RemasteredLookOverlay(_remasteredLookDevice);
 
-	if (!_softwareTexture || !_overlayTexture) {
+	if (!_softwareTexture) {
 		warning("RemasteredLookRenderer::open(): the composition textures could not be created");
 		_open = true;
 		close();
@@ -131,24 +132,6 @@ bool RemasteredLookRenderer::open(int hostWidth, int hostHeight) {
 	return true;
 }
 
-RemasteredLookTexture *RemasteredLookRenderer::createOverlayTexture(int width, int height) {
-	Common::Array<byte> overlay;
-	LookImage image;
-
-	overlay.resize((uint)width * height * 4);
-	memset(&overlay[0], 0, overlay.size());
-	image.format = kLookFormatRgba8;
-	image.width = width;
-	image.height = height;
-	image.numLevels = 1;
-	image.levels[0].data = &overlay[0];
-	image.levels[0].size = overlay.size();
-	image.levels[0].width = width;
-	image.levels[0].height = height;
-
-	return _remasteredLookDevice->createTexture(image);
-}
-
 void RemasteredLookRenderer::setHostSize(int hostWidth, int hostHeight) {
 	if (!_open || hostWidth <= 0 || hostHeight <= 0 || (hostWidth == _hostWidth && hostHeight == _hostHeight))
 		return;
@@ -157,15 +140,6 @@ void RemasteredLookRenderer::setHostSize(int hostWidth, int hostHeight) {
 	_hostHeight = hostHeight;
 	_remasteredLookDevice->setHostSize(hostWidth, hostHeight);
 	_remasteredLookPipeline->setHostSize(hostWidth, hostHeight);
-
-	if (_overlayTexture)
-		_remasteredLookDevice->destroyTexture(_overlayTexture);
-
-	_overlayTexture = createOverlayTexture(hostWidth, hostHeight);
-
-	if (!_overlayTexture)
-		warning("RemasteredLookRenderer::setHostSize(): the overlay texture could not be recreated");
-
 	_graphicsChanged = true;
 }
 
@@ -184,8 +158,8 @@ void RemasteredLookRenderer::close() {
 	if (_softwareTexture)
 		_remasteredLookDevice->destroyTexture(_softwareTexture);
 
-	if (_overlayTexture)
-		_remasteredLookDevice->destroyTexture(_overlayTexture);
+	delete _overlay;
+	_overlay = nullptr;
 
 	delete _remasteredLookPipeline;
 	_remasteredLookPipeline = nullptr;
@@ -1048,7 +1022,7 @@ void RemasteredLookRenderer::bufferCopy(const StdVBuffer *destination, const Std
 	_remasteredLookPipeline->drawBitmap(draw);
 }
 
-void RemasteredLookRenderer::present(const byte *software565, int softwarePitch, const byte *overlayRgba, bool overlayChanged) {
+void RemasteredLookRenderer::present(const byte *software565, int softwarePitch) {
 	recoverContext();
 
 	if (!_open)
@@ -1069,13 +1043,10 @@ void RemasteredLookRenderer::present(const byte *software565, int softwarePitch,
 		}
 	}
 
-	if (overlayRgba && overlayChanged)
-		_remasteredLookDevice->updateTexture(_overlayTexture, overlayRgba, _hostWidth, _hostHeight);
-
 	if (_deferredEnabled)
 		_remasteredLookPipeline->renderScene();
 
-	_remasteredLookPipeline->present(_softwareTexture, _softwareAlpha, _deferredEnabled, _softwareEnabled, _overlayTexture, _frontBufferVisible,
+	_remasteredLookPipeline->present(_softwareTexture, _softwareAlpha, _deferredEnabled, _softwareEnabled, _overlay, _frontBufferVisible,
 			_widescreen, _resolutionScaling);
 
 	bool widescreen = (int)_registry->getFloat("Widescreen", 0.0f) == 2;

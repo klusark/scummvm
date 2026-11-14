@@ -35,13 +35,16 @@ struct BlastTextFont;
 class HdFont {
 public:
 	enum {
-		kNumGlyphs = 255
+		kNumGlyphs = 255,
+		kAtlasSize = 2048
 	};
 
 	struct Glyph {
 		byte *alpha;
 		int width;
 		int height;
+		int atlasX;
+		int atlasY;
 		float xOffset;
 		float yOffset;
 		float advance;
@@ -51,6 +54,9 @@ public:
 	~HdFont();
 
 	void regenerate(float scale);
+	void writeAtlas(byte *destination) const;
+	uint getGeneration() const { return _generation; }
+	uint getAtlasUsedHeight() const { return _atlasUsedHeight; }
 	bool isLoaded() const { return _loaded; }
 	const Common::String &getPath() const { return _path; }
 	float getRequestedSize() const { return _requestedSize; }
@@ -72,6 +78,8 @@ private:
 	bool _loaded;
 	byte *_data;
 	long _dataSize;
+	uint _generation;
+	uint _atlasUsedHeight;
 	Glyph _glyphs[kNumGlyphs];
 	Glyph _emptyGlyph;
 };
@@ -134,6 +142,7 @@ struct HdTextDraw {
 	HdTextDraw();
 
 	Common::Array<HdTextQuad> quads;
+	const HdFont *font;
 	float originX;
 	float originY;
 	float textRed;
@@ -154,6 +163,7 @@ public:
 
 	void attachFont(BlastTextFont *font, const char *name);
 	const HdFont *getCustomFont();
+	const HdFont *getDebugFont();
 	void regenerate(float scale);
 
 	void layout(const HdTextInfo &info, HdTextCache *cache);
@@ -178,6 +188,8 @@ private:
 	float _scale;
 	const HdFont *_customFont;
 	bool _customFontTried;
+	const HdFont *_debugFont;
+	bool _debugFontTried;
 };
 
 } // End of namespace Grim

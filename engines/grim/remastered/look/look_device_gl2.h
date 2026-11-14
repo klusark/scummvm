@@ -55,6 +55,8 @@ public:
 
 	RemasteredLookTexture *createTexture(const LookImage &image) override;
 	void updateTexture(RemasteredLookTexture *texture, const byte *pixels, uint width, uint height) override;
+	void updateTextureRegion(RemasteredLookTexture *texture, const byte *pixels, uint pitchBytes, uint x, uint y, uint width,
+			uint height) override;
 	void destroyTexture(RemasteredLookTexture *&texture) override;
 
 	RemasteredLookBuffer *createVertexBuffer(LookVertexFormat format, const void *data, uint numVertices) override;

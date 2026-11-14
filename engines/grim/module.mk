@@ -294,6 +294,7 @@ MODULE_OBJS := \
 	remastered/look/look_glsl.o \
 	remastered/look/look_lightprobe.o \
 	remastered/look/look_math.o \
+	remastered/look/look_overlay.o \
 	remastered/look/look_pipeline.o \
 	remastered/look/look_programs.o \
 	remastered/look/look_renderer.o \

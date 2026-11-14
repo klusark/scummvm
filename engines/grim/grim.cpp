@@ -406,8 +406,7 @@ bool GrimEngine::hasFeature(EngineFeature f) const {
 		(f == kSupportsReturnToLauncher) ||
 		(f == kSupportsLoadingDuringRuntime) ||
 		(f == kSupportsQuitDialogOverride && !isRemastered()) ||
-		(f == kSupportsArbitraryResolutions && isRemastered() &&
-				(Graphics::Renderer::getAvailableTypes() & Graphics::kRendererTypeOpenGLShaders) != 0);
+		(f == kSupportsArbitraryResolutions && isRemastered() && _hdCanvas && _hdCanvas->isGpuWanted());
 }
 
 void GrimEngine::setTextCanvasWidth(int width) {

@@ -37,6 +37,7 @@ enum LookFormat {
 	kLookFormatDxt1,
 	kLookFormatDxt3,
 	kLookFormatDxt5,
+	kLookFormatR8,
 	kLookFormatDepth
 };
 

@@ -25,6 +25,7 @@
 #include "engines/grim/remastered/look/look_consts.h"
 #include "engines/grim/remastered/look/look_forward.h"
 #include "engines/grim/remastered/look/look_math.h"
+#include "engines/grim/remastered/look/look_overlay.h"
 #include "engines/grim/remastered/look/look_pipeline.h"
 
 #include <math.h>
@@ -1327,7 +1328,7 @@ void RemasteredLookPipeline::presentSurface(RemasteredLookTexture *texture, floa
 }
 
 void RemasteredLookPipeline::present(RemasteredLookTexture *software, float softwareAlpha, bool deferredEnabled, bool softwareEnabled,
-		RemasteredLookTexture *overlay, bool frontBufferVisible, bool widescreen, float resolutionScaling) {
+		RemasteredLookOverlay *overlay, bool frontBufferVisible, bool widescreen, float resolutionScaling) {
 	if (!_open)
 		return;
 
@@ -1355,28 +1356,8 @@ void RemasteredLookPipeline::present(RemasteredLookTexture *software, float soft
 	if (softwareEnabled && software)
 		presentSurface(software, softwareAlpha, true, widescreen, true);
 
-	if (overlay) {
-		LookCall call;
-
-		initCall(call, kLookProgramTexturedQuad, kLookDepthAlways, false);
-		call.blendEnable = true;
-		call.blendMode = kLookBlendPremultiplied;
-		call.numTextures = 1;
-		call.textures[0] = overlay;
-		call.numSamplers = 1;
-		call.samplers[0] = pointSampler;
-		setFullQuad(call, true);
-		call.pixelConstants.setLayout(RemasteredLookConsts::getLayout(RemasteredLookConsts::kLayoutQuad));
-		call.pixelConstants.setFloats(RemasteredLookConsts::kQuadMultiplyColor, oneColor, 4);
-
-		float texel[4] = { 1.0f / (float)overlay->getWidth(), 1.0f / (float)overlay->getHeight(), 0.0f, 1.0f };
-
-		call.pixelConstants.setFloats(RemasteredLookConsts::kQuadTexelDesaturateGamma, texel, 4);
-		call.hasPixelConstants = true;
-		call.vertexConstants = call.pixelConstants;
-		call.hasVertexConstants = true;
-		issueCall(call);
-	}
+	if (overlay)
+		overlay->issue(_hostWidth, _hostHeight);
 
 	_remasteredLookDevice->endFrame();
 }

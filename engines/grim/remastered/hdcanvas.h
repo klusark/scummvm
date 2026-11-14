@@ -48,6 +48,7 @@ public:
 	void open(RemasteredLookRenderer *remasteredLookRenderer = nullptr);
 	void close();
 	bool isActive() const { return _active; }
+	bool isGpuWanted() const { return _gpuWanted; }
 	int getWidth() const { return _width; }
 	int getHeight() const { return _height; }
 	void present(const StdVBuffer *scene, float gamma);
@@ -169,20 +170,11 @@ private:
 		byte cell[kPowCells + 1];
 	};
 
-	struct Bounds {
-		int left;
-		int top;
-		int right;
-		int bottom;
-	};
-
 	bool openGpu(RemasteredLookRenderer *remasteredLookRenderer);
 	void presentGpu(const StdVBuffer *scene);
 	void pollSize();
 	void resize(int width, int height);
-	void unionBounds(Bounds *bounds, int left, int top, int right, int bottom) const;
-	void getItemBounds(const Item &item, Bounds *bounds) const;
-	void buildOverlayFrame();
+	void queueTextGpu(const HdTextDraw &draw);
 	void updateSoftwareAlpha();
 	void prepareFrontScene(const StdVBuffer *scene);
 	void swapScene(const StdVBuffer *scene);
@@ -224,11 +216,11 @@ private:
 	bool _active;
 	bool _stretched;
 	bool _gpu;
+	bool _gpuWanted;
 	int _width;
 	int _height;
-	Bounds _overlayDirty;
 	RemasteredLookRenderer *_remasteredLookRenderer;
-	uint32 *_overlayFrame;
+	Common::Array<byte> _atlasScratch;
 	uint32 *_frame;
 	int _redShift;
 	int _greenShift;

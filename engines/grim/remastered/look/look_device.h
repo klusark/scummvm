@@ -96,6 +96,8 @@ public:
 
 	virtual RemasteredLookTexture *createTexture(const LookImage &image) = 0;
 	virtual void updateTexture(RemasteredLookTexture *texture, const byte *pixels, uint width, uint height) = 0;
+	virtual void updateTextureRegion(RemasteredLookTexture *texture, const byte *pixels, uint pitchBytes, uint x, uint y, uint width,
+			uint height) = 0;
 	virtual void destroyTexture(RemasteredLookTexture *&texture) = 0;
 
 	virtual RemasteredLookBuffer *createVertexBuffer(LookVertexFormat format, const void *data, uint numVertices) = 0;

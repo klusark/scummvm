@@ -47,6 +47,8 @@ struct RdThing;
 struct StdVBuffer;
 struct StdRect;
 
+class RemasteredLookOverlay;
+
 class RemasteredLookRenderer : public RemasteredLookScene {
 public:
 	enum {
@@ -79,7 +81,8 @@ public:
 	void notifyFree(const void *key);
 	void notifyMaterialLoad(const void *pixels, const char *materialName, int cellIndex);
 
-	void present(const byte *software565, int softwarePitch, const byte *overlayRgba, bool overlayChanged);
+	void present(const byte *software565, int softwarePitch);
+	RemasteredLookOverlay *getOverlay() const { return _overlay; }
 
 	uint getCharacterLightCount() const override;
 	uint getShadowCharacterLightCount() const override;
@@ -145,7 +148,6 @@ private:
 
 	void updateAlpha();
 	void recoverContext();
-	RemasteredLookTexture *createOverlayTexture(int width, int height);
 	bool getLightStatus(const char *name, int &value) const;
 	void updateRoom();
 	void updateExtraLights(float step);
@@ -167,7 +169,7 @@ private:
 	RemasteredLookPipeline *_remasteredLookPipeline;
 	RemasteredLookTextureCache *_remasteredLookTextureCache;
 	RemasteredLookTexture *_softwareTexture;
-	RemasteredLookTexture *_overlayTexture;
+	RemasteredLookOverlay *_overlay;
 	bool _open;
 	int _hostWidth;
 	int _hostHeight;
