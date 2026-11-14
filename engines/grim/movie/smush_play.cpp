@@ -183,6 +183,8 @@ int SmushPlay::startMovie(const char *name, int flags, int bufferBytes, int x, i
 	delete stream;
 	stream = nullptr;
 
+	_video->blankMovieBuffer();
+
 	if (_video->startVideo(width, height, 16, pixelFormat))
 		return 1;
 

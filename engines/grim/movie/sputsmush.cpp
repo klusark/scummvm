@@ -48,7 +48,7 @@ namespace Grim {
 
 SputSmush::SputSmush(Res *res, StdDisplay *stdDisplay, SputRender *sputRender, StdVBuffer *mainGfxBuffer, WuRegistry *wuRegistry) :
 		_res(res), _stdDisplay(stdDisplay), _sputRender(sputRender), _mainGfxBuffer(mainGfxBuffer),
-		_wuRegistry(wuRegistry), _hs(nullptr), _started(0), _presentBuf(nullptr), _buf(0), _playing(0), _paused(0), _abort(0),
+		_wuRegistry(wuRegistry), _hs(nullptr), _started(0), _presentBuf(nullptr), _smushBuf(nullptr), _buf(0), _playing(0), _paused(0), _abort(0),
 		_looping(0), _x(0), _y(0), _startTime(0), _lastPeriodicTime(0), _videoClip(nullptr), _movieSurface(nullptr),
 		_releasedSurface(nullptr), _frameTime(0.0f), _isVideoVisible(false), _playFromMenu(false),
 		_videoExtraFramesLeft(0), _videoDuration(0), _playingMovie(false), _wasPlayingMovie(false), _commentaryDucking(false),
@@ -88,6 +88,7 @@ int SputSmush::initialize(SysStruct *hs) {
 	_smushPlay->sysSetVideoCallbacks(this);
 
 	_presentBuf = nullptr;
+	_smushBuf = nullptr;
 	_buf = 1;
 
 	return 0;
@@ -153,6 +154,9 @@ int SputSmush::startup() {
 
 int SputSmush::shutdown() {
 	if (_started) {
+		if (_smushBuf)
+			_stdDisplay->vBufferFree(_smushBuf);
+
 		freeVideoResources();
 		_smushPlay->sysShutdown();
 	}
@@ -201,12 +205,23 @@ int SputSmush::periodic() {
 		return 1;
 	}
 
-	if (_paused)
+	bool remastered = g_grim->isRemastered();
+
+	if (_paused) {
+		if (remastered)
+			copyMovieBuffer();
+
 		return 0;
+	}
 
 	_smushPlay->setTranslationTable(_sputRender->getColorLookup());
 
-	if (_abort || !_smushPlay->updateMovie(&finished)) {
+	int updateResult = 0;
+
+	if (!_abort)
+		updateResult = _smushPlay->updateMovie(&finished);
+
+	if (_abort || !updateResult) {
 		if (finished || _abort) {
 			_playing = 0;
 
@@ -223,7 +238,25 @@ int SputSmush::periodic() {
 	_smushPlay->sysConfigureColorLookup(0);
 	_lastPeriodicTime = g_system->getMillis();
 
+	if (remastered) {
+		if (updateResult)
+			return 1;
+
+		copyMovieBuffer();
+
+		return 0;
+	}
+
 	return result;
+}
+
+void SputSmush::copyMovieBuffer() {
+	if (!_smushBuf) {
+		warning("SputSmush::copyMovieBuffer(): the movie buffer is not set");
+		return;
+	}
+
+	_stdDisplay->vBufferCopy(_sputRender->drawBuffer(), _smushBuf, 0, 0, nullptr, 1);
 }
 
 int SputSmush::setTarget(StdVBuffer *buffer) {
@@ -231,6 +264,44 @@ int SputSmush::setTarget(StdVBuffer *buffer) {
 		return 1;
 
 	_presentBuf = buffer;
+
+	if (!g_grim->isRemastered())
+		return 0;
+
+	if (_smushBuf) {
+		if (_smushBuf->tex.sizeInBytes == buffer->tex.sizeInBytes)
+			return 0;
+
+		_stdDisplay->vBufferFree(_smushBuf);
+	}
+
+	_smushBuf = _stdDisplay->vBufferNew(&buffer->tex, 0, 0, nullptr);
+
+	if (!_smushBuf) {
+		warning("SputSmush::setTarget(): cannot create the movie buffer");
+		return 1;
+	}
+
+	_smushBuf->colorKey = 61680;
+
+	blankMovieBuffer();
+
+	return 0;
+}
+
+int SputSmush::blankMovieBuffer() {
+	if (!g_grim->isRemastered())
+		return 0;
+
+	if (!_smushBuf) {
+		warning("SputSmush::blankMovieBuffer(): the movie buffer is not set");
+		return 1;
+	}
+
+	_stdDisplay->vBufferLock(_smushBuf);
+	memset(_smushBuf->pixels, (byte)_smushBuf->colorKey, _smushBuf->tex.sizeInBytes);
+	_stdDisplay->vBufferUnlock(_smushBuf);
+	_stdDisplay->notifyBufferWritten(_smushBuf);
 
 	return 0;
 }
@@ -322,23 +393,25 @@ int SputSmush::lockMovieBuffer(LecBitmap *bitmap, StdRect *rect) {
 	if (!_started)
 		return 1;
 
-	if (!_presentBuf) {
+	StdVBuffer *buffer = g_grim->isRemastered() ? _smushBuf : _presentBuf;
+
+	if (!buffer) {
 		warning("SputSmush::lockMovieBuffer(): the target is not set");
 		return 1;
 	}
 
-	_stdDisplay->vBufferLock(_presentBuf);
+	_stdDisplay->vBufferLock(buffer);
 
-	bitmap->bytesPerPixel = _presentBuf->tex.format.bpp >> 3;
-	bitmap->pixels = _presentBuf->pixels;
-	bitmap->height = _presentBuf->tex.height;
-	bitmap->width = _presentBuf->tex.width;
-	bitmap->pitchInBytes = _presentBuf->tex.pitchInBytes;
+	bitmap->bytesPerPixel = buffer->tex.format.bpp >> 3;
+	bitmap->pixels = buffer->pixels;
+	bitmap->height = buffer->tex.height;
+	bitmap->width = buffer->tex.width;
+	bitmap->pitchInBytes = buffer->tex.pitchInBytes;
 
 	rect->y = 0;
 	rect->x = 0;
-	rect->height = _presentBuf->tex.height;
-	rect->width = _presentBuf->tex.width;
+	rect->height = buffer->tex.height;
+	rect->width = buffer->tex.width;
 
 	return 0;
 }
@@ -347,13 +420,15 @@ int SputSmush::unlockMovieBuffer(LecBitmap *bitmap, StdRect *rect) {
 	if (!_started)
 		return 1;
 
-	if (!_presentBuf) {
+	StdVBuffer *buffer = g_grim->isRemastered() ? _smushBuf : _presentBuf;
+
+	if (!buffer) {
 		warning("SputSmush::unlockMovieBuffer(): the target is not set");
 		return 1;
 	}
 
-	_stdDisplay->notifyBufferWritten(_presentBuf);
-	_stdDisplay->vBufferUnlock(_presentBuf);
+	_stdDisplay->notifyBufferWritten(buffer);
+	_stdDisplay->vBufferUnlock(buffer);
 
 	return 0;
 }

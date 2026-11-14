@@ -76,6 +76,7 @@ public:
 	int lockMovieBuffer(LecBitmap *bitmap, StdRect *rect) override;
 	int unlockMovieBuffer(LecBitmap *bitmap, StdRect *rect) override;
 	int setVideoPalette(uint32 *palette, int start, int count) override;
+	int blankMovieBuffer() override;
 	virtual int moviePlaying();
 	virtual int pause(int pause);
 	virtual void blitFrame() {}
@@ -99,6 +100,7 @@ protected:
 	static bool isHdMovieName(const char *name);
 	void queueHdFrame();
 	void freeVideoResources();
+	void copyMovieBuffer();
 
 	SmushPlay *_smushPlay;
 	Res *_res;
@@ -109,6 +111,7 @@ protected:
 	SysStruct *_hs;
 	int _started;
 	StdVBuffer *_presentBuf;
+	StdVBuffer *_smushBuf;
 	int _buf;
 	int _playing;
 	int _paused;

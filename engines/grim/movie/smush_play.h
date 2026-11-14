@@ -75,6 +75,7 @@ public:
 	virtual int lockMovieBuffer(LecBitmap *bitmap, StdRect *rect) = 0;
 	virtual int unlockMovieBuffer(LecBitmap *bitmap, StdRect *rect) = 0;
 	virtual int setVideoPalette(uint32 *palette, int start, int count) = 0;
+	virtual int blankMovieBuffer() { return 0; }
 };
 
 class SmushPlay : public SmushAnimClient {
