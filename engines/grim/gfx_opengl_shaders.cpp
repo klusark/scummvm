@@ -2293,7 +2293,8 @@ Bitmap *GfxOpenGLS::getScreenshot(int w, int h, bool useStored) {
 #if !USE_FORCED_GLES2
 		} else {
 			glBindTexture(GL_TEXTURE_2D, _storedDisplay);
-			char *buffer = new char[_screenWidth * _screenHeight * 4];
+			// (zeroed: before the first storeDisplay the texture has no image, and glGetTexImage writes nothing)
+			char *buffer = new char[_screenWidth * _screenHeight * 4]();
 
 			glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
 			byte *rawBuf = (byte *)src.getPixels();
