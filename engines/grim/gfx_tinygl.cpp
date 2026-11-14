@@ -1174,6 +1174,8 @@ void GfxTinyGL::drawMovieFrame(int offsetX, int offsetY) {
 
 void GfxTinyGL::releaseMovieFrame() {
 	tglDeleteBlitImage(_smushImage);
+	// (TinyGL frees it at the next present: the next movie gets an image of its own)
+	_smushImage = nullptr;
 }
 
 void GfxTinyGL::loadEmergFont() {
