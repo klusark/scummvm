@@ -288,6 +288,10 @@ MODULE_OBJS := \
 	remastered/dialoglog.o \
 	remastered/hdcanvas.o \
 	remastered/hotspot.o \
+	remastered/look/materialpath.o \
+	remastered/look/mcb.o \
+	remastered/look/s3tc.o \
+	remastered/look/setx.o \
 	remastered/lua_remastered.o \
 	remastered/overlay.o \
 	remastered/pathfinder.o \
