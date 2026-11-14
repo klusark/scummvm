@@ -31,6 +31,8 @@
 #define FORBIDDEN_SYMBOL_EXCEPTION_fclose
 #define FORBIDDEN_SYMBOL_EXCEPTION_remove
 #define FORBIDDEN_SYMBOL_EXCEPTION_rename
+#define FORBIDDEN_SYMBOL_EXCEPTION_setjmp
+#define FORBIDDEN_SYMBOL_EXCEPTION_longjmp
 
 #include "common/archive.h"
 #include "common/debug-channels.h"
@@ -94,6 +96,9 @@
 #include "engines/grim/imuse/imuse_engine.h"
 #include "engines/grim/emi/sound/emisound.h"
 #include "engines/grim/lua/lua.h"
+
+// (engines/engine.cpp: the ScummVM logo has been shown)
+extern bool splash;
 
 namespace Grim {
 
@@ -178,6 +183,9 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 		static_cast<Audio::MixerImpl *>(_mixer)->setSimulated(true);
 		Video::g_videoSimulated = true;
 	}
+	// (no ScummVM logo for an autorun or a simulated run: it waits 0.6 s at the start of every game)
+	if (_autorunPending || _simFps)
+		splash = true;
 
 	_softRenderer = true;
 
