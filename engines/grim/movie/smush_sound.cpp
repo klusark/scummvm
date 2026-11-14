@@ -519,8 +519,11 @@ void SmushSound::souEngineFill(int frameCount, SmushDriver *driver) {
 						else
 							chunkFrames = _sampleRate * (chunkBytes / _bytesPerFrame[rt->format]) / rt->rate;
 
-						driver->sndDrivMix(rt->dataStart + ringPosition, destOffset, chunkFrames, chunkBytes,
-						                   (rt->gain * volume) >> 4, chan->pan, rt->format);
+						// (an underrun at the start of the stream steps back before its first byte: there is nothing
+						// to play again yet, the chunk is silence)
+						if (ringPosition >= 0 && ringPosition + chunkBytes <= rt->dataSize)
+							driver->sndDrivMix(rt->dataStart + ringPosition, destOffset, chunkFrames, chunkBytes,
+							                   (rt->gain * volume) >> 4, chan->pan, rt->format);
 
 						rt->remaining -= chunkBytes;
 						rt->readPosition += chunkBytes;
