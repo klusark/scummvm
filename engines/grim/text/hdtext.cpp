@@ -19,9 +19,6 @@
  *
  */
 
-// FreeType includes files that contain forbidden symbols
-#define FORBIDDEN_SYMBOL_ALLOW_ALL
-
 #include "common/scummsys.h"
 
 #include "common/archive.h"
@@ -34,11 +31,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <ft2build.h>
-#include FT_FREETYPE_H
-#include FT_IMAGE_H
-#include FT_OUTLINE_H
-#include FT_TRUETYPE_TABLES_H
+#include "graphics/fonts/ttf_glyphs.h"
 
 #include "engines/grim/remastered/hdcanvas.h"
 #include "engines/grim/text/blasttext.h"
@@ -46,23 +39,10 @@
 
 namespace Grim {
 
-namespace {
-
-struct HdSpanTarget {
-	byte *pixels;
-	int width;
-	int height;
-};
-
-}
-
-HdFont::HdFont(FT_LibraryRec_ *library, const Common::String &path, float size, int minPixels) :
+HdFont::HdFont(const Common::String &path, float size, int minPixels) :
 		_path(path), _requestedSize(size), _pixelSize(0.0f), _loaded(false) {
 	memset(_glyphs, 0, sizeof(_glyphs));
 	memset(&_emptyGlyph, 0, sizeof(_emptyGlyph));
-
-	if (!library)
-		return;
 
 	Common::SeekableReadStream *stream = SearchMan.createReadStreamForMember(Common::Path(path, '/'));
 
@@ -85,7 +65,7 @@ HdFont::HdFont(FT_LibraryRec_ *library, const Common::String &path, float size, 
 	delete stream;
 
 	if (readSize == dataSize)
-		loadGlyphs(library, data, dataSize, minPixels);
+		loadGlyphs(data, dataSize, minPixels);
 	else
 		warning("HdFont: cannot read the font file '%s'", path.c_str());
 
@@ -97,94 +77,18 @@ HdFont::~HdFont() {
 		delete[] _glyphs[i].alpha;
 }
 
-int HdFont::readGlyphBox(FT_FaceRec_ *face, int locFormat, int glyph, int *xMin, int *yMin, int *xMax, int *yMax) {
-	*xMin = 0;
-	*yMin = 0;
-	*xMax = 0;
-	*yMax = 0;
+void HdFont::loadGlyphs(const byte *data, long dataSize, int minPixels) {
+	Graphics::TTFGlyphs face;
 
-	if (locFormat < 0 || locFormat > 1)
-		return -1;
-
-	if (glyph < 0 || glyph >= (int)face->num_glyphs)
-		return 1;
-
-	byte entry[8];
-	FT_ULong length = (locFormat == 0) ? 4 : 8;
-	FT_ULong first;
-	FT_ULong second;
-
-	if (FT_Load_Sfnt_Table(face, FT_MAKE_TAG('l', 'o', 'c', 'a'), (FT_ULong)glyph * (locFormat == 0 ? 2 : 4), entry, &length) != 0)
-		return -1;
-
-	if (locFormat == 0) {
-		first = (FT_ULong)((entry[0] << 8) | entry[1]) * 2;
-		second = (FT_ULong)((entry[2] << 8) | entry[3]) * 2;
-	} else {
-		first = ((FT_ULong)entry[0] << 24) | ((FT_ULong)entry[1] << 16) | ((FT_ULong)entry[2] << 8) | (FT_ULong)entry[3];
-		second = ((FT_ULong)entry[4] << 24) | ((FT_ULong)entry[5] << 16) | ((FT_ULong)entry[6] << 8) | (FT_ULong)entry[7];
-	}
-
-	if (first == second)
-		return 1;
-
-	byte header[10];
-
-	length = 10;
-
-	if (FT_Load_Sfnt_Table(face, FT_MAKE_TAG('g', 'l', 'y', 'f'), first, header, &length) != 0)
-		return -1;
-
-	*xMin = (int16)((header[2] << 8) | header[3]);
-	*yMin = (int16)((header[4] << 8) | header[5]);
-	*xMax = (int16)((header[6] << 8) | header[7]);
-	*yMax = (int16)((header[8] << 8) | header[9]);
-
-	return 0;
-}
-
-void HdFont::spanCallback(int y, int count, const FT_Span_ *spans, void *user) {
-	HdSpanTarget *target = static_cast<HdSpanTarget *>(user);
-
-	if (y < 0 || y >= target->height)
-		return;
-
-	byte *row = target->pixels + (target->height - 1 - y) * target->width;
-
-	for (int i = 0; i < count; i++) {
-		int start = spans[i].x;
-		int length = spans[i].len;
-
-		for (int j = 0; j < length; j++) {
-			int x = start + j;
-
-			if (x >= 0 && x < target->width)
-				row[x] = spans[i].coverage;
-		}
-	}
-}
-
-void HdFont::loadGlyphs(FT_LibraryRec_ *library, const byte *data, long dataSize, int minPixels) {
-	FT_Face face = nullptr;
-
-	if (FT_New_Memory_Face(library, (const FT_Byte *)data, (FT_Long)dataSize, 0, &face) != 0) {
+	if (!face.load(data, (uint32)dataSize)) {
 		warning("HdFont: '%s' is not a valid font file", _path.c_str());
 		return;
 	}
 
-	TT_HoriHeader *hhea = (TT_HoriHeader *)FT_Get_Sfnt_Table(face, FT_SFNT_HHEA);
-	TT_Header *head = (TT_Header *)FT_Get_Sfnt_Table(face, FT_SFNT_HEAD);
-	int locFormat = head ? (int)head->Index_To_Loc_Format : -1;
-	long cell;
-
-	if (hhea)
-		cell = (long)hhea->Ascender - (long)hhea->Descender;
-	else
-		cell = (long)face->ascender - (long)face->descender;
+	long cell = face.getCellHeight();
 
 	if (cell <= 0) {
 		warning("HdFont: '%s' has no usable metrics", _path.c_str());
-		FT_Done_Face(face);
 		return;
 	}
 
@@ -196,52 +100,26 @@ void HdFont::loadGlyphs(FT_LibraryRec_ *library, const byte *data, long dataSize
 	_pixelSize = pixels;
 
 	float scale = pixels / (float)cell;
-	FT_Matrix matrix;
-
-	matrix.xx = (FT_Fixed)(scale * 64.0f * 65536.0f + 0.5f);
-	matrix.xy = 0;
-	matrix.yx = 0;
-	matrix.yy = matrix.xx;
 
 	for (int c = 0; c < kNumGlyphs; c++) {
 		Glyph *glyph = &_glyphs[c];
-		FT_UInt index = FT_Get_Char_Index(face, (FT_ULong)c);
+		Graphics::TTFGlyphs::GlyphInfo info;
 
-		if (FT_Load_Glyph(face, index, FT_LOAD_NO_SCALE | FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP) != 0)
+		if (!face.loadGlyph((uint32)c, &info))
 			continue;
 
-		FT_GlyphSlot slot = face->glyph;
-
-		glyph->advance = (float)slot->metrics.horiAdvance * scale;
+		glyph->advance = (float)info.advance * scale;
 
 		if (pixels <= 18.0f)
 			glyph->advance += 1.0f;
 
-		if (slot->format != FT_GLYPH_FORMAT_OUTLINE || slot->outline.n_points == 0)
+		if (!info.hasOutline)
 			continue;
 
-		int boxXMin;
-		int boxYMin;
-		int boxXMax;
-		int boxYMax;
-
-		if (readGlyphBox(face, locFormat, (int)index, &boxXMin, &boxYMin, &boxXMax, &boxYMax) < 0) {
-			FT_BBox box;
-
-			FT_Outline_Get_CBox(&slot->outline, &box);
-
-			boxXMin = (int)box.xMin;
-			boxYMin = (int)box.yMin;
-			boxXMax = (int)box.xMax;
-			boxYMax = (int)box.yMax;
-		}
-
-		FT_Outline_Transform(&slot->outline, &matrix);
-
-		float scaledXMin = (float)((double)boxXMin * (double)scale);
-		float scaledYMin = (float)((double)boxYMin * (double)scale);
-		float scaledXMax = (float)((double)boxXMax * (double)scale);
-		float scaledYMax = (float)((double)boxYMax * (double)scale);
+		float scaledXMin = (float)((double)info.xMin * (double)scale);
+		float scaledYMin = (float)((double)info.yMin * (double)scale);
+		float scaledXMax = (float)((double)info.xMax * (double)scale);
+		float scaledYMax = (float)((double)info.yMax * (double)scale);
 		int left = (int)floor((double)scaledXMin);
 		int bottom = (int)floor((double)scaledYMin);
 		int right = (int)ceil((double)scaledXMax);
@@ -264,25 +142,9 @@ void HdFont::loadGlyphs(FT_LibraryRec_ *library, const byte *data, long dataSize
 		glyph->width = width;
 		glyph->height = height;
 
-		FT_Outline_Translate(&slot->outline, (FT_Pos)(-left * 64), (FT_Pos)(-bottom * 64));
-
-		HdSpanTarget target;
-
-		target.pixels = glyph->alpha;
-		target.width = width;
-		target.height = height;
-
-		FT_Raster_Params params;
-
-		memset(&params, 0, sizeof(params));
-		params.flags = FT_RASTER_FLAG_AA | FT_RASTER_FLAG_DIRECT;
-		params.gray_spans = HdFont::spanCallback;
-		params.user = &target;
-
-		FT_Outline_Render(library, &slot->outline, &params);
+		face.renderGlyph(scale, left, bottom, width, height, glyph->alpha);
 	}
 
-	FT_Done_Face(face);
 	_loaded = true;
 }
 
@@ -303,15 +165,7 @@ HdTextCache::HdTextCache() : pixelSize(0.0f), minX(0.0f), minY(0.0f), maxRight(0
 HdTextDraw::HdTextDraw() : originX(0.0f), originY(0.0f), textRed(0.0f), textGreen(0.0f), textBlue(0.0f), alpha(0.0f) {
 }
 
-HdText::HdText() : _library(nullptr), _customFont(nullptr), _customFontTried(false) {
-	FT_Library library = nullptr;
-
-	if (FT_Init_FreeType(&library) != 0) {
-		warning("HdText: cannot initialize FreeType");
-		return;
-	}
-
-	_library = library;
+HdText::HdText() : _customFont(nullptr), _customFontTried(false) {
 }
 
 HdText::~HdText() {
@@ -319,9 +173,6 @@ HdText::~HdText() {
 		delete _fonts[i];
 
 	_fonts.clear();
-
-	if (_library)
-		FT_Done_FreeType(_library);
 }
 
 const HdFont *HdText::loadFont(const Common::String &path, float size, int minPixels) {
@@ -330,7 +181,7 @@ const HdFont *HdText::loadFont(const Common::String &path, float size, int minPi
 			return _fonts[i];
 	}
 
-	HdFont *font = new HdFont(_library, path, size, minPixels);
+	HdFont *font = new HdFont(path, size, minPixels);
 
 	if (!font->isLoaded()) {
 		delete font;

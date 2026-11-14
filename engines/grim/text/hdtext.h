@@ -28,10 +28,6 @@
 
 #include "engines/grim/std/std_display.h"
 
-struct FT_LibraryRec_;
-struct FT_FaceRec_;
-struct FT_Span_;
-
 namespace Grim {
 
 struct BlastTextFont;
@@ -51,7 +47,7 @@ public:
 		float advance;
 	};
 
-	HdFont(FT_LibraryRec_ *library, const Common::String &path, float size, int minPixels);
+	HdFont(const Common::String &path, float size, int minPixels);
 	~HdFont();
 
 	bool isLoaded() const { return _loaded; }
@@ -64,10 +60,7 @@ private:
 	HdFont(const HdFont &);
 	HdFont &operator=(const HdFont &);
 
-	static void spanCallback(int y, int count, const FT_Span_ *spans, void *user);
-	static int readGlyphBox(FT_FaceRec_ *face, int locFormat, int glyph, int *xMin, int *yMin, int *xMax, int *yMax);
-
-	void loadGlyphs(FT_LibraryRec_ *library, const byte *data, long dataSize, int minPixels);
+	void loadGlyphs(const byte *data, long dataSize, int minPixels);
 
 	Common::String _path;
 	float _requestedSize;
@@ -171,7 +164,6 @@ private:
 	void align(HdTextCache *cache, float alignX, float alignY) const;
 	static bool isWordCharacter(int c);
 
-	FT_LibraryRec_ *_library;
 	Common::Array<HdFont *> _fonts;
 	const HdFont *_customFont;
 	bool _customFontTried;
