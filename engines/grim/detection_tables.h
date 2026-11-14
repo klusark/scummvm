@@ -324,12 +324,12 @@ static const GrimGameDescription gameDescriptions[] = {
 		// Grim Fandango English demo version
 		{
 			"grim",
-			"Demo",
+			"Web Demo",
 			AD_ENTRY1s("gfdemo01.lab", "755cdac083f7f751bec7506402278f1a", 29489930),
 			Common::EN_ANY,
 			Common::kPlatformWindows,
 			ADGF_DEMO,
-			GUI_OPTIONS_GRIME
+			GUI_OPTIONS_GRIME_DEMO
 		},
 		GType_GRIM
 	},
@@ -342,7 +342,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			Common::EN_ANY,
 			Common::kPlatformWindows,
 			ADGF_DEMO,
-			GUI_OPTIONS_GRIME
+			GUI_OPTIONS_GRIME_DEMO
 		},
 		GType_GRIM
 	},
@@ -356,7 +356,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			Common::FR_FRA,
 			Common::kPlatformWindows,
 			ADGF_DEMO,
-			GUI_OPTIONS_GRIME
+			GUI_OPTIONS_GRIME_DEMO
 		},
 		GType_GRIM
 	},
@@ -371,7 +371,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			Common::DE_DEU,
 			Common::kPlatformWindows,
 			ADGF_DEMO,
-			GUI_OPTIONS_GRIME
+			GUI_OPTIONS_GRIME_DEMO
 		},
 		GType_GRIM
 	},
@@ -386,7 +386,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			Common::IT_ITA,
 			Common::kPlatformWindows,
 			ADGF_DEMO,
-			GUI_OPTIONS_GRIME
+			GUI_OPTIONS_GRIME_DEMO
 		},
 		GType_GRIM
 	},
@@ -401,7 +401,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			Common::ES_ESP,
 			Common::kPlatformWindows,
 			ADGF_DEMO,
-			GUI_OPTIONS_GRIME
+			GUI_OPTIONS_GRIME_DEMO
 		},
 		GType_GRIM
 	},

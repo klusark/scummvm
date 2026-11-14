@@ -21,6 +21,7 @@
 
 #include "audio/mixer.h"
 
+#include "common/array.h"
 #include "common/config-manager.h"
 #include "common/endian.h"
 #include "common/language.h"
@@ -55,6 +56,10 @@ static bool isStorableName(const char *valueName) {
 	}
 
 	return true;
+}
+
+static bool isMemoryOnlyName(const char *valueName) {
+	return !scumm_strnicmp(valueName, "Requesters\\", 11) || !scumm_stricmp(valueName, "Version");
 }
 
 static bool isStorableString(const char *data) {
@@ -385,6 +390,20 @@ int WuRegistry::startup(const char *version) {
 
 	ConfMan.set("joystick", "false");
 
+	Common::ConfigManager::Domain *domain = getConfDomain();
+
+	if (domain) {
+		Common::Array<Common::String> staleKeys;
+
+		for (Common::ConfigManager::Domain::const_iterator it = domain->begin(); it != domain->end(); ++it) {
+			if (isMemoryOnlyName(it->_key.c_str()))
+				staleKeys.push_back(it->_key);
+		}
+
+		for (uint i = 0; i < staleKeys.size(); i++)
+			domain->erase(staleKeys[i]);
+	}
+
 	if (!g_grim->isRemastered()) {
 		char storedVersion[128];
 
@@ -445,7 +464,7 @@ int WuRegistry::saveInt(const char *valueName, int value) {
 		return 1;
 	}
 
-	if (claimKey(valueName, kValueBinary, &key)) {
+	if (!isMemoryOnlyName(valueName) && claimKey(valueName, kValueBinary, &key)) {
 		addIndex(valueName);
 		ConfMan.setInt(key, value);
 
@@ -506,7 +525,7 @@ int WuRegistry::findIndex(const char *valueName) {
 	if (found)
 		return 1;
 
-	return ConfMan.hasKey(valueName) ? 1 : 0;
+	return (!isMemoryOnlyName(valueName) && ConfMan.hasKey(valueName)) ? 1 : 0;
 }
 
 int WuRegistry::saveFloat(const char *valueName, float value) {
@@ -531,7 +550,7 @@ int WuRegistry::saveFloat(const char *valueName, float value) {
 		return 1;
 	}
 
-	if (claimKey(valueName, kValueBinary, &key)) {
+	if (!isMemoryOnlyName(valueName) && claimKey(valueName, kValueBinary, &key)) {
 		addIndex(valueName);
 		ConfMan.set(key, Common::String::format("%.9g", value));
 
@@ -669,7 +688,7 @@ int WuRegistry::saveStr(const char *valueName, const char *data) {
 	if (!storable)
 		warning("WuRegistry::saveStr(): the string of '%s' cannot be stored in the configuration", valueName);
 
-	if (storable && claimKey(valueName, kValueString, &key)) {
+	if (storable && !isMemoryOnlyName(valueName) && claimKey(valueName, kValueString, &key)) {
 		int result = addIndex(valueName);
 
 		ConfMan.set(key, data);
@@ -874,6 +893,9 @@ bool WuRegistry::claimKey(const char *valueName, uint type, Common::String *key)
 }
 
 bool WuRegistry::findConfKey(const char *valueName, Common::String *key) const {
+	if (isMemoryOnlyName(valueName))
+		return false;
+
 	int index = findValue(valueName);
 
 	if (index >= 0) {
