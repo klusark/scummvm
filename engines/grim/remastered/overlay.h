@@ -49,6 +49,7 @@ class OverlayManager {
 public:
 	enum {
 		kMaxOverlays = 1023,
+		kOverlayCapacity = 1024,
 		kMaxImages = 128,
 		kNoHandle = -1
 	};
@@ -158,7 +159,7 @@ private:
 
 	HdCanvas *_canvas;
 
-	Overlay _overlays[kMaxOverlays];
+	Overlay _overlays[kOverlayCapacity];
 	int _numOverlays;
 	CachedImage *_images[kMaxImages];
 	int _numImages;

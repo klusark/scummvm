@@ -30,6 +30,7 @@
 #include "engines/grim/grim.h"
 #include "engines/grim/imuse/imuse_engine.h"
 #include "engines/grim/lua/lua.h"
+#include "engines/grim/lua/lualib.h"
 #include "engines/grim/lua_v1_opcodes/lua_v1.h"
 #include "engines/grim/movie/sputsmush.h"
 #include "engines/grim/remastered/commentary.h"
@@ -315,6 +316,7 @@ void GrimEngine::restoreRemastered() {
 
 	valid = SaveStore::readTag(stream, "LUAS") && valid;
 	lua_RestoreRemastered(saveReadCallback);
+	lua_iolibrestored();
 	valid = SaveStore::readTag(stream, "LUAE") && valid;
 	_sputRender->drawProgressBar(1.0f);
 

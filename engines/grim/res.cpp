@@ -35,11 +35,13 @@ namespace Grim {
 
 static const int kLabPriorityBase = -1000;
 static const int kDirectoryPriorityBase = 2;
+static const int kFirstCounterSerial = 0x40000000;
+static const int kLastCounterSerial = 0x7FFFFFF0;
 
 Res::Res(bool isDemo) : _resHS(nullptr), _resSysInitialized(0), _started(0), _nextLabPriority(kLabPriorityBase),
 		_nextDirectoryPriority(kDirectoryPriorityBase), _nextRemasteredPriority(kDirectoryPriorityBase),
 		_tagHead(nullptr), _nodeHead(nullptr), _nodeTail(nullptr), _defaultHandler(nullptr),
-		_logFile(nullptr), _memoryLimit(0x1800000), _sputRender(nullptr), _demo(isDemo) {
+		_logFile(nullptr), _memoryLimit(0x1800000), _nextSerial(kFirstCounterSerial), _sputRender(nullptr), _demo(isDemo) {
 }
 
 Res::~Res() {
@@ -467,6 +469,51 @@ ResNode *Res::resourceHandleFromSerialNumber(int serial) {
 	return nullptr;
 }
 
+int Res::nextFreeSerial() {
+	do {
+		if (_nextSerial >= kLastCounterSerial)
+			_nextSerial = kFirstCounterSerial;
+
+		_nextSerial++;
+	} while (resourceHandleFromSerialNumber(_nextSerial));
+
+	return _nextSerial;
+}
+
+int Res::allocateSerial(void *handle) {
+	int serial = (int)(intptr)handle;
+
+	if (serial && !resourceHandleFromSerialNumber(serial))
+		return serial;
+
+	return nextFreeSerial();
+}
+
+void Res::restoreSerial(ResNode *node, int serial, Common::Array<ResNode *> &restored) {
+	for (ResNode *other = _nodeHead; other; other = other->next) {
+		if (other == node || other->serial != serial)
+			continue;
+
+		bool alreadyRestored = false;
+
+		for (uint i = 0; i < restored.size(); i++) {
+			if (restored[i] == other)
+				alreadyRestored = true;
+		}
+
+		if (alreadyRestored)
+			warning("Res::restoreSerial(): the serial %d is used by %s and %s", serial, other->name, node->name);
+		else
+			other->serial = nextFreeSerial();
+	}
+
+	node->serial = serial;
+	restored.push_back(node);
+
+	if (serial > _nextSerial && serial < kLastCounterSerial)
+		_nextSerial = serial;
+}
+
 int Res::loaded(int tag, const char *name) {
 	return isResourceLoaded(tag, name) != nullptr;
 }
@@ -584,7 +631,7 @@ ResNode *Res::load(int tag, const char *name, void *handle) {
 
 	node->tag = tag;
 	node->handle = handle;
-	node->serial = (int)(intptr)handle;
+	node->serial = allocateSerial(handle);
 	node->flags = 0;
 	node->refs = nullptr;
 	node->name = nullptr;
@@ -800,7 +847,7 @@ void Res::setReference(ResRef *ref, void *handle) {
 
 	if (node) {
 		ref->valid = 1;
-		ref->serial = (int)(intptr)handle;
+		ref->serial = node->serial;
 		ref->handle = handle;
 		ref->prev = nullptr;
 		ref->next = node->refs;
@@ -936,6 +983,7 @@ int Res::sysSave(Common::WriteStream *stream) {
 
 int Res::sysLoad(Common::ReadStream *stream) {
 	char fileName[256];
+	Common::Array<ResNode *> restored;
 
 	int numNodes = stream->readSint32LE();
 
@@ -980,7 +1028,7 @@ int Res::sysLoad(Common::ReadStream *stream) {
 			return 1;
 		}
 
-		node->serial = stream->readSint32LE();
+		restoreSerial(node, stream->readSint32LE(), restored);
 
 		if (stream->err() || stream->eos())
 			return 1;
@@ -1019,6 +1067,7 @@ int Res::sysSaveRemastered(Common::WriteStream *stream) {
 
 int Res::sysLoadRemastered(Common::ReadStream *stream) {
 	char fileName[256];
+	Common::Array<ResNode *> restored;
 
 	int numNodes = stream->readSint32LE();
 
@@ -1057,7 +1106,7 @@ int Res::sysLoadRemastered(Common::ReadStream *stream) {
 			return 1;
 		}
 
-		node->serial = stream->readSint32LE();
+		restoreSerial(node, stream->readSint32LE(), restored);
 		stream->readSint32LE();
 
 		if (stream->err() || stream->eos())

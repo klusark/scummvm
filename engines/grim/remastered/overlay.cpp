@@ -416,7 +416,7 @@ int OverlayManager::restore(Common::ReadStream *stream) {
 
 	stream->read(firewall, 24);
 
-	if (stream->err() || stream->eos() || numOverlays < 0 || numOverlays > kMaxOverlays || numImages < 0 ||
+	if (stream->err() || stream->eos() || numOverlays < 0 || numOverlays > kOverlayCapacity || numImages < 0 ||
 			numImages > kMaxImages || serial < 0 || serial >= kHandleCount) {
 		warning("OverlayManager::restore(): invalid overlay counts %d and %d", numOverlays, numImages);
 		return 1;

@@ -1081,7 +1081,7 @@ void Lua_V1::SetActorColormap() {
 	if (lua_isstring(nameObj)) {
 		void *colormap = g_grim->_sputResource->alloc(kSputTagCmap, lua_getstring(nameObj));
 
-		if (!actor->colorMap->valid || actor->colorMap->serial != (int)(intptr)colormap) {
+		if (!actor->colorMap->valid || actor->colorMap->handle != colormap) {
 			g_grim->_res->removeReference(actor->colorMap);
 			g_grim->_res->setReference(actor->colorMap, colormap);
 		}

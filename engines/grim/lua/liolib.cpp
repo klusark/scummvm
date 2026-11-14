@@ -44,6 +44,13 @@ namespace Grim {
 
 LuaFile *stderrFile;
 
+enum {
+	kRemasteredStdinId = 0x7AFE3008,
+	kRemasteredStdoutId = 0x7AFE3028,
+	kRemasteredStderrId = 0x7AFE3048,
+	kRemasteredLegacyFileIds = 5
+};
+
 static int32 lastFileId = 0;
 Common::HashMap<int32, LuaFile *> *files;
 
@@ -177,6 +184,14 @@ static void setreturn(int32 id, const char *name) {
 	lua_pushusertag(id, tag);
 }
 
+static int32 stdinFileId() {
+	return g_grim->isRemastered() ? kRemasteredStdinId : 1;
+}
+
+static int32 stdoutFileId() {
+	return g_grim->isRemastered() ? kRemasteredStdoutId : 2;
+}
+
 static int32 addfile(LuaFile *f) {
 	++lastFileId;
 	(*files)[lastFileId] = f;
@@ -190,9 +205,9 @@ static void io_readfrom() {
 		if (luaIsEmi) {
 			closefile(FINPUT);
 			setreturn(0, FINPUT);
-		} else if (getfile(FINPUT) != getfile(1)) {
+		} else if (getfile(FINPUT) != getfile(stdinFileId())) {
 			closefile(FINPUT);
-			setreturn(1, FINPUT);
+			setreturn(stdinFileId(), FINPUT);
 		}
 	} else if (lua_tag(f) == gettag(IOTAG)) {
 		int32 id = lua_getuserdata(f);
@@ -237,9 +252,9 @@ static void io_writeto() {
 		if (luaIsEmi) {
 			closefile(FOUTPUT);
 			setreturn(0, FOUTPUT);
-		} else if (getfile(FOUTPUT) != getfile(2)) {
+		} else if (getfile(FOUTPUT) != getfile(stdoutFileId())) {
 			closefile(FOUTPUT);
-			setreturn(2, FOUTPUT);
+			setreturn(stdoutFileId(), FOUTPUT);
 		}
 	} else if (lua_tag(f) == gettag(IOTAG)) {
 		int32 id = lua_getuserdata(f);
@@ -492,6 +507,29 @@ static void openwithtags() {
 		return;
 
 	LuaFile* f;
+
+	if (g_grim->isRemastered()) {
+		LuaFile *input = new LuaFile();
+		LuaFile *output = new LuaFile();
+
+		input->_stdin = true;
+		output->_stdout = true;
+		stderrFile = new LuaFile();
+		stderrFile->_stderr = true;
+
+		(*files)[kRemasteredStdinId] = input;
+		(*files)[kRemasteredStdoutId] = output;
+		(*files)[kRemasteredStderrId] = stderrFile;
+
+		setfile(kRemasteredStdinId, FINPUT, iotag);
+		setfile(kRemasteredStdoutId, FOUTPUT, iotag);
+		setfile(kRemasteredStdinId, "_STDIN", iotag);
+		setfile(kRemasteredStdoutId, "_STDOUT", iotag);
+		setfile(kRemasteredStderrId, "_STDERR", iotag);
+
+		return;
+	}
+
 	f = new LuaFile();
 	f->_stdin = true;
 	setfile(addfile(f), FINPUT, iotag);
@@ -513,8 +551,33 @@ static void openwithtags() {
 	setfile(addfile(stderrFile), "_STDERR", iotag);
 }
 
+void lua_iolibrestored() {
+	static const char *const names[] = { "_INPUT", "_OUTPUT", "_STDIN", "_STDOUT", "_STDERR" };
+	static const int32 ids[] = { kRemasteredStdinId, kRemasteredStdoutId, kRemasteredStdinId, kRemasteredStdoutId, kRemasteredStderrId };
+
+	if (luaIsEmi || !g_grim->isRemastered())
+		return;
+
+	for (uint32 i = 0; i < ARRAYSIZE(names); i++) {
+		lua_Object object = lua_getglobal(names[i]);
+
+		if (!lua_isuserdata(object))
+			continue;
+
+		int32 id = lua_getuserdata(object);
+
+		if (id < 1 || id > kRemasteredLegacyFileIds)
+			continue;
+
+		setfile(ids[i], names[i], lua_tag(object));
+	}
+}
+
 void lua_iolibopen() {
 	files = new Common::HashMap<int32, LuaFile *>();
+
+	if (g_grim->isRemastered())
+		lastFileId = kRemasteredLegacyFileIds;
 
 	if (luaIsEmi)
 		luaL_openlib(iolibEmi, ARRAYSIZE(iolibEmi));

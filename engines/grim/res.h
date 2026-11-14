@@ -161,6 +161,9 @@ private:
 	int openLabFile(const char *path);
 	int fileOpenSearch(const char *dirPath);
 	int lookupFileHandle(const char *path);
+	int allocateSerial(void *handle);
+	int nextFreeSerial();
+	void restoreSerial(ResNode *node, int serial, Common::Array<ResNode *> &restored);
 
 	SysStruct *_resHS;
 	int _resSysInitialized;
@@ -175,6 +178,7 @@ private:
 	ResHandler *_defaultHandler;
 	Common::DumpFile *_logFile;
 	int _memoryLimit;
+	int _nextSerial;
 	SputRender *_sputRender;
 	bool _demo;
 };
