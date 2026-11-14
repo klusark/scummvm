@@ -1311,7 +1311,9 @@ void GrimEngine::savegameRestore() {
 	invalidateActiveActorsList();
 	buildActiveActorsList();
 
-	_currSet->setupCamera();
+	// (a game saved before any set was made current has none)
+	if (_currSet)
+		_currSet->setupCamera();
 	g_driver->set3DMode();
 }
 
@@ -1344,7 +1346,7 @@ void GrimEngine::restoreGRIM() {
 	_currSet = Set::getPool().getObject(_savedState->readLESint32());
 	if (_savedState->saveMinorVersion() > 4) {
 		_movieSetup = _savedState->readString();
-	} else {
+	} else if (_currSet) {
 		_movieSetup = _currSet->getCurrSetup()->_name;
 	}
 
