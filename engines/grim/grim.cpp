@@ -1498,7 +1498,7 @@ void GrimEngine::saveGRIM() {
 	_savedState->writeLESint32(_movieSubtitle ? _movieSubtitle->getId() : 0);
 
 	//Set stuff
-	_savedState->writeLESint32(_currSet->getId());
+	_savedState->writeLESint32(_currSet ? _currSet->getId() : 0);
 	_savedState->writeString(_movieSetup);
 
 	_savedState->endSection();
