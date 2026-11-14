@@ -395,7 +395,7 @@ void TextObject::draw() {
 }
 
 void TextObject::update() {
-	if (!_duration || !_created) {
+	if (!_duration) {
 		return;
 	}
 
