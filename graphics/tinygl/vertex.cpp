@@ -213,6 +213,7 @@ void GLContext::glopVertex(GLParam *p) {
 		if (!newarray) {
 			error("unable to allocate GLVertex array.");
 		}
+		memset(newarray + vertex_max / 2, 0, sizeof(GLVertex) * (vertex_max / 2));
 		vertex = newarray;
 	}
 	// new vertex entry
