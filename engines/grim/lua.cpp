@@ -417,6 +417,10 @@ Common::String LuaBase::parseMsgText(const char *msg, char *msgId) {
 	Common::String translation = g_localizer->localize(msg);
 	const char *secondSlash = nullptr;
 
+	// (a message without a "/id/" prefix has no id)
+	if (msgId)
+		msgId[0] = 0;
+
 	if (msg[0] == '/' && msgId) {
 		secondSlash = strchr(msg + 1, '/');
 		if (secondSlash) {

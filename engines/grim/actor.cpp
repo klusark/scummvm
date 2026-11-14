@@ -1156,7 +1156,7 @@ void Actor::sayLine(const char *msgId, bool background, float x, float y, int vo
 	Common::String msg = LuaBase::instance()->parseMsgText(msgId, id);
 
 	if (id[0] == 0) {
-		error("Actor::sayLine: No message ID for text");
+		warning("Actor::sayLine: No message ID for text \"%s\"", msgId);
 		return;
 	}
 
