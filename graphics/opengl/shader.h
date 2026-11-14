@@ -237,7 +237,8 @@ public:
 			size_t fragmentCount, const char *const *fragment,
 			const char *const *attributes);
 
-	void unbind();
+	/** Stop using any program and vertex array object, whichever shader is in use. */
+	static void unbind();
 
 	/**
 	 * Keep the vertex attribute setup in a vertex array object when the context supports them.

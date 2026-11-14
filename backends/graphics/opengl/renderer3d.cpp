@@ -25,6 +25,9 @@
 
 #include "backends/graphics/opengl/renderer3d.h"
 #include "backends/graphics/opengl/pipelines/pipeline.h"
+#ifdef USE_OPENGL_SHADERS
+#include "graphics/opengl/shader.h"
+#endif
 
 #include "common/system.h"
 #include "common/textconsole.h"
@@ -221,6 +224,15 @@ void Renderer3D::setup() {
 }
 
 void Renderer3D::leave3D() {
+#ifdef USE_OPENGL_SHADERS
+	if (OpenGLContext.shadersSupported) {
+		// Leave the engine's vertex array object before the state is saved: the client vertex array
+		// state pushed below holds the binding, and popping a vertex array object other than zero
+		// crashes the NVIDIA driver and puts the binding out of sync with OpenGL::Shader
+		Shader::unbind();
+	}
+#endif
+
 #if !USE_FORCED_GLES2
 	if (OpenGLContext.type == kContextGL) {
 		// Save current state (only available on OpenGL)

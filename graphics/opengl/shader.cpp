@@ -478,7 +478,7 @@ GLuint Shader::createBuffer(GLenum target, GLsizeiptr size, const GLvoid *data, 
 	GL_CALL(glGenBuffers(1, &vbo));
 	GL_CALL(glBindBuffer(target, vbo));
 	GL_CALL(glBufferData(target, size, data, usage));
-	GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, 0));
+	GL_CALL(glBindBuffer(target, 0));
 	return vbo;
 }
 
