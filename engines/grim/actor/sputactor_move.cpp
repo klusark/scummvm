@@ -159,7 +159,6 @@ void SputActorModule::updateActors(float delta) {
 	if (!g_grim->useRemasterFixes())
 		return;
 
-	// The scripts can allocate actors during the update: the table can move
 	SputActor *manny = getManny();
 
 	if (!manny || !(manny->mode & 1) || !manny->extra || manny->extra->pathIndex >= manny->extra->numPathPoints) {
@@ -349,12 +348,13 @@ void SputActorModule::updateCostumes2(SputActor *actor, float delta) {
 		_rd->normalize3Acc(target);
 	}
 
+	bool remastered = _grim->isRemastered();
 	RdVector3 axis;
 
 	_rd->cross3(axis, up, target);
 	_rd->normalize3Acc(axis);
 
-	if (g_grim->useRemasterFixes() && dot3Remastered(axis, axis) < 0.0001f) {
+	if (g_grim->useRemasterFixes() && _rd->dot3Remastered(axis, axis) < 0.0001f) {
 		target[0] = 0.0f;
 		target[1] = 0.0f;
 		target[2] = 1.0f;
@@ -366,6 +366,10 @@ void SputActorModule::updateCostumes2(SputActor *actor, float delta) {
 	float turnLimit = (float)((double)node->headTurnRate * delta);
 	float dotValue = _rd->dot2(up, target);
 	double angle = 90.0 - _stdMath->arcSin2(dotValue);
+
+	if (remastered)
+		angle = (float)angle;
+
 	double absAngle = angle;
 
 	if (absAngle < 0.0)
@@ -399,11 +403,20 @@ void SputActorModule::updateCostumes2(SputActor *actor, float delta) {
 	RdThing *headThing = node->headThing;
 
 	if (actor->mode & 2) {
-		pitchYawRoll[1] = (float)(pitchYawRoll[1] * 0.3333333432674408);
-		pitchYawRoll[0] = (float)(pitchYawRoll[0] * 0.3333333432674408);
+		double pitchLimit;
+		double yawLimit;
 
-		double pitchLimit = node->headPitchLimit * 0.3333333432674408;
-		double yawLimit = node->headYawLimit * 0.3333333432674408;
+		if (remastered) {
+			pitchYawRoll[1] = (float)(pitchYawRoll[1] / 3.0);
+			pitchYawRoll[0] = (float)(pitchYawRoll[0] / 3.0);
+			pitchLimit = (float)(node->headPitchLimit / 3.0);
+			yawLimit = (float)(node->headYawLimit / 3.0);
+		} else {
+			pitchYawRoll[1] = (float)(pitchYawRoll[1] * 0.3333333432674408);
+			pitchYawRoll[0] = (float)(pitchYawRoll[0] * 0.3333333432674408);
+			pitchLimit = node->headPitchLimit * 0.3333333432674408;
+			yawLimit = node->headYawLimit * 0.3333333432674408;
+		}
 
 		for (int i = 0; i < 3; i++) {
 			float *jointAngles = headThing->jointPyr[node->headJoint[i]];
@@ -463,10 +476,11 @@ void SputActorModule::updateCostumes3(SputActor *actor) {
 	puckForward[1] = puck->_orient[2][1];
 	puckForward[2] = puck->_orient[2][2];
 
+	bool remastered = _grim->isRemastered();
 	float dotValue = _rd->dot3(actorForward, puckForward);
 	double angle = 90.0 - _stdMath->arcSin3(dotValue);
 	float angleF = (float)angle;
-	double absAngle = angle;
+	double absAngle = remastered ? (double)angleF : angle;
 
 	if (absAngle < 0.0)
 		absAngle = -absAngle;
@@ -476,6 +490,9 @@ void SputActorModule::updateCostumes3(SputActor *actor) {
 
 	float frameTime = _sputTime->getFrameTimeFlex();
 	double rate = (double)frameTime * actor->extra->turnRate;
+
+	if (remastered)
+		rate = (float)rate;
 
 	if (angleF > 0.0f && rate < angleF)
 		angleF = (float)rate;
@@ -489,9 +506,23 @@ void SputActorModule::updateCostumes3(SputActor *actor) {
 
 	RdVector3 axis;
 
-	axis[0] = (float)((double)puckForward[2] * actorForward[1] - (double)puckForward[1] * actorForward[2]);
-	axis[1] = (float)((double)puckForward[0] * actorForward[2] - (double)puckForward[2] * actorForward[0]);
-	axis[2] = (float)((double)puckForward[1] * actorForward[0] - (double)puckForward[0] * actorForward[1]);
+	if (remastered) {
+		float firstProduct = (float)((double)puckForward[2] * actorForward[1]);
+		float secondProduct = (float)((double)puckForward[1] * actorForward[2]);
+
+		axis[0] = (float)((double)firstProduct - secondProduct);
+		firstProduct = (float)((double)puckForward[0] * actorForward[2]);
+		secondProduct = (float)((double)puckForward[2] * actorForward[0]);
+		axis[1] = (float)((double)firstProduct - secondProduct);
+		firstProduct = (float)((double)puckForward[1] * actorForward[0]);
+		secondProduct = (float)((double)puckForward[0] * actorForward[1]);
+		axis[2] = (float)((double)firstProduct - secondProduct);
+	} else {
+		axis[0] = (float)((double)puckForward[2] * actorForward[1] - (double)puckForward[1] * actorForward[2]);
+		axis[1] = (float)((double)puckForward[0] * actorForward[2] - (double)puckForward[2] * actorForward[0]);
+		axis[2] = (float)((double)puckForward[1] * actorForward[0] - (double)puckForward[0] * actorForward[1]);
+	}
+
 	_rd->normalize3Acc(axis);
 
 	RdMatrix34 turnMatrix;
@@ -768,14 +799,35 @@ void SputActorModule::updateCostumes4(SputActor *actor) {
 	actor->extra->turnDir = 0;
 }
 
-void SputActorModule::updatePuckMovement(SputActor *actor) {
+float SputActorModule::walkTargetDistanceRemastered(SputActor *actor) {
 	Extra *extra = actor->extra;
-	double deltaY = actor->actorPos[1] - extra->walkTarget[1];
-	double deltaX = actor->actorPos[0] - extra->walkTarget[0];
-	double deltaZ = actor->actorPos[2] - extra->walkTarget[2];
-	float deltaXF = (float)deltaX;
-	float deltaYF = (float)deltaY;
-	float distance = (float)sqrt(deltaX * deltaXF + deltaY * deltaYF + deltaZ * deltaZ);
+	float deltaX = (float)((double)actor->actorPos[0] - extra->walkTarget[0]);
+	float deltaY = (float)((double)actor->actorPos[1] - extra->walkTarget[1]);
+	float deltaZ = (float)((double)actor->actorPos[2] - extra->walkTarget[2]);
+	float squareX = (float)((double)deltaX * deltaX);
+	float squareY = (float)((double)deltaY * deltaY);
+	float squareZ = (float)((double)deltaZ * deltaZ);
+
+	return (float)sqrt(((double)squareX + squareY) + squareZ);
+}
+
+void SputActorModule::updatePuckMovement(SputActor *actor) {
+	bool remastered = _grim->isRemastered();
+	Extra *extra = actor->extra;
+	float distance;
+
+	if (remastered) {
+		distance = walkTargetDistanceRemastered(actor);
+	} else {
+		double deltaY = actor->actorPos[1] - extra->walkTarget[1];
+		double deltaX = actor->actorPos[0] - extra->walkTarget[0];
+		double deltaZ = actor->actorPos[2] - extra->walkTarget[2];
+		float deltaXF = (float)deltaX;
+		float deltaYF = (float)deltaY;
+
+		distance = (float)sqrt(deltaX * deltaXF + deltaY * deltaYF + deltaZ * deltaZ);
+	}
+
 	float walkRate = extra->walkRate;
 
 	if (walkRate < 0.0f)
@@ -784,7 +836,12 @@ void SputActorModule::updatePuckMovement(SputActor *actor) {
 	extra = actor->extra;
 
 	float frameTime = _sputTime->getFrameTimeFlex();
-	float step = (float)((double)frameTime * extra->timeScale * walkRate * 1.25);
+	float step;
+
+	if (remastered)
+		step = (float)((double)frameTime * walkRate * extra->timeScale * 1.25);
+	else
+		step = (float)((double)frameTime * extra->timeScale * walkRate * 1.25);
 
 	if (distance < step) {
 		double currentDistance;
@@ -808,12 +865,18 @@ void SputActorModule::updatePuckMovement(SputActor *actor) {
 			actor->extra->walkTarget[2] = nextPoint[2];
 
 			extra = actor->extra;
-			deltaY = actor->actorPos[1] - extra->walkTarget[1];
-			deltaX = actor->actorPos[0] - extra->walkTarget[0];
-			deltaZ = actor->actorPos[2] - extra->walkTarget[2];
-			deltaXF = (float)deltaX;
-			deltaYF = (float)deltaY;
-			currentDistance = sqrt(deltaX * deltaXF + deltaY * deltaYF + deltaZ * deltaZ);
+
+			if (remastered) {
+				currentDistance = walkTargetDistanceRemastered(actor);
+			} else {
+				double deltaY = actor->actorPos[1] - extra->walkTarget[1];
+				double deltaX = actor->actorPos[0] - extra->walkTarget[0];
+				double deltaZ = actor->actorPos[2] - extra->walkTarget[2];
+				float deltaXF = (float)deltaX;
+				float deltaYF = (float)deltaY;
+
+				currentDistance = sqrt(deltaX * deltaXF + deltaY * deltaYF + deltaZ * deltaZ);
+			}
 		} while (currentDistance < step);
 
 		extra = actor->extra;
@@ -839,14 +902,6 @@ void SputActorModule::leaveSector(SputActor *actor, WalkPlane *sector) {
 		sector->jumpOut(puck);
 		setActorPosition(actor, puck->_pos);
 	}
-}
-
-float SputActorModule::dot3Remastered(float *a, float *b) {
-	float productY = (float)((double)a[1] * b[1]);
-	float productX = (float)((double)a[0] * b[0]);
-	float productZ = (float)((double)a[2] * b[2]);
-
-	return (float)(((double)productY + productX) + productZ);
 }
 
 void SputActorModule::setActorConstrain(SputActor *actor, int constrain) {

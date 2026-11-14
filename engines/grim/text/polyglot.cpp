@@ -79,7 +79,6 @@ void Polyglot::configure(const char *tabFile) {
 			_languageMalloc[i] = _languageMalloc[i + 4] ^ 0xDD;
 	}
 
-	// The remastered skips the empty lines and the comments
 	bool skipComments = g_grim->isRemastered();
 	char *line = _languageMalloc;
 

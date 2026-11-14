@@ -160,6 +160,13 @@ void RenderDroid::buildFromVectorAngle34(RdMatrix34 out, RdVector3 axis, float a
 }
 
 void RenderDroid::buildRotate34(RdMatrix34 out, RdVector3 pyr) {
+	if (_remastered) {
+		RdVector3 origin = { 0.0f, 0.0f, 0.0f };
+
+		build34(out, pyr, origin);
+		return;
+	}
+
 	float sinP, cosP, sinY, cosY, sinR, cosR;
 
 	_stdMath->sinCos(pyr[0], &sinP, &cosP);
@@ -289,6 +296,13 @@ void RenderDroid::invertOrtho34(RdMatrix34 out, RdMatrix34 in) {
 	double z = in[3][2];
 	double x = in[3][0];
 
+	if (_remastered) {
+		out[3][0] = (float)-(((double)in[0][0] * x + (double)in[0][1] * y) + (double)in[0][2] * z);
+		out[3][1] = (float)-(((double)in[1][0] * x + (double)in[1][1] * y) + (double)in[1][2] * z);
+		out[3][2] = (float)-(((double)in[2][0] * x + (double)in[2][1] * y) + (double)in[2][2] * z);
+		return;
+	}
+
 	out[3][0] = (float)-((double)in[0][1] * y + (double)in[0][2] * z + x * in[0][0]);
 	if (isDemo())
 		out[3][1] = (float)-((double)in[1][1] * y + (double)in[1][2] * z + (double)in[1][0] * x);
@@ -338,6 +352,24 @@ void RenderDroid::lookAt(RdMatrix34 out, RdVector3 pos, RdVector3 target, float 
 }
 
 void RenderDroid::multiply34(RdMatrix34 out, RdMatrix34 a, RdMatrix34 b) {
+	if (_remastered) {
+		for (int row = 0; row < 4; row++) {
+			for (int column = 0; column < 3; column++) {
+				float first = (float)((double)a[0][column] * b[row][0]);
+				float second = (float)((double)a[1][column] * b[row][1]);
+				float third = (float)((double)a[2][column] * b[row][2]);
+				double sum = ((double)first + second) + third;
+
+				if (row == 3)
+					sum += a[3][column];
+
+				out[row][column] = (float)sum;
+			}
+		}
+
+		return;
+	}
+
 	out[0][0] = (float)((double)a[2][0] * b[0][2] + (double)a[1][0] * b[0][1] + (double)a[0][0] * b[0][0]);
 	out[0][1] = (float)((double)a[0][1] * b[0][0] + (double)a[1][1] * b[0][1] + (double)a[2][1] * b[0][2]);
 	out[0][2] = (float)((double)a[0][2] * b[0][0] + (double)a[2][2] * b[0][2] + (double)a[1][2] * b[0][1]);
@@ -364,6 +396,24 @@ void RenderDroid::postMultiply34(RdMatrix34 dst, RdMatrix34 src) {
 	RdMatrix34 orig;
 
 	memcpy(orig, dst, sizeof(RdMatrix34));
+
+	if (_remastered) {
+		for (int row = 0; row < 4; row++) {
+			for (int column = 0; column < 3; column++) {
+				float first = (float)((double)src[0][column] * orig[row][0]);
+				float second = (float)((double)src[1][column] * orig[row][1]);
+				float third = (float)((double)src[2][column] * orig[row][2]);
+				double sum = ((double)first + second) + third;
+
+				if (row == 3)
+					sum += src[3][column];
+
+				dst[row][column] = (float)sum;
+			}
+		}
+
+		return;
+	}
 
 	if (isDemo()) {
 		for (int r = 0; r < 4; r++) {
@@ -412,6 +462,21 @@ void RenderDroid::preMultiply34(RdMatrix34 dst, RdMatrix34 src) {
 	RdMatrix34 orig;
 
 	memcpy(orig, dst, sizeof(RdMatrix34));
+
+	if (_remastered) {
+		for (int row = 0; row < 4; row++) {
+			for (int column = 0; column < 3; column++) {
+				double sum = ((double)src[row][0] * orig[0][column] + (double)src[row][1] * orig[1][column]) + (double)src[row][2] * orig[2][column];
+
+				if (row == 3)
+					sum += orig[3][column];
+
+				dst[row][column] = (float)sum;
+			}
+		}
+
+		return;
+	}
 
 	if (isDemo()) {
 		for (int c = 0; c < 3; c++)
@@ -483,6 +548,13 @@ void RenderDroid::transformPoint34Acc(RdVector3 pt, RdMatrix34 mat) {
 }
 
 void RenderDroid::transformPointLst34(RdMatrix34 mat, RdVector3 *in, RdVector3 *out, uint num) {
+	if (_remastered) {
+		for (uint i = 0; i < num; i++)
+			transformPoint34Remastered(out[i], in[i], mat);
+
+		return;
+	}
+
 	for (uint i = 0; i < num; i++) {
 		out[i][0] = (float)((double)in[i][1] * mat[1][0] + (double)mat[2][0] * in[i][2] + (double)mat[0][0] * in[i][0] + mat[3][0]);
 		if (isDemo())

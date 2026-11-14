@@ -245,7 +245,6 @@ Common::String GrimMetaEngine::getSavegameFile(int saveGameIdx, const char *targ
 	return Common::String::format("grim%02d.gsv", saveGameIdx);
 }
 
-// The slots of the remastered are folders: their files are emptied, which takes them out of the list
 bool GrimMetaEngine::removeSaveState(const char *target, int slot) const {
 	if (ConfMan.get("extra", target).contains("Remastered"))
 		return SaveStore::eraseSlot(slot) == SaveStore::kStatusOk;
@@ -337,7 +336,6 @@ SaveStateDescriptor GrimMetaEngine::querySaveMetaInfos(const char *target, int s
 
 			SaveStateDescriptor remasteredDesc(this, slot, slots[i].title);
 
-			// The thumbnail is the mural of the solved puzzles
 			remasteredDesc.setThumbnail(SaveStore::makeMuralThumbnail(slots[i].mural.c_str()));
 
 			return remasteredDesc;

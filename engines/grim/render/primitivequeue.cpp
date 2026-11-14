@@ -110,7 +110,6 @@ SputPrimitiveObject *PrimitiveQueue::addObject(int id, int layer) {
 		_head = obj;
 	}
 
-	// The remastered also has the passes of the menus (4) and of the dialogs (8); the other values are the overlay pass
 	if (g_grim->isRemastered()) {
 		if (layer != 1 && layer != 4 && layer != 8)
 			layer = 2;

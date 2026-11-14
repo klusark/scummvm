@@ -43,9 +43,8 @@ IMuseInternalMixer::IMuseInternalMixer(Audio::Mixer *mixer, int sampleRate, bool
 	_sampleRate = sampleRate;
 	_lowLatencyMode = lowLatencyMode;
 	_demo = demo;
+	_remastered = remastered;
 
-	// In the remastered the plain sound type of the mixer is neutral (the HD movies use it), so the
-	// level of the output of iMUSE is the volume of its channels: 256 * 192 / 255 gives 192
 	if (remastered)
 		_outputChannelVolume = 192;
 
@@ -143,12 +142,10 @@ int IMuseInternalMixer::init(int numChannels, int mixBufSize, int mixChannelsNum
 	return 0;
 }
 
-// The output device of the original: opened by DwInitialize, closed by DwTerminate
 void IMuseInternalMixer::openOutput() {
 	if (_lowLatencyMode)
 		return;
 
-	// After closeOutput() the stream is gone with its mixer channel
 	if (!_stream)
 		_stream = Audio::makeQueuingAudioStream(_sampleRate, _mixer->getOutputStereo());
 
@@ -261,7 +258,11 @@ void IMuseInternalMixer::mix16ToStereo(const int16 *srcBuf, int32 inFrameCount, 
 	switch (ratio) {
 	case 0x8000:
 		for (int i = 0; i < inFrameCount - 1; i++) {
-			interpolated = (srcBuf[0] + srcBuf[2]) >> 1;
+			// The remastered averages with the next sample
+			if (_remastered)
+				interpolated = (srcBuf[0] + srcBuf[1]) >> 1;
+			else
+				interpolated = (srcBuf[0] + srcBuf[2]) >> 1;
 
 			mixBufCurCell[0] += srcBuf[0] * leftAmp;
 			mixBufCurCell[1] += srcBuf[0] * rightAmp;
@@ -319,7 +320,10 @@ void IMuseInternalMixer::mix16ToStereoSwap(const int16 *srcBuf, int32 inFrameCou
 	case 0x8000:
 		for (int i = 0; i < inFrameCount - 1; i++) {
 			sample = (int16)SWAP_BYTES_16(srcBuf[0]);
-			interpolated = (sample + (int16)SWAP_BYTES_16(srcBuf[2])) >> 1;
+			if (_remastered)
+				interpolated = (sample + (int16)SWAP_BYTES_16(srcBuf[1])) >> 1;
+			else
+				interpolated = (sample + (int16)SWAP_BYTES_16(srcBuf[2])) >> 1;
 
 			mixBufCurCell[0] += sample * leftAmp;
 			mixBufCurCell[1] += sample * rightAmp;

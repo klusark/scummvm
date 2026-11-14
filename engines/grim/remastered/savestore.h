@@ -38,15 +38,8 @@ struct Surface;
 
 namespace Grim {
 
-/**
- * The save slots of the remastered. Each slot is a folder inside the saves folder with two
- * files: grim.gsv, the zlib stream of the blocks of the game, and meta.gsv, with the title and
- * the puzzles that are solved. The folder is read and written through the file system nodes
- * because the save file manager only knows about flat files.
- */
 class SaveStore {
 public:
-	// What GetSaveStatus answers to the scripts
 	enum Status {
 		kStatusWaiting = -1,
 		kStatusOk = 0,
@@ -75,16 +68,13 @@ public:
 	static Common::String getSlotName(int slot);
 	static Common::FSNode getRootNode();
 
-	// The zlib stream, without any header of ours around it
 	static bool compress(const byte *data, uint32 size, Common::Array<byte> &result);
 	static bool uncompress(const byte *data, uint32 size, Common::Array<byte> &result);
 
-	// Return 0 or the status that the scripts get
 	static int writeSlot(int slot, const Common::Array<byte> &compressed, int setIndex, const char *mural, const char *title);
 	static int readSlot(int slot, Common::Array<byte> &compressed);
 	static int eraseSlot(int slot);
 
-	// The slots that have a meta.gsv of the right size, by slot number
 	static void listSlots(Common::Array<SlotInfo> &slots);
 
 	static uint32 packMetadata(int setIndex, const char *mural);
@@ -93,11 +83,9 @@ public:
 	static void writeTag(Common::WriteStream *stream, const char *tag);
 	static bool readTag(Common::ReadStream *stream, const char *tag);
 
-	// The block of the commentary: the module writes and reads it
 	static void writeCommentary(Common::WriteStream *stream);
 	static bool readCommentary(Common::ReadStream *stream);
 
-	// The mural of the slot, for the launcher
 	static Graphics::Surface *makeMuralThumbnail(const char *mural);
 
 private:

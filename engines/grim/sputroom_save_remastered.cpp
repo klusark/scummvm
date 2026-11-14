@@ -35,7 +35,6 @@
 
 namespace Grim {
 
-// The block of the rooms in the savegames of the remastered: the serials of the rooms take 8 bytes
 int SputRoom::saveRemastered(Common::WriteStream *stream) {
 	ResNode *next;
 	void *handle;

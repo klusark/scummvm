@@ -62,7 +62,7 @@ HdText *BlastText::getHdText() {
 int BlastText::load(const char *fileName, BlastTextFont *&font) {
 	int result = 1;
 
-	// The remastered never reads the font file: it makes an empty font and draws all the text from TrueType
+	// Remastered draws all the text from TrueType, the font file is not read
 	if (g_grim->isRemastered()) {
 		BlastTextFont *emptyFont = new BlastTextFont();
 

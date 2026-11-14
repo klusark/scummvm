@@ -32,9 +32,6 @@ enum {
 	kRemasteredFilelistNameSize = 33
 };
 
-// The savegames of the remastered have the structures of the iMUSE as they are in memory, with
-// the pointers in slots of 8 bytes. The pointers are not used when loading, only the one of the
-// stream matters as a flag.
 void IMuse::dispatchSaveLoadRemastered(Common::Serializer &ser) {
 	IMuseDispatch emptyDispatch;
 
@@ -75,7 +72,7 @@ void IMuse::dispatchSaveLoadRemastered(Common::Serializer &ser) {
 		ser.syncAsSint32LE(dispatch->fadeVol, VER(30));
 		ser.syncAsSint32LE(dispatch->fadeSlope, VER(30));
 
-		// The stream is allocated again later
+		// Only a flag, the stream is allocated later
 		if (ser.isLoading())
 			dispatch->streamPtr = streamPtr ? (IMuseStream *)1 : nullptr;
 	}
@@ -167,7 +164,6 @@ void IMuse::imSaveLoadFilelistRemastered(Common::Serializer &ser) {
 	ser.syncAsSint32LE(loadedCount, VER(30));
 	ser.syncAsSint32LE(openedCount, VER(30));
 
-	// The loaded sounds, then the opened ones
 	for (int list = 0; list < 2; list++) {
 		int count = list == 0 ? loadedCount : openedCount;
 
@@ -263,8 +259,6 @@ void IMuse::soundsSaveLoadBlockDataRemastered(Common::Serializer &ser, bool isIm
 	imSaveLoadRemastered(ser);
 }
 
-// The ImSave and ImSaveScript data are stored as a size followed by the data,
-// the ImSave one starts with the tag 49
 void IMuse::soundsSaveLoadBlockRemastered(Common::Serializer &ser, bool isImSave) {
 	int32 size = 0;
 
@@ -338,7 +332,6 @@ void IMuse::soundsSaveLoadRemastered(Common::Serializer &ser) {
 	int savedSlots[IMUSE_MAX_CACHED_SOUNDS];
 
 	if (ser.isSaving()) {
-		// Only active sounds with a native iMUS map are saved...
 		for (int slot = 0; slot < IMUSE_MAX_CACHED_SOUNDS; slot++) {
 			IMuseCachedSound *sound = &_soundCache[slot];
 
@@ -353,7 +346,6 @@ void IMuse::soundsSaveLoadRemastered(Common::Serializer &ser) {
 	if (numSounds < 0 || numSounds > IMUSE_MAX_CACHED_SOUNDS)
 		return;
 
-	// The cached sounds are restarted with the same ids, volume, pan and hook
 	for (int i = 0; i < numSounds; i++) {
 		char soundName[32] = {};
 		int32 luaSoundId = 0, priority = 0;

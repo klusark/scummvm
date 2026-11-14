@@ -35,7 +35,6 @@ namespace Grim {
 
 class HdCanvas;
 
-// The properties of OverlayCreate
 struct OverlayProps {
 	int cache = 0;
 	int layer = 1;
@@ -46,12 +45,6 @@ struct OverlayProps {
 	int height = -1;
 };
 
-/**
- * The images the scripts put on the 1920x1080 canvas (menus, buttons, cursors, fades).
- * An overlay is a handle with a position, a layer and a fade state; the images behind
- * the handles are shared and cached by name. They are loaded when first needed, from a
- * PNG file or, for the names ending in ".save", built as the mural of a savegame.
- */
 class OverlayManager {
 public:
 	enum {
@@ -85,10 +78,8 @@ public:
 	explicit OverlayManager(HdCanvas *canvas);
 	~OverlayManager();
 
-	// Back to the state of a new manager: no image and no overlay
 	void reset();
 
-	// An empty name makes an overlay without image. The image is loaded at once.
 	int create(const Common::String &name, int x, int y, const OverlayProps &props);
 	void move(int handle, int x, int y);
 	void setLayer(int handle, int layer);
@@ -99,18 +90,14 @@ public:
 	void fade(int handle, int type, bool hasValue, float value);
 	void showLoadSpinner(bool show, int x, int y);
 
-	// The cursors and the hotspots reach the entries and the cache of the images directly: the image of
-	// an entry is replaced without a reference count, an unknown handle does nothing
 	bool loadCached(const Common::String &name, int cacheMode);
 	void setImage(int handle, const Common::String &name);
 	bool getLayer(int handle, int *layer);
 	bool hasImage(int handle);
 	void preloadImage(const Common::String &name);
 
-	// Queues the overlays of a layer in the canvas and steps their fades
 	void render(int layer, int boxing);
 
-	// The block of the overlays in the savegames, the images are loaded again when they are needed
 	int save(Common::WriteStream *stream) const;
 	int restore(Common::ReadStream *stream);
 
@@ -120,7 +107,6 @@ public:
 		kMuralPuzzles = 60
 	};
 
-	// Fills the pixels (RGBA, kMuralWidth x kMuralHeight) of the mural: a '0' puzzle darkens its tiles
 	static void renderMural(const char *puzzles, int numPuzzles, byte *pixels);
 
 private:
@@ -130,8 +116,6 @@ private:
 		kSavedNameSize = 128
 	};
 
-	// lastHandle is the handle of the last overlay created with the image: the cache drops the
-	// smallest one first
 	struct CachedImage {
 		Common::String name;
 		int refCount;
@@ -174,8 +158,6 @@ private:
 
 	HdCanvas *_canvas;
 
-	// The slots are kept like the original keeps them: the entries after the last one hold what the
-	// compaction left there, and the handles are chosen with them in mind
 	Overlay _overlays[kMaxOverlays];
 	int _numOverlays;
 	CachedImage *_images[kMaxImages];

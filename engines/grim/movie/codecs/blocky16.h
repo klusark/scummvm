@@ -44,9 +44,13 @@ private:
 	int32 _bufSize;
 	int _width, _height;
 	int _blocksWidth, _blocksHeight;
+	bool _remasterFixes;
+	byte *_lastShown;
 
 	void makeTablesInterpolation(int param);
 	void makeTables47(int width);
+	uint16 blockOffset(uint16 first, uint16 second) const;
+	void upscaleFrame(byte *dest, const byte *source, int width, int height, const byte *palette);
 	void level1(byte *d_dst);
 	void level2(byte *d_dst);
 	void level3(byte *d_dst);

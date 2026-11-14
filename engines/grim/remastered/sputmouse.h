@@ -45,9 +45,6 @@ class WalkPlane;
 class WalkSystem;
 struct SputActor;
 
-// The cursor of the remastered and the queries that the scripts make with the mouse.
-// The cursor is two entries of the overlays, drawn with the others of the cursor layer.
-// Positions are on the 1920x1080 canvas, the play area is 1440 wide and starts at 240.
 class SputMouse {
 public:
 	enum {
@@ -62,13 +59,10 @@ public:
 
 	HotspotManager *getHotspots() { return &_hotspots; }
 
-	// Loads the cursor images and creates the two cursor overlays: they have to be the first
-	// overlays of the game. The hotspots need their overlays before. Returns 0 the first time.
 	int startup();
 	void shutdown();
 
 	void getCanvasPosition(int *x, int *y) const;
-	// Mouse axis of the controls, -1 to 1 around the center of the 640x480 screen
 	float getAxisNormalized(int axis, bool invert);
 
 	void setCursor(int index);
@@ -78,23 +72,21 @@ public:
 	void setVisibleInMovie(int visible) { _visibleInMovie = visible; }
 	bool isVisibleInMovie() const { return _visibleInMovie != 0; }
 
-	// Once per frame, before the overlays of the cursor layer are drawn
 	void update();
 
-	// The render module gives the camera and the depth of the scene under the pointer
 	bool getFloorWalkPos(bool onGround, SputRender *sputRender, RdVector3 out);
-	void projectToAxis(SputRender *sputRender, const float *actorPos, const float *axis, float t, float *scalar, float *parameter);
+	void projectToAxis(SputRender *sputRender, float *actorPos, float *axis, float t, float *scalar, float *parameter);
 	int getSelectedDialog(int x, int y, int itemHeight, int numLines) const;
 	void walkActorToMouseTarget(SputActor *actor, SputRender *sputRender);
 
-	// Block of the save game: the two cursor handles, then the hotspots
 	int save(Common::WriteStream *stream);
 	int restore(Common::ReadStream *stream);
 
 private:
 	bool getCameraRay(SputRender *sputRender, RdVector3 start, RdVector3 end) const;
-	bool reverseProject(SputRender *sputRender, int x, int y, RdVector3 out) const;
-	void raycast(const WalkPlane *plane, const float *start, const float *end, float *hit) const;
+	float distanceExactDifferences(const float *a, const float *b) const;
+	float distanceFloatDifferences(const float *a, const float *b) const;
+	void raycast(WalkPlane *plane, const float *start, const float *end, float *hit) const;
 	bool segmentPlaneIntersect(float *out, const float *start, const float *end, float normalX, float normalY, float normalZ, float constant) const;
 	bool segmentTriangleIntersect(float *out, const float *a, const float *b, const float *c, const float *start, const float *end) const;
 	void loadCursors(int count);
@@ -108,7 +100,6 @@ private:
 	RenderDroid *_rd;
 
 	HotspotManager _hotspots;
-	// Names of the cached cursor images, empty where the slot has no image
 	Common::String _cursorNames[kNumCursors];
 	Common::String _noImage;
 	bool _started;

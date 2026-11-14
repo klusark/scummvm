@@ -90,7 +90,7 @@ void lua_removelibslists() {
 
 void luaL_openlib(const luaL_reg *l, int32 n) {
 	int32 i;
-	lua_open(luaIsEmi);  // make sure lua is already open
+	lua_open(luaIsEmi, luaIsRemastered);  // make sure lua is already open
 	for (i = 0; i < n; i++)
 		lua_register(l[i].name, l[i].func);
 	luaL_addlibtolist(l, n);

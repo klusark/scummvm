@@ -531,7 +531,6 @@ int SputResource::loadResFont(ResHandlerMsg *msg) {
 			if (!_rd->isDemo())
 				_res->setPurgeOnFree(font, 0);
 
-			// The remastered draws the font from the TrueType file named in FontsHD
 			if (g_grim->isRemastered())
 				_blastText->getHdText()->attachFont(font, msg->name);
 

@@ -27,6 +27,7 @@
 #include "engines/grim/lua/lua.h"
 #include "engines/grim/lua_v1_opcodes/lua_v1.h"
 #include "engines/grim/remastered/hdcanvas.h"
+#include "engines/grim/remastered/hotspot.h"
 #include "engines/grim/text/hdtext.h"
 #include "engines/grim/text/normaltext.h"
 #include "engines/grim/text/polyglot.h"
@@ -195,7 +196,6 @@ SputTextEvent *SputText::createActorText(SputActor *actor, const char *text, int
 	}
 
 	if (_grim->isRemastered()) {
-		// The text is centered at (x, y), wrapped inside the middle of the screen, and grows upward from y
 		int penX = x;
 		int penY = y;
 
@@ -208,7 +208,7 @@ SputTextEvent *SputText::createActorText(SputActor *actor, const char *text, int
 		clip.y = 0;
 		clip.width = 1280;
 		clip.height = 1080;
-		HdText::convertRectNative(&clip, 0);
+		HotspotManager::convertRectNative(&clip, HotspotManager::kCoordsLegacy);
 
 		params.clip = &clip;
 		params.fgColor = actor->extra->talkColor;
@@ -418,7 +418,6 @@ int SputText::startup() {
 
 	_lua->registerTextOpcodes();
 
-	// The numbers of the references are saved with the Lua state, the order is the one of the savegames
 	if (_grim->isRemastered()) {
 		lua_pushstring("x");
 		_luaTextObjXRef = lua_ref(1);
@@ -755,7 +754,6 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 	if (obj && lua_isnumber(obj)) {
 		int y = luaFtol(lua_getnumber(obj));
 
-		// The remastered adds the baseline of the font when the text is queued
 		if (_grim->isRemastered()) {
 			params->y = y;
 		} else {
@@ -1130,26 +1128,12 @@ int SputText::getCoordsFromTable(lua_Object tableObj) {
 	return 0;
 }
 
-// The text area is the game screen of the canvas, in the units of the coordinates of the object
 void SputText::getHdClip(StdRect *clip, int coords) {
 	clip->x = 240;
 	clip->y = 0;
 	clip->width = 1440;
 	clip->height = 1080;
-	HdText::convertRectNative(clip, coords);
-}
-
-// The HD bitmap stays queued until the end of the frame, so the next update frees the event
-void SputText::queueBlastEvent(SputTextEvent *event) {
-	event->duration = 0;
-	event->flags = 0;
-	event->prev = nullptr;
-	event->next = _textQueue;
-
-	if (_textQueue)
-		_textQueue->prev = event;
-
-	_textQueue = event;
+	HotspotManager::convertRectNative(clip, coords);
 }
 
 void SputText::initHdEvent(SputTextEvent *event) {
@@ -1187,7 +1171,6 @@ bool SputText::makeHdInfo(SputTextEvent *event, HdTextInfo *info) {
 		baseLine = font->baseLine;
 	}
 
-	// The fonts without a TrueType file of their own use the custom font
 	if (!hdFont)
 		hdFont = hdText->getCustomFont();
 
@@ -1199,9 +1182,9 @@ bool SputText::makeHdInfo(SputTextEvent *event, HdTextInfo *info) {
 	int coords = event->params.coords;
 	StdRect rect = event->clip;
 
-	HdText::convertCoords1080(&x, &y, coords, false);
-	HdText::convertCoords1080(&rect.x, &rect.y, coords, false);
-	HdText::convertCoords1080(&rect.width, &rect.height, coords, true);
+	HotspotManager::convertCoords1080(&x, &y, coords, false);
+	HotspotManager::convertCoords1080(&rect.x, &rect.y, coords, false);
+	HotspotManager::convertCoords1080(&rect.width, &rect.height, coords, true);
 
 	int flags = event->params.flags;
 
@@ -1275,7 +1258,6 @@ bool SputText::queryTextObject(SputTextEvent *event, int *x, int *y, int *width,
 	return true;
 }
 
-// The number of lines after the wrap, and of characters in one of them (for the timing of the subtitles)
 int SputText::getHdLineCount(SputTextEvent *event) {
 	HdTextCache *cache = getHdLayout(event);
 
@@ -1303,7 +1285,6 @@ void SputText::luaGetFontDimensions() {
 
 	const HdFont *hdFont = font ? font->hdFont : nullptr;
 
-	// A font without a TrueType file gives an unwritten value in the original
 	if (!hdFont) {
 		warning("SputText::luaGetFontDimensions(): the font has no TrueType file");
 		lua_pushnumber(0.0f);
@@ -1326,7 +1307,6 @@ void SputText::drawHdEvent(SputTextEvent *event, int page) {
 	if (!cache || !makeHdInfo(event, &info))
 		return;
 
-	// The canvas draws the boxes in the order of the calls, whatever the page is
 	HdTextDraw draw;
 
 	_blastText->getHdText()->buildDraw(info, cache, canvas->getTextCanvas(), &draw);
@@ -1344,8 +1324,6 @@ void SputText::updateHd(int force, int page) {
 		SputTextEvent *next = event->next;
 		bool deleteEvent = false;
 
-		// Every call steps the fade and the time of every event, whatever the page is
-		// (fade in, or fade out that can delete the event)
 		if (event->params.flags & 0x400) {
 			event->params.alpha += 1.0f / 18.0f;
 

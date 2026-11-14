@@ -19,9 +19,30 @@
  *
  */
 
+#include "common/textconsole.h"
+
 #include "engines/grim/std/std_math.h"
 
 namespace Grim {
+
+int StdMath::tableIndex(float value, int quadrant) {
+	int lowest = quadrant * 4096;
+
+	if (value > -2147483648.0f && value < 2147483648.0f) {
+		int index = (int)value;
+
+		if (index >= lowest && index < lowest + 4096)
+			return index;
+
+		warning("StdMath::tableIndex(): index %d out of range", index);
+
+		return index < lowest ? lowest : lowest + 4095;
+	}
+
+	warning("StdMath::tableIndex(): invalid index value %f", value);
+
+	return lowest;
+}
 
 float StdMath::flexPower(float base, int exponent) {
 	float result = base;
@@ -106,7 +127,7 @@ void StdMath::sinCos(float angle, float *sin, float *cos) {
 
 	float value = (float)((double)normalized * 45.511112f);
 	float fraction = (float)((double)value - rint(value));
-	int index = (int)value;
+	int index = tableIndex(value, quadrant);
 	int next = index + 1;
 	const float *table = kSinCosTable;
 	float nextSin;
@@ -165,7 +186,7 @@ float StdMath::tan(float angle) {
 
 	float scaled = (float)((double)normalized / 360.0 * 16384.0);
 	float fraction = (float)((double)scaled - rint(scaled));
-	int index = (int)scaled;
+	int index = tableIndex(scaled, quadrant);
 	int next = index + 1;
 	const float *table = kTanTable;
 	float nextValue;
@@ -198,7 +219,26 @@ float StdMath::tan(float angle) {
 	return result;
 }
 
+float StdMath::arcSin2Remastered(float value) {
+	bool negative = value < 0.0;
+	float absValue = negative ? (float)(-(double)value) : value;
+	float result;
+
+	if (!(absValue > 0.70710677f)) {
+		result = (float)(((double)flexPower(absValue, 3) * 0.212749f + absValue) * 57.295784f);
+	} else {
+		float root = (float)sqrt(1.0 - (double)absValue * absValue);
+
+		result = (float)(90.0 - ((double)flexPower(root, 3) * 0.212749f + root) * 57.295784f);
+	}
+
+	return negative ? -result : result;
+}
+
 float StdMath::arcSin2(float value) {
+	if (_remastered)
+		return arcSin2Remastered(value);
+
 	bool negative = value < 0.0;
 	float absValue = (value >= 0.0) ? value : (float)(-(double)value);
 	float result;
@@ -260,7 +300,38 @@ float StdMath::arcSin3(float value) {
 	return negative ? -result : result;
 }
 
+float StdMath::arcTan4Remastered(float y, float x) {
+	if (x == 0.0f && y == 0.0f)
+		return 0.0f;
+
+	bool yNegative = y < 0.0f;
+	bool xNegative = x < 0.0f;
+	float absY = yNegative ? -y : y;
+	float absX = xNegative ? -x : x;
+	float ratio = (absY < absX) ? (float)((double)absY / absX) : (float)((double)absX / absY);
+	float absRatio = (ratio < 0.0f) ? -ratio : ratio;
+
+	double first = (double)absRatio - (double)flexPower(absRatio, 3) / 3.0;
+	double second = (double)flexPower(absRatio, 5) / 5.0 + first;
+	double third = second - (double)flexPower(absRatio, 7) / 7.0;
+	float angle = (float)(((double)flexPower(absRatio, 9) * 0.063235f + third) * 57.295784f);
+
+	if (absX <= absY)
+		angle = (float)(90.0 - angle);
+
+	float result = (float)(90.0 - angle);
+	if (yNegative)
+		result = (float)(180.0 - result);
+
+	if (!xNegative)
+		return -result;
+	return result;
+}
+
 float StdMath::arcTan4(float y, float x) {
+	if (_remastered)
+		return arcTan4Remastered(y, x);
+
 	if (x == 0.0 && y == 0.0)
 		return 0.0f;
 

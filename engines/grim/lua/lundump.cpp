@@ -3,13 +3,22 @@
 ** See Copyright Notice in lua.h
 */
 
+#include "common/endian.h"
+#include "common/textconsole.h"
+
 #include "engines/grim/lua/lauxlib.h"
 #include "engines/grim/lua/lfunc.h"
 #include "engines/grim/lua/lmem.h"
+#include "engines/grim/lua/lstate.h"
 #include "engines/grim/lua/lstring.h"
 #include "engines/grim/lua/lundump.h"
 
 namespace Grim {
+
+struct NumberFormat {
+	bool swapped;
+	bool isFloat;
+};
 
 static float conv_float(const byte *data) {
 	float f;
@@ -22,6 +31,8 @@ static float conv_float(const byte *data) {
 }
 
 static void unexpectedEOZ(ZIO *Z) {
+	if (luaIsRemastered)
+		luaL_verror("unexpected end of binary file %s", zname(Z));
 	luaL_verror("unexpected end of file in %s", zname(Z));
 }
 
@@ -56,9 +67,36 @@ static uint32 LoadSize(ZIO *Z) {
 	return (hi << 16) | lo;
 }
 
-static float LoadFloat(ZIO *Z) {
-	uint32 l = LoadSize(Z);
-	return conv_float((const byte *)&l);
+static float LoadFloat(ZIO *Z, const NumberFormat &format) {
+	if (!luaIsRemastered) {
+		uint32 l = LoadSize(Z);
+		return conv_float((const byte *)&l);
+	}
+
+	if (format.isFloat) {
+		byte data[4];
+		ezread(Z, data, 4);
+		uint32 bits = format.swapped ? READ_BE_UINT32(data) : READ_LE_UINT32(data);
+		float value;
+		memcpy(&value, &bits, sizeof(value));
+		return value;
+	}
+
+	byte data[8];
+	ezread(Z, data, 8);
+	uint64 bits = format.swapped ? READ_BE_UINT64(data) : READ_LE_UINT64(data);
+	double wide;
+	memcpy(&wide, &bits, sizeof(wide));
+
+	if (wide >= 3.4028235677973366e38 || wide <= -3.4028235677973366e38) {
+		warning("LoadFloat(): the number does not fit a float");
+		uint32 infinity = (wide > 0.0) ? 0x7F800000 : 0xFF800000;
+		float value;
+		memcpy(&value, &infinity, sizeof(value));
+		return value;
+	}
+
+	return (float)wide;
 }
 
 static TaggedString *LoadTString(ZIO *Z) {
@@ -89,7 +127,7 @@ static void LoadLocals(TProtoFunc *tf, ZIO *Z) {
 	tf->locvars[i].varname = nullptr;
 }
 
-static void LoadConstants(TProtoFunc *tf, ZIO *Z) {
+static void LoadConstants(TProtoFunc *tf, ZIO *Z, const NumberFormat &format) {
 	int32 i, n = LoadWord(Z);
 	tf->nconsts = n;
 	if (n == 0)
@@ -101,7 +139,7 @@ static void LoadConstants(TProtoFunc *tf, ZIO *Z) {
 		switch (c) {
 		case ID_NUM:
 			ttype(o) = LUA_T_NUMBER;
-			nvalue(o) = LoadFloat(Z);
+			nvalue(o) = LoadFloat(Z, format);
 			break;
 		case ID_STR:
 			ttype(o) = LUA_T_STRING;
@@ -116,24 +154,25 @@ static void LoadConstants(TProtoFunc *tf, ZIO *Z) {
 	}
 }
 
-static void LoadFunctions(TProtoFunc *tf, ZIO *Z);
+static void LoadFunctions(TProtoFunc *tf, ZIO *Z, const NumberFormat &format);
 
-static TProtoFunc *LoadFunction(ZIO *Z) {
+static TProtoFunc *LoadFunction(ZIO *Z, const NumberFormat &format) {
 	TProtoFunc *tf = luaF_newproto();
 	tf->lineDefined = LoadWord(Z);
 	tf->fileName = LoadTString(Z);
 	tf->code = (byte *)LoadBlock(LoadSize(Z), Z);
-	LoadConstants(tf, Z);
+	LoadConstants(tf, Z, format);
 	LoadLocals(tf, Z);
-	LoadFunctions(tf, Z);
+	LoadFunctions(tf, Z, format);
 
 	return tf;
 }
 
-static void LoadFunctions(TProtoFunc *tf, ZIO *Z) {
-	while (ezgetc(Z) == ID_FUNCTION) {
+static void LoadFunctions(TProtoFunc *tf, ZIO *Z, const NumberFormat &format) {
+	// The end of the input after the last function is not an error
+	while ((luaIsRemastered ? zgetc(Z) : ezgetc(Z)) == ID_FUNCTION) {
 		int32 i = LoadWord(Z);
-		TProtoFunc *t = LoadFunction(Z);
+		TProtoFunc *t = LoadFunction(Z, format);
 		TObject *o = tf->consts + i;
 		tfvalue(o) = t;
 	}
@@ -144,20 +183,73 @@ static void LoadSignature(ZIO *Z) {
 
 	while (*s && ezgetc(Z) == *s)
 		++s;
-	if (*s)
+	if (*s) {
+		if (luaIsRemastered)
+			luaL_verror("bad signature in binary file %s", zname(Z));
 		luaL_verror("bad signature in %s", zname(Z));
+	}
 }
 
-static void LoadHeader(ZIO *Z) {
+static void LoadRemasteredNumberFormat(ZIO *Z, int32 sizeofR, NumberFormat *format) {
+	if (sizeofR == 4) {
+		byte data[4];
+		ezread(Z, data, 4);
+		uint32 bits = READ_LE_UINT32(data);
+		float testNumber = (float)TEST_FLOAT;
+		float loaded;
+		memcpy(&loaded, &bits, sizeof(loaded));
+
+		if (testNumber != loaded) {
+			bits = READ_BE_UINT32(data);
+			memcpy(&loaded, &bits, sizeof(loaded));
+			if (testNumber != loaded)
+				luaL_verror("unknown float representation in binary file %s", zname(Z));
+			format->swapped = true;
+		}
+		format->isFloat = true;
+	} else if (sizeofR == 8) {
+		byte data[8];
+		ezread(Z, data, 8);
+		uint64 bits = READ_LE_UINT64(data);
+		double testNumber = (double)(float)TEST_FLOAT;
+		double loaded;
+		memcpy(&loaded, &bits, sizeof(loaded));
+
+		if (testNumber != loaded) {
+			bits = READ_BE_UINT64(data);
+			memcpy(&loaded, &bits, sizeof(loaded));
+			if (testNumber != loaded)
+				luaL_verror("unknown float representation in binary file %s", zname(Z));
+			format->swapped = true;
+		}
+		format->isFloat = false;
+	} else {
+		luaL_verror("floats in binary file %s have %d bytes; expected %d (float) or %d (double)", zname(Z), sizeofR, 4, 8);
+	}
+}
+
+static void LoadHeader(ZIO *Z, NumberFormat *format) {
 	int32 version, sizeofR;
 
 	LoadSignature(Z);
 	version = ezgetc(Z);
-	if (version > VERSION)
+	if (version > VERSION) {
+		if (luaIsRemastered)
+			luaL_verror("binary file %s too new: version=0x%02x; expected at most 0x%02x", zname(Z), version, VERSION);
 		luaL_verror("%s too new: version=0x%02x; expected at most 0x%02x", zname(Z), version, VERSION);
-	if (version < VERSION) // check last major change
+	}
+	if (version < VERSION) { // check last major change
+		if (luaIsRemastered)
+			luaL_verror("binary file %s too old: version=0x%02x; expected at least 0x%02x", zname(Z), version, VERSION);
 		luaL_verror("%s too old: version=0x%02x; expected at least 0x%02x", zname(Z), version, VERSION);
+	}
 	sizeofR = ezgetc(Z); // test number representation
+
+	if (luaIsRemastered) {
+		LoadRemasteredNumberFormat(Z, sizeofR, format);
+		return;
+	}
+
 	if (sizeofR != sizeof(float))
 		luaL_verror("number expected float in %s", zname(Z));
 	ezgetc(Z);
@@ -167,8 +259,11 @@ static void LoadHeader(ZIO *Z) {
 }
 
 static TProtoFunc *LoadChunk(ZIO *Z) {
-	LoadHeader(Z);
-	return LoadFunction(Z);
+	NumberFormat format;
+	format.swapped = false;
+	format.isFloat = true;
+	LoadHeader(Z, &format);
+	return LoadFunction(Z, format);
 }
 
 /*
@@ -179,8 +274,11 @@ TProtoFunc *luaU_undump1(ZIO *Z) {
 	int32 c = zgetc(Z);
 	if (c == ID_CHUNK)
 		return LoadChunk(Z);
-	else if (c != EOZ)
+	else if (c != EOZ) {
+		if (luaIsRemastered)
+			luaL_verror("%s is not a lua binary file", zname(Z));
 		luaL_verror("%s is not a Lua binary file", zname(Z));
+	}
 	return nullptr;
 }
 

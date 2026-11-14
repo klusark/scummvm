@@ -42,7 +42,7 @@ WalkPlane::WalkPlane(WalkSystem *system, float (*verts)[3], int numPoints, const
 	_next = nullptr;
 	_number = 0;
 	_type = 0;
-	_hitEdge = -1;
+	_hitEdge = _system->_remastered ? 0 : -1;
 	_quadAxis = 0;
 	_alwaysMerge = 0;
 	_numTriangles = 0;
@@ -172,7 +172,72 @@ void WalkPlane::setName(const char *name) {
 	}
 }
 
+void WalkPlane::setTypeRemastered(int newType) {
+	_type = newType;
+	_tolerance = 9999.0f;
+
+	if ((newType & 0x1000) != 0)
+		_tolerance = 0.005f;
+
+	if ((newType & 0x100) == 0)
+		return;
+
+	if (_numVerts != 4) {
+		_type = 4096;
+		return;
+	}
+
+	RdVector3 edgeA;
+	RdVector3 edgeB;
+
+	edgeA[0] = (float)((double)_verts[1]->x - _verts[0]->x);
+	edgeA[1] = (float)((double)_verts[1]->y - _verts[0]->y);
+	edgeA[2] = (float)((double)_verts[1]->z - _verts[0]->z);
+	edgeB[0] = (float)((double)_verts[3]->x - _verts[2]->x);
+	edgeB[1] = (float)((double)_verts[3]->y - _verts[2]->y);
+	edgeB[2] = (float)((double)_verts[3]->z - _verts[2]->z);
+
+	float lengthA = _system->_rd->normalize3Acc(edgeA);
+	float lengthB = _system->_rd->normalize3Acc(edgeB);
+	float productY = (float)((double)edgeB[1] * edgeA[1]);
+	float productX = (float)((double)edgeB[0] * edgeA[0]);
+	float productZ = (float)((double)edgeB[2] * edgeA[2]);
+	float firstDot = (float)fabs(((double)productY + productX) + productZ);
+
+	edgeA[0] = (float)((double)_verts[2]->x - _verts[1]->x);
+	edgeA[1] = (float)((double)_verts[2]->y - _verts[1]->y);
+	edgeA[2] = (float)((double)_verts[2]->z - _verts[1]->z);
+	edgeB[0] = (float)((double)_verts[0]->x - _verts[3]->x);
+	edgeB[1] = (float)((double)_verts[0]->y - _verts[3]->y);
+	edgeB[2] = (float)((double)_verts[0]->z - _verts[3]->z);
+
+	float lengthC = _system->_rd->normalize3Acc(edgeA);
+	float lengthD = _system->_rd->normalize3Acc(edgeB);
+
+	productY = (float)((double)edgeB[1] * edgeA[1]);
+	productX = (float)((double)edgeB[0] * edgeA[0]);
+	productZ = (float)((double)edgeB[2] * edgeA[2]);
+
+	float secondDot = (float)fabs(((double)productY + productX) + productZ);
+
+	if (!(secondDot < firstDot)) {
+		if (lengthD > lengthC)
+			_quadAxis = 1;
+		else
+			_quadAxis = 3;
+	} else if (lengthB > lengthA) {
+		_quadAxis = 0;
+	} else {
+		_quadAxis = 2;
+	}
+}
+
 void WalkPlane::setType(int newType) {
+	if (_system->_remastered) {
+		setTypeRemastered(newType);
+		return;
+	}
+
 	_type = newType;
 
 	if (_system->_demo) {
@@ -668,7 +733,74 @@ void WalkPlane::draw(uint16 color) {
 	}
 }
 
+void WalkPlane::jumpOutRemastered(Puck *puck) {
+	if (_numVerts != 4)
+		return;
+
+	RdVector3 a;
+	RdVector3 b;
+	RdVector3 out;
+
+	a[0] = puck->_pos[0];
+	a[1] = puck->_pos[1];
+	a[2] = puck->_pos[2];
+
+	float stepX = (float)((double)puck->_orient[1][0] * -10.0);
+	float stepY = (float)((double)puck->_orient[1][1] * -10.0);
+	float stepZ = (float)((double)puck->_orient[1][2] * -10.0);
+
+	b[0] = (float)((double)a[0] + stepX);
+	b[1] = (float)((double)a[1] + stepY);
+	b[2] = (float)((double)a[2] + stepZ);
+
+	intersection(a, b, out);
+
+	int edge = _hitEdge;
+
+	if (edge == -1)
+		return;
+
+	float *vert = &_verts[edge]->x;
+	int prevEdge = edge - 1;
+
+	if (prevEdge <= -1)
+		prevEdge = _numVerts - 1;
+
+	float deltaX = (float)((double)_verts[prevEdge]->x - vert[0]);
+	float absDeltaX = deltaX < 0.0f ? -deltaX : deltaX;
+	float t;
+
+	if (0.00001f < absDeltaX && deltaX != 0.0f)
+		t = (float)(((double)out[0] - vert[0]) / deltaX);
+	else
+		t = (float)(((double)out[1] - vert[1]) / (float)((double)_verts[prevEdge]->y - vert[1]));
+
+	float inverseT = (float)(1.0 - t);
+	int nextEdge = (edge + 2) % _numVerts;
+
+	_hitEdge = nextEdge;
+
+	float *to = &_verts[nextEdge]->x;
+	int beforeNext = nextEdge - 1;
+
+	if (beforeNext <= -1)
+		beforeNext = _numVerts - 1;
+
+	float *from = &_verts[beforeNext]->x;
+
+	out[0] = (float)(((double)from[0] - to[0]) * inverseT + to[0]);
+	out[1] = (float)(((double)from[1] - to[1]) * inverseT + to[1]);
+	out[2] = (float)(((double)from[2] - to[2]) * inverseT + to[2]);
+
+	puck->setPos(out);
+}
+
 void WalkPlane::jumpOut(Puck *puck) {
+	if (_system->_remastered) {
+		jumpOutRemastered(puck);
+		return;
+	}
+
 	if (_numVerts == 4) {
 		RdVector3 a;
 		RdVector3 b;
@@ -723,7 +855,152 @@ void WalkPlane::jumpOut(Puck *puck) {
 	}
 }
 
+float *WalkPlane::getConstraintVectorRemastered(Puck *puck) {
+	float *constraint = _system->_constraintVector;
+	RdVector3 a;
+	RdVector3 b;
+
+	a[0] = puck->_pos[0];
+	a[1] = puck->_pos[1];
+	a[2] = puck->_pos[2];
+
+	float reach = 100.0f;
+	if (puck->_forwardDist > 0.0f)
+		reach = -100.0f;
+
+	float stepX = (float)((double)reach * puck->_orient[1][0]);
+	float stepY = (float)((double)reach * puck->_orient[1][1]);
+	float stepZ = (float)((double)reach * puck->_orient[1][2]);
+
+	b[0] = (float)((double)a[0] + stepX);
+	b[1] = (float)((double)a[1] + stepY);
+	b[2] = (float)((double)a[2] + stepZ);
+
+	intersection(a, b, constraint);
+
+	if (_hitEdge == -1)
+		return nullptr;
+
+	WpVertex *hitVert = _verts[_hitEdge];
+
+	double deltaX = (double)hitVert->x - constraint[0];
+	double deltaY = (double)hitVert->y - constraint[1];
+	double deltaZ = (double)hitVert->z - constraint[2];
+	float squareX = (float)(deltaX * deltaX);
+	float squareY = (float)(deltaY * deltaY);
+	float squareZ = (float)(deltaZ * deltaZ);
+	double cornerSum = ((double)squareX + squareY) + squareZ;
+	double cornerDist = 0.0025000000000000005;
+
+	if (!(cornerSum < cornerDist)) {
+		int prevEdge = _hitEdge - 1;
+
+		if (prevEdge <= -1)
+			prevEdge = _numVerts - 1;
+
+		WpVertex *prevVert = _verts[prevEdge];
+
+		double probeX = (double)prevVert->x - constraint[0];
+		double probeY = (double)prevVert->y - constraint[1];
+		double probeZ = (double)prevVert->z - constraint[2];
+		float probeSquareY = (float)(probeY * probeY);
+		float probeSquareX = (float)(probeX * probeX);
+		float probeSquareZ = (float)(probeZ * probeZ);
+		double probeSum = ((double)probeSquareY + probeSquareX) + probeSquareZ;
+
+		if (probeSum < cornerDist) {
+			RdVector3 vec;
+
+			vec[0] = (float)((double)prevVert->x - hitVert->x);
+			vec[1] = (float)((double)prevVert->y - hitVert->y);
+			vec[2] = (float)((double)prevVert->z - hitVert->z);
+
+			_system->_rd->normalize3Acc(vec);
+
+			float value = _system->_rd->dot3(vec, puck->_orient[1]);
+			float angle = (float)(90.0 - _system->_stdMath->arcSin3(value));
+
+			if (angle < 1.0f || angle > 179.0f) {
+				int newEdge = _hitEdge - 1;
+
+				if (newEdge <= -1)
+					newEdge = _numVerts - 1;
+
+				_hitEdge = newEdge;
+			}
+		}
+	} else {
+		int prevEdge = _hitEdge - 1;
+
+		if (prevEdge <= -1)
+			prevEdge = _numVerts - 1;
+
+		RdVector3 vec;
+
+		vec[0] = (float)((double)_verts[prevEdge]->x - hitVert->x);
+		vec[1] = (float)((double)_verts[prevEdge]->y - hitVert->y);
+		vec[2] = (float)((double)_verts[prevEdge]->z - hitVert->z);
+
+		_system->_rd->normalize3Acc(vec);
+
+		float value = _system->_rd->dot3(vec, puck->_orient[1]);
+		float angle = (float)(90.0 - _system->_stdMath->arcSin3(value));
+
+		if (angle < 1.0f || angle > 179.0f)
+			_hitEdge = (_hitEdge + 1) % _numVerts;
+	}
+
+	float *edgeVert = &_verts[_hitEdge]->x;
+	int edgeBefore = _hitEdge - 1;
+
+	if (edgeBefore <= -1)
+		edgeBefore = _numVerts - 1;
+
+	float *edgePrev = &_verts[edgeBefore]->x;
+	float edgeDeltaX = (float)((double)edgePrev[0] - edgeVert[0]);
+	float absEdgeDeltaX = edgeDeltaX < 0.0f ? -edgeDeltaX : edgeDeltaX;
+	float t;
+
+	if (0.00001f < absEdgeDeltaX && edgeDeltaX != 0.0f)
+		t = (float)(((double)constraint[0] - edgeVert[0]) / edgeDeltaX);
+	else
+		t = (float)(((double)constraint[1] - edgeVert[1]) / (float)((double)edgePrev[1] - edgeVert[1]));
+
+	if (t < 0.15f)
+		t = 0.15f;
+
+	if (0.85f < t)
+		t = 0.85f;
+
+	float *nextVert = &_verts[(_hitEdge + 1) % _numVerts]->x;
+	float *otherVert = &_verts[(_numVerts + _hitEdge - 2) % _numVerts]->x;
+
+	float spanX = (float)((double)otherVert[0] - nextVert[0]);
+	float spanY = (float)((double)otherVert[1] - nextVert[1]);
+	float spanZ = (float)((double)otherVert[2] - nextVert[2]);
+	float targetX = (float)((double)spanX * t + nextVert[0]);
+	float targetY = (float)((double)spanY * t + nextVert[1]);
+	float targetZ = (float)((double)spanZ * t + nextVert[2]);
+
+	constraint[0] = (float)((double)targetX - constraint[0]);
+	constraint[1] = (float)((double)targetY - constraint[1]);
+	constraint[2] = (float)((double)targetZ - constraint[2]);
+
+	_system->_rd->normalize3Acc(constraint);
+
+	if (puck->_forwardDist < 0.0f) {
+		constraint[0] = (float)(constraint[0] * -1.0f);
+		constraint[1] = (float)(constraint[1] * -1.0f);
+		constraint[2] = (float)(constraint[2] * -1.0f);
+	}
+
+	return constraint;
+}
+
 float *WalkPlane::getConstraintVector(Puck *puck) {
+	if (_system->_remastered)
+		return getConstraintVectorRemastered(puck);
+
 	float *constraint = _system->_constraintVector;
 	RdVector3 a;
 	RdVector3 b;
@@ -753,7 +1030,6 @@ float *WalkPlane::getConstraintVector(Puck *puck) {
 	float deltaXStored = (float)deltaX;
 	float deltaZStored = (float)deltaZ;
 
-	// The demo uses a larger distance to the corners
 	double cornerDist = _system->_demo ? 0.01 : 0.0025;
 
 	if (deltaX * deltaXStored + deltaY * deltaY + deltaZ * deltaZStored >= cornerDist) {
@@ -853,7 +1129,101 @@ float *WalkPlane::getConstraintVector(Puck *puck) {
 	return constraint;
 }
 
+int WalkPlane::clipPolyRemastered(const float *poly, int numPoly, float *out) {
+	float bufferA[36] = { 0.0f };
+	float bufferB[36] = { 0.0f };
+	float *in = bufferA;
+	float *newObject = bufferB;
+	int count = numPoly;
+
+	if (numPoly > 12) {
+		warning("WalkPlane::clipPolyRemastered(): polygon has %d vertices, only 12 are supported", numPoly);
+		return 0;
+	}
+
+	if (numPoly > 0)
+		memcpy(bufferA, poly, sizeof(float) * 3 * numPoly);
+
+	if (_numVerts > 0) {
+		float *prevVert = &_verts[_numVerts - 1]->x;
+
+		for (int i = 0; i < _numVerts; i++) {
+			float *vert = &_verts[i]->x;
+			float edgeU = (float)(-((double)vert[_axisU] - prevVert[_axisU]));
+			float edgeV = (float)((double)vert[_axisV] - prevVert[_axisV]);
+
+			if (count <= 0)
+				return 0;
+
+			float *prevIn = &in[3 * (count - 1)];
+			float prevDist = (float)(((double)prevIn[_axisV] - prevVert[_axisV]) * edgeU + ((double)prevIn[_axisU] - prevVert[_axisU]) * edgeV);
+			int outCount = 0;
+
+			for (int j = 0; j < count; j++) {
+				float *curIn = &in[3 * j];
+				float dist = (float)(((double)curIn[_axisV] - prevVert[_axisV]) * edgeU + ((double)curIn[_axisU] - prevVert[_axisU]) * edgeV);
+
+				bool addIntersection = (prevDist > 0.0f && dist < 0.0f) || (prevDist < 0.0f && dist > 0.0f);
+				bool addVertex = (prevDist > 0.0f || prevDist < 0.0f) && dist > 0.0f;
+
+				if (addIntersection) {
+					float deltaV = (float)((double)curIn[_axisV] - prevIn[_axisV]);
+					float deltaU = (float)((double)curIn[_axisU] - prevIn[_axisU]);
+					float denominator = (float)(-((double)deltaV * edgeU) - (double)deltaU * edgeV);
+					float absDenominator = denominator < 0.0f ? -denominator : denominator;
+
+					if (0.00001f < absDenominator && denominator != 0.0f) {
+						if (outCount >= 12) {
+							warning("WalkPlane::clipPolyRemastered(): clipped polygon has more than 12 vertices");
+							return 0;
+						}
+
+						float t = (float)((double)dist / denominator);
+						float *newVert = &newObject[3 * outCount];
+
+						newVert[_axisV] = (float)((double)deltaV * t + curIn[_axisV]);
+						newVert[_axisU] = (float)((double)deltaU * t + curIn[_axisU]);
+						outCount++;
+					}
+				}
+
+				if (addVertex) {
+					if (outCount >= 12) {
+						warning("WalkPlane::clipPolyRemastered(): clipped polygon has more than 12 vertices");
+						return 0;
+					}
+
+					memcpy(&newObject[3 * outCount], curIn, sizeof(float) * 3);
+					outCount++;
+				}
+
+				prevDist = dist;
+				prevIn = curIn;
+			}
+
+			if (outCount < 2)
+				return 0;
+
+			float *swap = in;
+			in = newObject;
+			newObject = swap;
+			count = outCount;
+			prevVert = vert;
+		}
+	}
+
+	for (int i = 0; i < count; i++) {
+		memcpy(&out[3 * i], &in[3 * i], sizeof(float) * 3);
+		project(&out[3 * i]);
+	}
+
+	return count;
+}
+
 int WalkPlane::clipPoly(const float *poly, int numPoly, float *out) {
+	if (_system->_remastered)
+		return clipPolyRemastered(poly, numPoly, out);
+
 	float bufferA[36] = { 0.0f };
 	float bufferB[36] = { 0.0f };
 	float *in = bufferA;
@@ -967,12 +1337,26 @@ double WalkPlane::distToEdge(int edge, float *point) {
 	_system->_rd->normalize3(edgeDir, edgeVec);
 	float pointLength = _system->_rd->normalize3(pointDir, pointVec);
 
-	float value = (float)((double)pointDir[0] * edgeDir[0] + (double)pointDir[1] * edgeDir[1] + (double)pointDir[2] * edgeDir[2]);
+	float value;
+
+	if (_system->_remastered) {
+		float productY = (float)((double)pointDir[1] * edgeDir[1]);
+		float productX = (float)((double)pointDir[0] * edgeDir[0]);
+		float productZ = (float)((double)pointDir[2] * edgeDir[2]);
+
+		value = (float)(((double)productY + productX) + productZ);
+	} else {
+		value = (float)((double)pointDir[0] * edgeDir[0] + (double)pointDir[1] * edgeDir[1] + (double)pointDir[2] * edgeDir[2]);
+	}
+
 	float angle = (float)(90.0 - _system->_stdMath->arcSin3(value));
 	float sinValue;
 	float cosValue;
 
 	_system->_stdMath->sinCos(angle, &sinValue, &cosValue);
+
+	if (_system->_remastered)
+		return (float)((double)sinValue * pointLength);
 
 	return (double)sinValue * pointLength;
 }
@@ -991,6 +1375,22 @@ int WalkPlane::removeShortEdge() {
 		double deltaY = (double)prevVert[1] - vert[1];
 		double deltaZ = (double)prevVert[2] - vert[2];
 		double deltaX = (double)prevVert[0] - vert[0];
+
+		if (_system->_remastered) {
+			float squareX = (float)(deltaX * deltaX);
+			float squareY = (float)(deltaY * deltaY);
+			float squareZ = (float)(deltaZ * deltaZ);
+			float lengthSquared = (float)(((double)squareX + squareY) + squareZ);
+
+			if (lengthSquared < minLength) {
+				minLength = lengthSquared;
+				shortest = (_numVerts + i - 1) % _numVerts;
+			}
+
+			prevVert = vert;
+			continue;
+		}
+
 		float deltaYStored = (float)deltaY;
 		float deltaXStored = (float)deltaX;
 		double lengthSq = deltaY * deltaYStored + deltaZ * deltaZ + deltaX * deltaXStored;
@@ -1017,20 +1417,40 @@ int WalkPlane::removeShortEdge() {
 	float edgeV = (float)((double)edgeStart[_axisV] - before[_axisV]);
 	float cross = (float)(((double)point[_axisU] - before[_axisU]) * edgeV + ((double)point[_axisV] - before[_axisV]) * edgeU);
 
-	if (fabs((double)cross) <= 0.00001f)
-		return 0;
+	if (_system->_remastered) {
+		float absCross = cross < 0.0f ? -cross : cross;
 
-	double deltaV = (double)point[_axisV] - after[_axisV];
-	double deltaU = (double)point[_axisU] - after[_axisU];
-	double denominator = -(deltaV * edgeU) - deltaU * edgeV;
+		if (!(0.00001f < absCross && cross != 0.0f))
+			return 0;
 
-	if (fabs(denominator) <= 0.00001f)
-		return 0;
+		float deltaV = (float)((double)point[_axisV] - after[_axisV]);
+		float deltaU = (float)((double)point[_axisU] - after[_axisU]);
+		float denominator = (float)(-((double)deltaV * edgeU) - (double)deltaU * edgeV);
+		float absDenominator = denominator < 0.0f ? -denominator : denominator;
 
-	double t = (double)cross / denominator;
+		if (!(0.00001f < absDenominator && denominator != 0.0f))
+			return 0;
 
-	point[_axisV] = (float)(deltaV * t + point[_axisV]);
-	point[_axisU] = (float)(deltaU * t + point[_axisU]);
+		float t = (float)((double)cross / denominator);
+
+		point[_axisV] = (float)((double)deltaV * t + point[_axisV]);
+		point[_axisU] = (float)((double)deltaU * t + point[_axisU]);
+	} else {
+		if (fabs((double)cross) <= 0.00001f)
+			return 0;
+
+		double deltaV = (double)point[_axisV] - after[_axisV];
+		double deltaU = (double)point[_axisU] - after[_axisU];
+		double denominator = -(deltaV * edgeU) - deltaU * edgeV;
+
+		if (fabs(denominator) <= 0.00001f)
+			return 0;
+
+		double t = (double)cross / denominator;
+
+		point[_axisV] = (float)(deltaV * t + point[_axisV]);
+		point[_axisU] = (float)(deltaU * t + point[_axisU]);
+	}
 
 	project(point);
 
@@ -1389,6 +1809,21 @@ WpVertex *WalkSystem::addVertex(WalkPlane *plane, float *pos) {
 			double deltaY = (double)pos[1] - _vertDb[i].y;
 			double deltaX = (double)pos[0] - _vertDb[i].x;
 			double deltaZ = (double)pos[2] - _vertDb[i].z;
+
+			if (_remastered) {
+				float squareX = (float)(deltaX * deltaX);
+				float squareY = (float)(deltaY * deltaY);
+				float squareZ = (float)(deltaZ * deltaZ);
+				float distance = (float)(((double)squareX + squareY) + squareZ);
+
+				if (distance < 0.00000001) {
+					_vertDb[i].refCount++;
+					return &_vertDb[i];
+				}
+
+				continue;
+			}
+
 			float deltaXStored = (float)deltaX;
 			float deltaZStored = (float)deltaZ;
 
@@ -2222,10 +2657,147 @@ void WalkSystem::tightenPathRemastered() {
 		tightenPathRemastered();
 }
 
+void WalkSystem::shrinkBoxesRemastered(float amount) {
+	int vertexUseCount[1024];
+	float vertexOffsetSum[3072];
+	float offsets[30];
+
+	if (amount < 0.0f)
+		return;
+
+	memset(vertexOffsetSum, 0, sizeof(vertexOffsetSum));
+	memset(vertexUseCount, 0, sizeof(vertexUseCount));
+
+	for (WalkPlane *plane = _wpHead; plane; plane = plane->_next) {
+		if ((plane->_type & 0x1000) == 0 || !plane->_active)
+			continue;
+
+		if (plane->_numVerts <= 0) {
+			warning("WalkSystem::shrinkBoxesRemastered(): sector %s has no vertices", plane->_name);
+			continue;
+		}
+
+		bool restart;
+
+		do {
+			restart = false;
+			memset(offsets, 0, sizeof(offsets));
+
+			float *vert = &plane->_verts[0]->x;
+			float *prevVert = &plane->_verts[plane->_numVerts - 1]->x;
+			int corner = 0;
+			bool valid = true;
+
+			while (valid && corner < plane->_numVerts) {
+				float *nextVert = &plane->_verts[(corner + 1) % plane->_numVerts]->x;
+				RdVector3 toPrev;
+				RdVector3 toNext;
+				RdVector3 bisector;
+				RdVector3 point;
+
+				toPrev[0] = (float)((double)prevVert[0] - vert[0]);
+				toPrev[1] = (float)((double)prevVert[1] - vert[1]);
+				toPrev[2] = (float)((double)prevVert[2] - vert[2]);
+				_rd->normalize3Acc(toPrev);
+
+				toNext[0] = (float)((double)nextVert[0] - vert[0]);
+				toNext[1] = (float)((double)nextVert[1] - vert[1]);
+				toNext[2] = (float)((double)nextVert[2] - vert[2]);
+				_rd->normalize3Acc(toNext);
+
+				bisector[0] = (float)((double)toNext[0] + toPrev[0]);
+				bisector[1] = (float)((double)toNext[1] + toPrev[1]);
+				bisector[2] = (float)((double)toNext[2] + toPrev[2]);
+				_rd->normalize3Acc(bisector);
+
+				float productY = (float)((double)toNext[1] * bisector[1]);
+				float productX = (float)((double)toNext[0] * bisector[0]);
+				float productZ = (float)((double)toNext[2] * bisector[2]);
+				float value = (float)(((double)productY + productX) + productZ);
+				float angle = (float)(90.0 - _stdMath->arcSin3(value));
+				float sinValue;
+				float cosValue;
+
+				_stdMath->sinCos(angle, &sinValue, &cosValue);
+
+				float offsetLength = (float)((double)amount / sinValue);
+				float stepX = (float)((double)offsetLength * bisector[0]);
+				float stepY = (float)((double)offsetLength * bisector[1]);
+				float stepZ = (float)((double)offsetLength * bisector[2]);
+
+				point[0] = (float)((double)stepX + vert[0]);
+				point[1] = (float)((double)stepY + vert[1]);
+				point[2] = (float)((double)stepZ + vert[2]);
+
+				if (plane->within(point, 1)) {
+					double limit = (double)amount - 0.001;
+
+					for (int edge = 0; edge < plane->_numVerts; edge++) {
+						float edgeDistance = (float)plane->distToEdge(edge, point);
+
+						if (edgeDistance < limit) {
+							valid = false;
+							break;
+						}
+					}
+				} else {
+					valid = false;
+				}
+
+				if (valid) {
+					offsets[3 * corner] = stepX;
+					offsets[3 * corner + 1] = stepY;
+					offsets[3 * corner + 2] = stepZ;
+
+					corner++;
+					prevVert = vert;
+					vert = nextVert;
+				}
+			}
+
+			if (valid) {
+				for (int i = 0; i < plane->_numVerts; i++) {
+					int index = (int)(plane->_verts[i] - _vertDb);
+
+					vertexOffsetSum[3 * index] = (float)((double)offsets[3 * i] + vertexOffsetSum[3 * index]);
+					vertexOffsetSum[3 * index + 1] = (float)((double)offsets[3 * i + 1] + vertexOffsetSum[3 * index + 1]);
+					vertexOffsetSum[3 * index + 2] = (float)((double)offsets[3 * i + 2] + vertexOffsetSum[3 * index + 2]);
+					vertexUseCount[index]++;
+				}
+			} else if (plane->removeShortEdge()) {
+				restart = true;
+			} else {
+				plane->_active = 0;
+				markPathFinderDirty();
+			}
+		} while (restart);
+	}
+
+	for (int i = 0; i < 1024; i++) {
+		if (vertexUseCount[i] != 0) {
+			double inverse = 1.0 / (double)vertexUseCount[i];
+			float scaledX = (float)((double)vertexOffsetSum[3 * i] * inverse);
+			float scaledY = (float)((double)vertexOffsetSum[3 * i + 1] * inverse);
+			float scaledZ = (float)((double)vertexOffsetSum[3 * i + 2] * inverse);
+
+			_vertDb[i].x = (float)((double)scaledX + _vertDb[i].x);
+			_vertDb[i].y = (float)((double)scaledY + _vertDb[i].y);
+			_vertDb[i].z = (float)((double)scaledZ + _vertDb[i].z);
+		}
+	}
+
+	markPathFinderDirty();
+}
+
 void WalkSystem::shrinkBoxes(float amount) {
 	int vertexUseCount[1024];
 	float vertexOffsetSum[3072];
 	float offsets[30];
+
+	if (_remastered) {
+		shrinkBoxesRemastered(amount);
+		return;
+	}
 
 	if (amount < 0.0f)
 		return;

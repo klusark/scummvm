@@ -200,7 +200,7 @@ public:
 	void allocateActorExtra(SputActor *actor);
 	void enableWalkSystem(SputActor *actor, int enable);
 	void enablePuck(SputActor *actor, int enable);
-	void setActorPosition(SputActor *actor, float *pos);
+	void setActorPosition(SputActor *actor, float *pos, bool clearWalk = true);
 	void setActorRotation(SputActor *actor, float *rot, int flipTurn);
 	void setReflection(SputActor *actor, float angle);
 	void setWalkChore(SputActor *actor, int choreIndex, CostumeNode *node);
@@ -279,14 +279,14 @@ private:
 	void publishActors();
 	bool buildPath(SputActor *actor, float *start, float *goal, int tighten, unsigned *failFlag, SputActor *avoid);
 	int pathCapacity() const;
-	float dot3Remastered(float *a, float *b);
-	float normalize2Remastered(float *vec);
-	float normalize3AccRemastered(float *vec);
 	SputActor *getManny();
 	int findSlidePoint(float *otherCenter, float *prevCenter, float *center, float reach);
 	int findSlideCandidates(float *prevCenter, float *otherCenter, float radius, float moved, float *firstPoint, float *secondPoint);
 	void sphereCollisionRemastered(SputActor *actor, SputActor *other, float *myCenterOffset, float *myCenterWorld, float *prevCenterWorld,
 			float *otherCenterWorld, float myRadius, float otherRadius);
+	float walkTargetDistanceRemastered(SputActor *actor);
+	void updatePositionRemastered(SputActor *actor);
+	int sweepIntoBoxRemastered(float *from, float *to, const RdBound3 &box, float *outPos);
 
 	enum {
 		kMannyPositions = 40

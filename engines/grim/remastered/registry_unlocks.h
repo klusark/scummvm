@@ -30,11 +30,6 @@ class SeekableReadStream;
 
 namespace Grim {
 
-// Unlocked cutscenes (64 slots, 40 used) and concept art (128 slots, 98 used)
-// of the extras menus. Indices are zero based. They live in the file
-// registry.sav of the saves folder, laid out like the original registry file:
-// u32 version, 64 entries of 268 bytes, 8 bytes of cutscene bits, 16 bytes of
-// concept bits. Bit n is bit (n & 7) of byte (n >> 3).
 class RegistryUnlocks {
 public:
 	RegistryUnlocks();
@@ -45,10 +40,8 @@ public:
 	bool isConceptUnlocked(int index);
 	void resetUnlocks();
 
-	// Merges the unlocks of a registry file of the original game
 	bool importRegistrySav(Common::SeekableReadStream *stream);
 
-	// Writes registry.sav, also when nothing changed
 	void saveFile();
 
 private:

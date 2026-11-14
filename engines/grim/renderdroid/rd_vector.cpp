@@ -24,25 +24,56 @@
 namespace Grim {
 
 void RenderDroid::cross3(RdVector3 out, RdVector3 a, RdVector3 b) {
+	if (_remastered) {
+		cross3Remastered(out, a, b);
+		return;
+	}
+
 	out[0] = (float)((double)b[2] * a[1] - (double)a[2] * b[1]);
 	out[1] = (float)((double)a[2] * b[0] - (double)b[2] * a[0]);
 	out[2] = (float)((double)b[1] * a[0] - (double)a[1] * b[0]);
 }
 
 float RenderDroid::dot2(RdVector2 a, RdVector2 b) {
+	if (_remastered)
+		return dot2Remastered(a, b);
+
 	return (float)((double)b[1] * a[1] + (double)a[0] * b[0]);
 }
 
 float RenderDroid::dot3(RdVector3 a, RdVector3 b) {
-	if (_remastered) {
-		float productY = (float)((double)a[1] * b[1]);
-		float productX = (float)((double)a[0] * b[0]);
-		float productZ = (float)((double)a[2] * b[2]);
-
-		return (float)(((double)productY + productX) + productZ);
-	}
+	if (_remastered)
+		return dot3Remastered(a, b);
 
 	return (float)((double)b[1] * a[1] + (double)b[2] * a[2] + (double)a[0] * b[0]);
+}
+
+void RenderDroid::cross3Remastered(RdVector3 out, RdVector3 a, RdVector3 b) {
+	float first = (float)((double)a[1] * b[2]);
+	float second = (float)((double)a[2] * b[1]);
+
+	out[0] = (float)((double)first - second);
+	first = (float)((double)a[2] * b[0]);
+	second = (float)((double)a[0] * b[2]);
+	out[1] = (float)((double)first - second);
+	first = (float)((double)b[1] * a[0]);
+	second = (float)((double)b[0] * a[1]);
+	out[2] = (float)((double)first - second);
+}
+
+float RenderDroid::dot2Remastered(RdVector2 a, RdVector2 b) {
+	float productY = (float)((double)a[1] * b[1]);
+	float productX = (float)((double)a[0] * b[0]);
+
+	return (float)((double)productY + productX);
+}
+
+float RenderDroid::dot3Remastered(RdVector3 a, RdVector3 b) {
+	float productY = (float)((double)a[1] * b[1]);
+	float productX = (float)((double)a[0] * b[0]);
+	float productZ = (float)((double)a[2] * b[2]);
+
+	return (float)(((double)productY + productX) + productZ);
 }
 
 void RenderDroid::extractAngles(RdVector3 vec, RdVector3 pyr) {
@@ -52,6 +83,9 @@ void RenderDroid::extractAngles(RdVector3 vec, RdVector3 pyr) {
 }
 
 float RenderDroid::normalize3(RdVector3 out, RdVector3 in) {
+	if (_remastered)
+		return normalize3Remastered(out, in);
+
 	double length = sqrt((double)in[1] * in[1] + (double)in[2] * in[2] + (double)in[0] * in[0]);
 
 	if (length == 0.0) {
@@ -67,20 +101,53 @@ float RenderDroid::normalize3(RdVector3 out, RdVector3 in) {
 	return (float)length;
 }
 
-float RenderDroid::normalize3Acc(RdVector3 vec) {
-	if (_remastered) {
-		float length = (float)sqrt(((double)vec[1] * vec[1] + (double)vec[0] * vec[0]) + (double)vec[2] * vec[2]);
+float RenderDroid::normalize3Remastered(RdVector3 out, RdVector3 in) {
+	float squareX = (float)((double)in[0] * in[0]);
+	float squareY = (float)((double)in[1] * in[1]);
+	float squareZ = (float)((double)in[2] * in[2]);
+	float length = (float)sqrt(((double)squareX + squareY) + squareZ);
 
-		if (length != 0.0f) {
-			float inverse = (float)(1.0 / length);
-
-			vec[0] = (float)(vec[0] * inverse);
-			vec[1] = (float)(inverse * vec[1]);
-			vec[2] = (float)(inverse * vec[2]);
-		}
-
-		return length;
+	if (length == 0.0f) {
+		out[0] = in[0];
+		out[1] = in[1];
+		out[2] = in[2];
+	} else {
+		out[0] = (float)((double)in[0] / length);
+		out[1] = (float)((double)in[1] / length);
+		out[2] = (float)((double)in[2] / length);
 	}
+
+	return length;
+}
+
+float RenderDroid::normalize2Remastered(float *vec) {
+	float length = (float)sqrt((double)vec[0] * vec[0] + (double)vec[1] * vec[1]);
+
+	if (length != 0.0f) {
+		vec[0] = (float)((double)vec[0] / length);
+		vec[1] = (float)((double)vec[1] / length);
+	}
+
+	return length;
+}
+
+float RenderDroid::normalize3AccRemastered(RdVector3 vec) {
+	float length = (float)sqrt(((double)vec[1] * vec[1] + (double)vec[0] * vec[0]) + (double)vec[2] * vec[2]);
+
+	if (length != 0.0f) {
+		float inverse = (float)(1.0 / length);
+
+		vec[0] = (float)(vec[0] * inverse);
+		vec[1] = (float)(inverse * vec[1]);
+		vec[2] = (float)(inverse * vec[2]);
+	}
+
+	return length;
+}
+
+float RenderDroid::normalize3Acc(RdVector3 vec) {
+	if (_remastered)
+		return normalize3AccRemastered(vec);
 
 	double length = sqrt((double)vec[1] * vec[1] + (double)vec[2] * vec[2] + (double)vec[0] * vec[0]);
 

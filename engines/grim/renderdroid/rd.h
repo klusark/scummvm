@@ -526,6 +526,14 @@ public:
 	void transformVector34Acc(RdVector3 vec, RdMatrix34 mat);
 	void transformVectorOrtho34(RdVector3 out, RdVector3 vec, RdMatrix34 mat);
 
+	void cross3Remastered(RdVector3 out, RdVector3 a, RdVector3 b);
+	float dot2Remastered(RdVector2 a, RdVector2 b);
+	float dot3Remastered(RdVector3 a, RdVector3 b);
+	float normalize2Remastered(float *vec);
+	float normalize3Remastered(RdVector3 out, RdVector3 in);
+	float normalize3AccRemastered(RdVector3 vec);
+	int pointsCollinearRemastered(RdVector3 a, RdVector3 b, RdVector3 c);
+
 	void buildFromVectorAngle34Remastered(RdMatrix34 out, RdVector3 axis, float angle);
 	void extractAngles34Remastered(RdMatrix34 mat, RdVector3 pyr);
 	void transformPoint34Remastered(RdVector3 out, RdVector3 pt, RdMatrix34 mat);
@@ -590,6 +598,7 @@ public:
 		int line2(RdCanvas *canvas, int *x0, int *y0, int *x1, int *y1);
 		int calcOutcode2(RdCanvas *canvas, int x, int y);
 		int point3(RdClipFrustum *clip, RdVector3 pt);
+		int point3Remastered(RdClipFrustum *clip, RdVector3 pt);
 		int line3(RdClipFrustum *clip, RdVector3 v0, RdVector3 v1, int *clipped0, int *clipped1);
 		int face3W(RdClipFrustum *clip, RdVector3 *verts, int numVerts);
 		int face3WOrtho(RdClipFrustum *clip, RdVector3 *verts, int numVerts);

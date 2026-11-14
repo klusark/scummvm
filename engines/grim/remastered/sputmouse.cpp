@@ -49,7 +49,6 @@ SputMouse::SputMouse(GrimEngine *grim, SysStruct *hs, StdControl *stdControl, Sp
 		_wave(0), _waveEnd(-1), _waveNext(0) {
 }
 
-// Loads the images of the first count cursors and keeps their names, the other slots have no image
 void SputMouse::loadCursors(int count) {
 	OverlayManager *overlays = _hotspots.getOverlays();
 
@@ -114,7 +113,6 @@ float SputMouse::getAxisNormalized(int axis, bool invert) {
 	return -1.0f;
 }
 
-// The image of a cursor slot. A slot out of the table has no image.
 const Common::String &SputMouse::getCursorName(int index) const {
 	if (index < 0 || index >= kNumCursors) {
 		if (index >= kNumCursors)
@@ -133,7 +131,6 @@ void SputMouse::setCursor(int index) {
 		overlays->setImage(_mainHandle, getCursorName(index));
 }
 
-// The cursor shows when show is set, the animation cursor always hides
 void SputMouse::showCursor(bool show) {
 	OverlayManager *overlays = _hotspots.getOverlays();
 
@@ -172,7 +169,6 @@ void SputMouse::preloadCursors() {
 	}
 }
 
-// A cursor with an image and a layer is centered on the pointer
 void SputMouse::placeCursor(int handle, int x, int y) {
 	OverlayManager *overlays = _hotspots.getOverlays();
 	int layer;
@@ -187,8 +183,7 @@ void SputMouse::placeCursor(int handle, int x, int y) {
 	overlays->move(handle, x - width / 2, y - height / 2);
 }
 
-// Nothing happens without a camera. The animation moves on every 30 ms: the end is tested
-// before the next image is shown, so the last image of the animation is shown too.
+// The end is tested before the next image is shown, so the last image is shown too
 void SputMouse::update() {
 	OverlayManager *overlays = _hotspots.getOverlays();
 
@@ -219,7 +214,6 @@ void SputMouse::update() {
 	}
 }
 
-// The ray of the pointer from the camera of the room: its position and the far point, 100 units away
 bool SputMouse::getCameraRay(SputRender *sputRender, RdVector3 start, RdVector3 end) const {
 	RdCamera *camera = _rd->_camera.getCurrent();
 	RoomCamera *roomCamera = sputRender->getCamera();
@@ -238,14 +232,14 @@ bool SputMouse::getCameraRay(SputRender *sputRender, RdVector3 start, RdVector3 
 	getCanvasPosition(&x, &y);
 	HotspotManager::convertCoordsNative(&x, &y, HotspotManager::kCoordsLegacy, false);
 
-	float focalLen = camera->focalLen;
+	double focalLen = camera->focalLen;
 	RdVector3 point;
 	RdVector3 direction;
 	RdMatrix34 cameraMatrix;
 
-	point[0] = ((float)x - camera->canvas->xCenter) / focalLen;
+	point[0] = (float)(((double)x - camera->canvas->xCenter) / focalLen);
 	point[1] = 1.0f;
-	point[2] = -((float)y - camera->canvas->yCenter) / focalLen;
+	point[2] = (float)(-(((double)y - camera->canvas->yCenter) / focalLen));
 	_rd->_camera.getMatrix(cameraMatrix);
 	_rd->transformPoint34Acc(point, cameraMatrix);
 
@@ -263,74 +257,64 @@ bool SputMouse::getCameraRay(SputRender *sputRender, RdVector3 start, RdVector3 
 	return true;
 }
 
-// The depth of the scene at a point of the screen, as a point of the world. The z buffer of the
-// scene without the actors is used.
-bool SputMouse::reverseProject(SputRender *sputRender, int x, int y, RdVector3 out) const {
-	RdCamera *camera = _rd->_camera.getCurrent();
-	RoomCamera *roomCamera = sputRender->getCamera();
-	StdVBuffer *zBuffer = sputRender->cleanZBuffer();
+// The squares are rounded to float one by one, their sum is not
+float SputMouse::distanceExactDifferences(const float *a, const float *b) const {
+	double differenceX = (double)a[0] - (double)b[0];
+	double differenceY = (double)a[1] - (double)b[1];
+	double differenceZ = (double)a[2] - (double)b[2];
+	float squareX = (float)(differenceX * differenceX);
+	float squareY = (float)(differenceY * differenceY);
+	float squareZ = (float)(differenceZ * differenceZ);
 
-	if (!camera || !camera->canvas || !roomCamera || !zBuffer || !zBuffer->pixels || camera->focalLen == 0.0f)
-		return false;
-
-	if (x < 0 || y < 0 || x > 639 || y > 479 || x >= zBuffer->tex.width || y >= zBuffer->tex.height)
-		return false;
-
-	uint16 zValue = ((const uint16 *)zBuffer->pixels)[zBuffer->tex.width * y + x];
-	float scaledZ = (float)(int)((uint)zValue << (camera->canvas->zScaleShift & 31));
-
-	// A depth of zero is infinitely far
-	if (scaledZ == 0.0f)
-		return false;
-
-	float distance = 1.0f / (scaledZ * 1.52587890625e-5f) + -1.0f;
-
-	if (!(distance <= 100.0f))
-		return false;
-
-	float focalLen = camera->focalLen;
-	float centerX = camera->canvas->xCenter + -0.5f;
-	float centerY = camera->canvas->yCenter + -0.5f;
-	RdVector3 point;
-
-	point[0] = (((float)x - centerX) * distance) / focalLen;
-	point[1] = distance;
-	point[2] = -(((float)y - centerY) * distance) / focalLen;
-	_rd->transformPoint34(out, point, roomCamera->posMatrix);
-
-	return true;
+	return (float)sqrt(((double)squareX + squareY) + squareZ);
 }
 
-// The point where the line through start and end meets the plane of a walk plane. The hit is left as
-// it was when the plane has no vertices or the line is parallel to it.
-void SputMouse::raycast(const WalkPlane *plane, const float *start, const float *end, float *hit) const {
+// Here the differences are rounded to float before they are squared
+float SputMouse::distanceFloatDifferences(const float *a, const float *b) const {
+	float differenceX = a[0] - b[0];
+	float differenceY = a[1] - b[1];
+	float differenceZ = a[2] - b[2];
+	float squareX = differenceX * differenceX;
+	float squareY = differenceY * differenceY;
+	float squareZ = differenceZ * differenceZ;
+
+	return (float)sqrt(((double)squareX + squareY) + squareZ);
+}
+
+void SputMouse::raycast(WalkPlane *plane, const float *start, const float *end, float *hit) const {
 	if (plane->_numVerts == 0)
 		return;
 
-	float deltaX = end[0] - start[0];
-	float deltaY = end[1] - start[1];
-	float deltaZ = end[2] - start[2];
-	float normalX = plane->_normal[0];
-	float normalY = plane->_normal[1];
-	float normalZ = plane->_normal[2];
-	float denominator = deltaZ * normalZ + (deltaY * normalY + deltaX * normalX);
+	RdVector3 delta;
+	RdVector3 toVertex;
+	const WpVertex *vertex = plane->_verts[0];
+
+	delta[0] = end[0] - start[0];
+	delta[1] = end[1] - start[1];
+	delta[2] = end[2] - start[2];
+	toVertex[0] = vertex->x - start[0];
+	toVertex[1] = vertex->y - start[1];
+	toVertex[2] = vertex->z - start[2];
+
+	float denominator = _rd->dot3(plane->_normal, delta);
 	float magnitude = denominator < 0.0f ? -denominator : denominator;
 
-	if (!((double)magnitude >= 0.000001))
+	if ((double)magnitude < 0.000001)
 		return;
 
-	const WpVertex *vertex = plane->_verts[0];
-	float t = ((vertex->z - start[2]) * normalZ + ((vertex->y - start[1]) * normalY + (vertex->x - start[0]) * normalX)) / denominator;
+	float productX = plane->_normal[0] * toVertex[0];
+	float productY = plane->_normal[1] * toVertex[1];
+	float productZ = plane->_normal[2] * toVertex[2];
+	float t = (float)((((double)productX + productY) + productZ) / (double)denominator);
+	float stepX = delta[0] * t;
+	float stepY = delta[1] * t;
+	float stepZ = delta[2] * t;
 
-	hit[0] = deltaX * t + start[0];
-	hit[1] = deltaY * t + start[1];
-	hit[2] = deltaZ * t + start[2];
+	hit[0] = stepX + start[0];
+	hit[1] = stepY + start[1];
+	hit[2] = stepZ + start[2];
 }
 
-// With onGround the point is where the ray meets the plane z = 0, moved onto the nearest walk plane.
-// Otherwise it is the walk plane under the pointer when it is nearer than the depth of the scene, or
-// the walkable point closest to that depth. When both fail the ray is moved down in small steps and
-// then up until it meets a walk plane.
 bool SputMouse::getFloorWalkPos(bool onGround, SputRender *sputRender, RdVector3 out) {
 	RdVector3 start;
 	RdVector3 end;
@@ -339,18 +323,24 @@ bool SputMouse::getFloorWalkPos(bool onGround, SputRender *sputRender, RdVector3
 		return false;
 
 	if (onGround) {
-		// The original divides by zero when the ray is level
-		if (end[2] - start[2] == 0.0f) {
+		// The original could divide by zero here, let's avoid that...
+		if (end[2] == start[2]) {
 			warning("SputMouse::getFloorWalkPos(): the ray does not meet the ground");
 			return false;
 		}
 
-		float scale = -start[2] / (end[2] - start[2]);
+		float scale = (float)(-(double)start[2] / ((double)end[2] - (double)start[2]));
+		float deltaX = end[0] - start[0];
+		float deltaY = end[1] - start[1];
+		float deltaZ = end[2] - start[2];
+		float stepX = deltaX * scale;
+		float stepY = deltaY * scale;
+		float stepZ = scale * deltaZ;
 		RdVector3 point;
 
-		point[0] = (end[0] - start[0]) * scale + start[0];
-		point[1] = (end[1] - start[1]) * scale + start[1];
-		point[2] = scale * (end[2] - start[2]) + start[2];
+		point[0] = start[0] + stepX;
+		point[1] = start[1] + stepY;
+		point[2] = start[2] + stepZ;
 
 		WalkPlane *plane = _walkSystem->planeClosest(point, kPlaneTypeWalk);
 
@@ -375,7 +365,7 @@ bool SputMouse::getFloorWalkPos(bool onGround, SputRender *sputRender, RdVector3
 
 	RdVector3 projected;
 
-	if (reverseProject(sputRender, x, y, projected)) {
+	if (sputRender->reverseProject(x, y, projected)) {
 		RdVector3 hit;
 		WalkPlane *found = nullptr;
 
@@ -395,12 +385,9 @@ bool SputMouse::getFloorWalkPos(bool onGround, SputRender *sputRender, RdVector3
 		}
 
 		if (found) {
-			float hitDistance = sqrtf((start[2] - hit[2]) * (start[2] - hit[2]) +
-					((start[1] - hit[1]) * (start[1] - hit[1]) + (start[0] - hit[0]) * (start[0] - hit[0])));
-			float projectedDistance = sqrtf((start[2] - projected[2]) * (start[2] - projected[2]) +
-					((start[1] - projected[1]) * (start[1] - projected[1]) + (start[0] - projected[0]) * (start[0] - projected[0])));
+			float hitDistance = distanceExactDifferences(start, hit);
+			float projectedDistance = distanceFloatDifferences(start, projected);
 
-			// The plane is nearer than the depth of the scene
 			if (projectedDistance > hitDistance) {
 				out[0] = hit[0];
 				out[1] = hit[1];
@@ -421,8 +408,7 @@ bool SputMouse::getFloorWalkPos(bool onGround, SputRender *sputRender, RdVector3
 		if (closestPlane) {
 			closestPlane->closestPoint(closest);
 
-			float distance = sqrtf((projected[2] - closest[2]) * (projected[2] - closest[2]) +
-					((projected[1] - closest[1]) * (projected[1] - closest[1]) + (projected[0] - closest[0]) * (projected[0] - closest[0])));
+			float distance = distanceExactDifferences(projected, closest);
 
 			if (distance < 5.0f) {
 				out[0] = closest[0];
@@ -436,7 +422,6 @@ bool SputMouse::getFloorWalkPos(bool onGround, SputRender *sputRender, RdVector3
 		}
 	}
 
-	// Nothing close to the depth: move the ray down in small steps, then up
 	RdVector3 hit;
 
 	for (int i = 0; i < 100; i++) {
@@ -458,8 +443,8 @@ bool SputMouse::getFloorWalkPos(bool onGround, SputRender *sputRender, RdVector3
 			}
 		}
 
-		start[2] = start[2] + -0.015f;
-		end[2] = end[2] + -0.015f;
+		start[2] = (float)((double)start[2] - (double)0.015f);
+		end[2] = (float)((double)end[2] - (double)0.015f);
 	}
 
 	getCameraRay(sputRender, start, end);
@@ -483,61 +468,70 @@ bool SputMouse::getFloorWalkPos(bool onGround, SputRender *sputRender, RdVector3
 			}
 		}
 
-		start[2] = start[2] + 0.015f;
-		end[2] = end[2] + 0.015f;
+		start[2] = (float)((double)start[2] + (double)0.015f);
+		end[2] = (float)((double)end[2] + (double)0.015f);
 	}
 
 	return false;
 }
 
-// Closest approach of two lines: the one through the actor along the axis, and the one of the pointer
-// ray, both moved back by t along the axis. The shifted far point of the ray is used as its direction,
-// like the original does. The scalar is the axis dotted with the actor position plus the parameter.
-void SputMouse::projectToAxis(SputRender *sputRender, const float *actorPos, const float *axis, float t, float *scalar, float *parameter) {
+// The disasm uses the shifted far point of the ray as its direction
+void SputMouse::projectToAxis(SputRender *sputRender, float *actorPos, float *axis, float t, float *scalar, float *parameter) {
 	RdVector3 start;
 	RdVector3 end;
 
+	float positionProductY = actorPos[1] * axis[1];
+	float positionProductX = actorPos[0] * axis[0];
+	float positionProductZ = actorPos[2] * axis[2];
+	double positionDot = ((double)positionProductY + positionProductX) + positionProductZ;
+
 	*parameter = 0.0f;
-	*scalar = axis[2] * actorPos[2] + (axis[1] * actorPos[1] + axis[0] * actorPos[0]);
+	*scalar = (float)positionDot;
 
 	if (!getCameraRay(sputRender, start, end)) {
 		warning("SputMouse::projectToAxis(): there is no camera");
 		return;
 	}
 
-	// Both ends of the ray move back by t along the axis. The moved far point is the direction.
-	float originX = start[0] - axis[0] * t;
-	float originY = start[1] - axis[1] * t;
-	float originZ = start[2] - t * axis[2];
-	float directionX = end[0] - axis[0] * t;
-	float directionY = end[1] - axis[1] * t;
-	float directionZ = end[2] - t * axis[2];
-	float axisDotDirection = axis[2] * directionZ + (axis[1] * directionY + axis[0] * directionX);
-	float directionLength = directionZ * directionZ + (directionY * directionY + directionX * directionX);
-	float axisLength = axis[2] * axis[2] + (axis[1] * axis[1] + axis[0] * axis[0]);
-	float toActorX = actorPos[0] - originX;
-	float toActorY = actorPos[1] - originY;
-	float toActorZ = actorPos[2] - originZ;
-	float directionDotToActor = toActorZ * directionZ + (toActorY * directionY + toActorX * directionX);
-	float axisDotToActor = axis[2] * toActorZ + (axis[1] * toActorY + axis[0] * toActorX);
-	float denominator = directionLength * axisLength - axisDotDirection * axisDotDirection;
+	float shiftX = t * axis[0];
+	float shiftY = t * axis[1];
+	float shiftZ = t * axis[2];
+	RdVector3 origin;
+	RdVector3 direction;
+	RdVector3 toActor;
 
-	// The original divides by zero here
-	if (denominator == 0.0f) {
+	origin[0] = start[0] - shiftX;
+	origin[1] = start[1] - shiftY;
+	origin[2] = start[2] - shiftZ;
+	direction[0] = end[0] - shiftX;
+	direction[1] = end[1] - shiftY;
+	direction[2] = end[2] - shiftZ;
+	toActor[0] = actorPos[0] - origin[0];
+	toActor[1] = actorPos[1] - origin[1];
+	toActor[2] = actorPos[2] - origin[2];
+
+	float negAxisDotDirection = -_rd->dot3(axis, direction);
+	float directionLength = _rd->dot3(direction, direction);
+	float negAxisDotToActor = -_rd->dot3(axis, toActor);
+	float directionDotToActor = _rd->dot3(toActor, direction);
+	float axisLength = _rd->dot3(axis, axis);
+	double numerator = (double)negAxisDotToActor * directionLength - (double)directionDotToActor * negAxisDotDirection;
+	double denominator = (double)axisLength * directionLength - (double)negAxisDotDirection * negAxisDotDirection;
+
+	// The original could divide by zero here, let's avoid that...
+	if (denominator == 0.0) {
 		warning("SputMouse::projectToAxis(): the axis and the ray are parallel");
 		*scalar = 0.0f;
 
 		return;
 	}
 
-	float tau = (directionDotToActor * axisDotDirection - axisDotToActor * directionLength) / denominator;
+	float tau = (float)(numerator / denominator);
 
 	*parameter = tau;
-	*scalar = *scalar + tau;
+	*scalar = (float)(positionDot + (double)tau);
 }
 
-// The lines of a dialog menu go up from the point (x, y), each one itemHeight tall.
-// Returns the number of the line under the pointer, from 1, or 0.
 int SputMouse::getSelectedDialog(int x, int y, int itemHeight, int numLines) const {
 	int width = kDialogWidth;
 	int height = itemHeight;
@@ -551,7 +545,6 @@ int SputMouse::getSelectedDialog(int x, int y, int itemHeight, int numLines) con
 	if (numLines <= 0)
 		return 0;
 
-	// Both edges of the area and of each line count as inside
 	if (pointerX < x || x + width < pointerX)
 		return 0;
 
@@ -569,9 +562,6 @@ int SputMouse::getSelectedDialog(int x, int y, int itemHeight, int numLines) con
 	return line + 1;
 }
 
-// A point the actor walks to under the pointer. The pointer axes give a ray from the camera.
-// A ray that goes up does nothing. The first triangle of a walk plane that the ray crosses is
-// the target; when there is none, the closest point of the plane that is nearest to the ray.
 void SputMouse::walkActorToMouseTarget(SputActor *actor, SputRender *sputRender) {
 	RdCamera *camera = _rd->_camera.getCurrent();
 	RoomCamera *roomCamera = sputRender->getCamera();
@@ -585,14 +575,19 @@ void SputMouse::walkActorToMouseTarget(SputActor *actor, SputRender *sputRender)
 	int centerY = (int)camera->canvas->yCenter;
 	float axisX = getAxisNormalized(12, false);
 	float axisY = getAxisNormalized(13, false);
-	float focalLen = camera->focalLen;
+	float centerXFloat = (float)centerX;
+	float centerYFloat = (float)centerY;
+	double focalLen = camera->focalLen;
 	RdVector3 point;
 	RdVector3 direction;
 	RdMatrix34 cameraMatrix;
 
-	point[0] = (((axisX * (float)centerX) + (float)centerX) - (float)centerX) / focalLen;
+	float screenX = (float)((double)axisX * centerXFloat + centerXFloat);
+	float screenY = (float)((double)axisY * centerYFloat + centerYFloat);
+
+	point[0] = (float)(((double)screenX - centerXFloat) / focalLen);
 	point[1] = 1.0f;
-	point[2] = -(((axisY * (float)centerY) + (float)centerY) - (float)centerY) / focalLen;
+	point[2] = (float)(-(((double)screenY - centerYFloat) / focalLen));
 	_rd->_camera.getMatrix(cameraMatrix);
 	_rd->transformPoint34Acc(point, cameraMatrix);
 
@@ -601,7 +596,11 @@ void SputMouse::walkActorToMouseTarget(SputActor *actor, SputRender *sputRender)
 	direction[2] = point[2] - roomCamera->position[2];
 	_rd->normalize3Acc(direction);
 
-	if (!(direction[2] * 1.0f + (direction[1] * 0.0f + direction[0] * 0.0f) < 0.0f))
+	float facingY = 0.0f * direction[1];
+	float facingX = 0.0f * direction[0];
+	float facingZ = 1.0f * direction[2];
+
+	if (((double)facingY + facingX) + facingZ >= 0.0)
 		return;
 
 	RdVector3 end;
@@ -636,7 +635,6 @@ void SputMouse::walkActorToMouseTarget(SputActor *actor, SputRender *sputRender)
 		}
 	}
 
-	// No triangle: the closest point of the plane that is nearest to the ray
 	float nearest = 3.4028235e38f;
 	RdVector3 target;
 	RdVector3 crossing = { 0.0f, 0.0f, 0.0f };
@@ -647,8 +645,7 @@ void SputMouse::walkActorToMouseTarget(SputActor *actor, SputRender *sputRender)
 		if ((plane->_type & kPlaneTypeWalk) == 0)
 			continue;
 
-		// The fourth value of the plane is the tolerance of the plane. A segment that misses leaves the
-		// crossing of the previous plane, the original starts from an undefined point.
+		// A segment that misses leaves the crossing of the previous plane
 		if (segmentPlaneIntersect(crossing, roomCamera->position, end, plane->_normal[0], plane->_normal[1], plane->_normal[2], plane->_tolerance))
 			hasCrossing = true;
 		else if (!hasCrossing)
@@ -661,8 +658,7 @@ void SputMouse::walkActorToMouseTarget(SputActor *actor, SputRender *sputRender)
 		closest[2] = crossing[2];
 		plane->closestPoint(closest);
 
-		float distance = sqrtf((closest[2] - crossing[2]) * (closest[2] - crossing[2]) +
-				((closest[1] - crossing[1]) * (closest[1] - crossing[1]) + (closest[0] - crossing[0]) * (closest[0] - crossing[0])));
+		float distance = distanceExactDifferences(closest, crossing);
 
 		if (nearest > distance) {
 			nearest = distance;
@@ -681,28 +677,27 @@ void SputMouse::walkActorToMouseTarget(SputActor *actor, SputRender *sputRender)
 	_sputActor->actorWalkTo(actor, target, goal, nullptr);
 }
 
-// The point where the segment from start to end meets the plane through the origin with a normal and
-// a constant. False when the segment is nearly parallel to it.
 bool SputMouse::segmentPlaneIntersect(float *out, const float *start, const float *end, float normalX, float normalY, float normalZ, float constant) const {
-	float startSide = constant + (start[2] * normalZ + (start[1] * normalY + start[0] * normalX));
-	float endSide = constant + (end[2] * normalZ + (end[1] * normalY + end[0] * normalX));
-	float difference = startSide - endSide;
-	float magnitude = difference < 0.0f ? -difference : difference;
+	float deltaX = end[0] - start[0];
+	float deltaY = end[1] - start[1];
+	float deltaZ = end[2] - start[2];
+	float startSide = (float)((((double)start[0] * normalX + (double)start[1] * normalY) + (double)start[2] * normalZ) + constant);
+	float endSide = (float)((((double)end[0] * normalX + (double)end[1] * normalY) + (double)end[2] * normalZ) + constant);
+	double difference = (double)startSide - (double)endSide;
+	double magnitude = difference < 0.0 ? -difference : difference;
 
-	if (!((double)magnitude >= 0.1))
+	if (magnitude < 0.1)
 		return false;
 
-	float t = startSide / difference;
+	float t = (float)((double)startSide / difference);
 
-	out[0] = (end[0] - start[0]) * t + start[0];
-	out[1] = (end[1] - start[1]) * t + start[1];
-	out[2] = t * (end[2] - start[2]) + start[2];
+	out[0] = (float)((double)t * deltaX + start[0]);
+	out[1] = (float)((double)t * deltaY + start[1]);
+	out[2] = (float)((double)t * deltaZ + start[2]);
 
 	return true;
 }
 
-// The point where the segment from start to end crosses the triangle a, b, c, only from the side that
-// the triangle faces. The point is left at zero when it does not.
 bool SputMouse::segmentTriangleIntersect(float *out, const float *a, const float *b, const float *c, const float *start, const float *end) const {
 	out[0] = 0.0f;
 	out[1] = 0.0f;
@@ -714,42 +709,52 @@ bool SputMouse::segmentTriangleIntersect(float *out, const float *a, const float
 	float acX = c[0] - a[0];
 	float acY = c[1] - a[1];
 	float acZ = c[2] - a[2];
-	float normalX = abY * acZ - abZ * acY;
-	float normalY = abZ * acX - abX * acZ;
-	float normalZ = abX * acY - abY * acX;
-	float backX = start[0] - end[0];
-	float backY = start[1] - end[1];
-	float backZ = start[2] - end[2];
-	float side = normalZ * backZ + (normalY * backY + backX * normalX);
+	RdVector3 ab = { abX, abY, abZ };
+	RdVector3 ac = { acX, acY, acZ };
+	RdVector3 normal;
+	RdVector3 back;
+	RdVector3 ap;
+	RdVector3 cross;
 
-	if (!(side > 0.0f))
+	normal[0] = abY * acZ - abZ * acY;
+	normal[1] = abZ * acX - abX * acZ;
+	normal[2] = abX * acY - abY * acX;
+	back[0] = start[0] - end[0];
+	back[1] = start[1] - end[1];
+	back[2] = start[2] - end[2];
+
+	float side = _rd->dot3(normal, back);
+
+	if (side <= 0.0f)
 		return false;
 
-	float apX = start[0] - a[0];
-	float apY = start[1] - a[1];
-	float apZ = start[2] - a[2];
-	float distance = normalZ * apZ + (normalY * apY + normalX * apX);
+	ap[0] = start[0] - a[0];
+	ap[1] = start[1] - a[1];
+	ap[2] = start[2] - a[2];
+
+	float distance = _rd->dot3(normal, ap);
 
 	if (distance < 0.0f || distance > side)
 		return false;
 
-	float crossX = backY * apZ - apY * backZ;
-	float crossY = backZ * apX - apZ * backX;
-	float crossZ = backX * apY - apX * backY;
-	float v = acZ * crossZ + (acY * crossY + acX * crossX);
+	cross[0] = ap[2] * back[1] - ap[1] * back[2];
+	cross[1] = ap[0] * back[2] - ap[2] * back[0];
+	cross[2] = ap[1] * back[0] - ap[0] * back[1];
+
+	float v = _rd->dot3(ac, cross);
 
 	if (v < 0.0f || v > side)
 		return false;
 
-	float w = abZ * crossZ + (abY * crossY + abX * crossX);
+	float w = -_rd->dot3(ab, cross);
 
-	if (!(w <= -0.0f) || v - w > side)
+	if (w < 0.0f || (double)w + (double)v > (double)side)
 		return false;
 
 	float inverse = 1.0f / side;
 	float weightB = v * inverse;
 	float weightC = w * inverse;
-	float weightA = (1.0f - weightB) + weightC;
+	float weightA = (float)((1.0 - (double)weightB) - (double)weightC);
 
 	out[0] = a[0] * weightA + 0.0f;
 	out[1] = a[1] * weightA + 0.0f;
@@ -757,9 +762,9 @@ bool SputMouse::segmentTriangleIntersect(float *out, const float *a, const float
 	out[0] = b[0] * weightB + out[0];
 	out[1] = b[1] * weightB + out[1];
 	out[2] = weightB * b[2] + out[2];
-	out[0] = out[0] - c[0] * weightC;
-	out[1] = out[1] - c[1] * weightC;
-	out[2] = out[2] - weightC * c[2];
+	out[0] = out[0] + c[0] * weightC;
+	out[1] = out[1] + c[1] * weightC;
+	out[2] = out[2] + weightC * c[2];
 
 	return true;
 }
@@ -776,7 +781,6 @@ int SputMouse::save(Common::WriteStream *stream) {
 	return _hotspots.serialize(stream);
 }
 
-// The cursor images are loaded again, the cursor overlays come from the overlay block
 int SputMouse::restore(Common::ReadStream *stream) {
 	_visibleInMovie = 0;
 	loadCursors(kNumCursors);

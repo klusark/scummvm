@@ -24,6 +24,7 @@
 #include "common/stream.h"
 #include "common/debug.h"
 
+#include "engines/grim/grim.h"
 #include "engines/grim/movie/codecs/blocky8.h"
 #include "engines/grim/movie/codecs/codec48.h"
 #include "engines/grim/movie/codecs/smush_decoder.h"
@@ -50,7 +51,7 @@ SmushAnimator::~SmushAnimator() {
 }
 
 void SmushAnimator::animatorInitialize() {
-	_frame = 0;
+	_frame = g_grim->useRemasterFixes() ? -1 : 0;
 	_blockSize = 0;
 	_tag = SMUSH_TAG_NULL;
 	_frameCount = 1;

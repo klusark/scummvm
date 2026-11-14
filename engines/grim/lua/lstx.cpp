@@ -952,7 +952,7 @@ int yyparse() {
 
 #define YYPOPSTACK   (yyvsp--, yyssp--)
 
-	int yystacksize = YYINITDEPTH;
+	int yystacksize = luaIsRemastered ? 500 : YYINITDEPTH;
 
 	int yychar;
 	YYSTYPE yylval;

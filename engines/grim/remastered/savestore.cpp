@@ -40,11 +40,9 @@ static const char *const slotPrefix = "grim-remastered-savedata";
 static const char *const gameFileName = "grim.gsv";
 static const char *const metaFileName = "meta.gsv";
 
-// Where each year of the game starts and ends in the list of the 60 puzzles
 static const int yearStart[4] = { 0, 17, 32, 46 };
 static const int yearEnd[4] = { 17, 32, 46, 60 };
 
-// The bits of the puzzles of the year in the metadata
 static const int puzzleBits = 22;
 
 Common::String SaveStore::getSlotName(int slot) {
@@ -63,7 +61,6 @@ bool SaveStore::parseSlotName(const Common::String &name, int *slot) {
 	int value = 0;
 	int count = 0;
 
-	// Like the scan of the original: four digits at most, whatever follows them is ignored
 	for (; *digits >= '0' && *digits <= '9' && count < 4; digits++) {
 		value = value * 10 + (*digits - '0');
 		count++;
@@ -89,8 +86,6 @@ uint32 SaveStore::adler32(const byte *data, uint32 size) {
 	return (sumB << 16) | sumA;
 }
 
-// The only compressor that the common code offers writes a gzip stream. Its deflate data is the
-// same as the one of a zlib stream, so only the header and the trailer are exchanged.
 bool SaveStore::compress(const byte *data, uint32 size, Common::Array<byte> &result) {
 	Common::MemoryWriteStreamDynamic *memory = new Common::MemoryWriteStreamDynamic(DisposeAfterUse::YES);
 	Common::WriteStream *gzip = Common::wrapCompressedWriteStream(memory);
@@ -162,7 +157,6 @@ bool SaveStore::writeFile(const Common::FSNode &node, const byte *data, uint32 s
 	return written;
 }
 
-// The game file is written first: a slot without it is not listed because it has no metadata
 int SaveStore::writeSlot(int slot, const Common::Array<byte> &compressed, int setIndex, const char *mural, const char *title) {
 	Common::FSNode folder = getRootNode().getChild(getSlotName(slot));
 
@@ -181,7 +175,6 @@ int SaveStore::writeSlot(int slot, const Common::Array<byte> &compressed, int se
 	memset(meta, 0, sizeof(meta));
 	WRITE_LE_UINT32(meta, packMetadata(setIndex, mural));
 
-	// The title takes 127 characters and the end of the string
 	Common::strlcpy((char *)meta + 4, title, kTitleSize);
 
 	if (!writeFile(folder.getChild(metaFileName), meta, sizeof(meta))) {
@@ -205,7 +198,6 @@ int SaveStore::readSlot(int slot, Common::Array<byte> &compressed) {
 
 	int64 size = stream->size();
 
-	// A file without data counts as a missing one
 	if (size <= 0 || size > 0x7FFFFFFF) {
 		delete stream;
 
@@ -227,8 +219,6 @@ int SaveStore::readSlot(int slot, Common::Array<byte> &compressed) {
 	return kStatusOk;
 }
 
-// The file system nodes cannot remove a file: it is emptied, and a file without data counts as removed,
-// like readSlot and listSlots see it
 bool SaveStore::eraseFile(const Common::FSNode &file) {
 	if (!file.exists() || file.isDirectory())
 		return false;
@@ -248,8 +238,6 @@ bool SaveStore::eraseFile(const Common::FSNode &file) {
 	return writeFile(file, nullptr, 0);
 }
 
-// The game file goes first and then the metadata. Nothing else is touched after a file that cannot be
-// removed, and a file that is not there is one of those. The folder stays, empty, because it cannot be removed.
 int SaveStore::eraseSlot(int slot) {
 	Common::FSNode folder = getRootNode().getChild(getSlotName(slot));
 
@@ -296,7 +284,6 @@ void SaveStore::listSlots(Common::Array<SlotInfo> &slots) {
 		data[kMetaSize - 1] = '\0';
 		info.title = (const char *)data + 4;
 
-		// The slots go in order of number, a new one goes before the first one with a higher number
 		uint position = 0;
 
 		while (position < slots.size() && slots[position].slot < slot)
@@ -306,13 +293,10 @@ void SaveStore::listSlots(Common::Array<SlotInfo> &slots) {
 	}
 }
 
-// The metadata keeps the set, the year and the puzzles of that year. The puzzles of the years
-// before are all solved: the year is the one of the first puzzle that is not.
 uint32 SaveStore::packMetadata(int setIndex, const char *mural) {
 	char puzzles[kMuralLength + 1];
 	int first = kMuralLength;
 
-	// A mural shorter than 60 characters has no puzzles after its end: they are neither solved nor open
 	memset(puzzles, 0, sizeof(puzzles));
 
 	for (int i = 0; i < kMuralLength && mural[i]; i++)
@@ -347,7 +331,7 @@ void SaveStore::unpackMetadata(uint32 packed, int *setIndex, Common::String *mur
 	for (int i = 0; year > 0 && i < yearEnd[year - 1]; i++)
 		puzzles[i] = '1';
 
-	// The 22 bits are not cut at the end of the year, only at the end of the mural
+	// The 22 bits are cut at the end of the mural, not at the end of the year
 	for (int k = 0; k < puzzleBits && yearStart[year] + k < kMuralLength; k++) {
 		if ((packed >> (puzzleBits - 1 - k)) & 1)
 			puzzles[yearStart[year] + k] = '1';
@@ -383,7 +367,6 @@ bool SaveStore::readCommentary(Common::ReadStream *stream) {
 	return g_grim->getCommentary()->restoreRemastered(stream);
 }
 
-// The solved puzzles are light and the others dark, like the mural of the game menu
 Graphics::Surface *SaveStore::makeMuralThumbnail(const char *mural) {
 	enum {
 		kThumbnailWidth = 160,

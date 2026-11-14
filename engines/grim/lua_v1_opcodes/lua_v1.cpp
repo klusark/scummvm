@@ -48,6 +48,7 @@
 #include "engines/grim/std/std_math.h"
 #include "engines/grim/stdcontrol.h"
 #include "engines/grim/text/text.h"
+#include "engines/grim/walkplane.h"
 #include "engines/grim/wuregistry.h"
 #include "engines/grim/lua/lauxlib.h"
 #include "engines/grim/lua/luadebug.h"
@@ -244,7 +245,6 @@ void Lua_V1::WriteRegistryValue() {
 	lua_Object valObj = lua_getparam(2);
 	WuRegistry *wuRegistry = g_grim->_wuRegistry;
 
-	// A number is a string for Lua 3.1, the remastered tests it first and keeps it as a number
 	if (g_grim->isRemastered()) {
 		if (lua_isnumber(valObj))
 			wuRegistry->saveFloat(key, lua_getnumber(valObj));
@@ -1015,7 +1015,42 @@ void Lua_V1::GetActorLoopingChores() {
 }
 
 void Lua_V1::ScreenToWorld() {
-	warning("Lua_V1::ScreenToWorld(): not implemented");
+	lua_Object xObj = lua_getparam(1);
+	lua_Object yObj = lua_getparam(2);
+
+	if (!lua_isnumber(xObj) || !lua_isnumber(yObj))
+		return;
+
+	float xValue = lua_getnumber(xObj);
+	float yValue = lua_getnumber(yObj);
+	int x;
+	int y;
+
+	if (g_grim->isRemastered()) {
+		x = (xValue >= -2147483648.0f && xValue < 2147483648.0f) ? (int)xValue : INT_MIN;
+		y = (yValue >= -2147483648.0f && yValue < 2147483648.0f) ? (int)yValue : INT_MIN;
+	} else {
+		int64 wideX = (xValue >= -9223372036854775808.0f && xValue < 9223372036854775808.0f) ? (int64)xValue : (-9223372036854775807LL - 1);
+		int64 wideY = (yValue >= -9223372036854775808.0f && yValue < 9223372036854775808.0f) ? (int64)yValue : (-9223372036854775807LL - 1);
+		x = (int)(uint32)((uint64)wideX & 0xFFFFFFFFu);
+		y = (int)(uint32)((uint64)wideY & 0xFFFFFFFFu);
+	}
+
+	if (x < 0 || x > 639 || y < 0 || y > 479)
+		return;
+
+	float world[3];
+
+	if (!g_grim->_sputRender->reverseProject(x, y, world)) {
+		warning("Lua_V1::ScreenToWorld(): the point cannot be projected");
+		world[0] = 0.0f;
+		world[1] = 0.0f;
+		world[2] = 0.0f;
+	}
+
+	lua_pushnumber(world[0]);
+	lua_pushnumber(world[1]);
+	lua_pushnumber(world[2]);
 }
 
 void Lua_V1::PrintMessage() {
@@ -1179,7 +1214,7 @@ void Lua_V1::GetSoundParameters() {
 }
 
 void Lua_V1::TEST() {
-	warning("Lua_V1::TEST(): not implemented");
+	g_grim->_walkSystem->shrinkBoxes(0.005f);
 }
 
 void Lua_V1::GetTickCount() {
@@ -1833,9 +1868,8 @@ int Lua_V1::terminate() {
 }
 
 int Lua_V1::startup() {
-	// The state of the remastered is made here, so that it can be made again for a new game
 	if (g_grim->isRemastered()) {
-		lua_open(false);
+		lua_open(false, true);
 		lua_iolibopen();
 		lua_strlibopen();
 		lua_mathlibopen();
@@ -1923,8 +1957,6 @@ void Lua_V1::makeSystemTable() {
 
 	registerControls();
 
-	// The remastered has a function of its own for each kind of handler, and a handler for the
-	// kind of device in use
 	if (g_grim->isRemastered()) {
 		lua_pushobject(lua_getref(_refSystemTable));
 		lua_pushstring("camChangeHandler");

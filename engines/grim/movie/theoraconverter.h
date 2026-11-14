@@ -30,8 +30,6 @@
 
 namespace Grim {
 
-// YCbCr 4:2:0 to RGBX conversion of the Remastered HD movies: the tables and the
-// per pixel arithmetic of the original. The output surface has to be RGBA32.
 class TheoraConverter : public Video::TheoraDecoder::FrameConverter {
 public:
 	TheoraConverter();
@@ -55,7 +53,6 @@ private:
 		return (uint32)value;
 	}
 
-	// The luma term of a pixel plus the chroma terms of its 2x2 block; the fourth byte is opaque
 	static uint32 makePixel(int lumaTerm, int redTerm, int greenTerm, int blueTerm,
 	                        int redShift, int greenShift, int blueShift, uint32 opaque) {
 		return (clampChannel((lumaTerm + redTerm) >> kFixedPointShift) << redShift) |
@@ -64,7 +61,6 @@ private:
 		       opaque;
 	}
 
-	// Indexed by the sample byte: luma (y - 16), Cr -> R, Cb -> G, Cr -> G, Cb -> B
 	int _yTable[kTableSize];
 	int _rvTable[kTableSize];
 	int _guTable[kTableSize];
@@ -74,9 +70,6 @@ private:
 	bool _warnedPixelFormat;
 };
 
-// Float to 16 bit conversion of the audio of the Remastered HD movies: the volume gain of
-// the clip, the clamp and the truncation of the original. It has to be given the gain
-// before the audio is decoded, as the original does.
 class TheoraAudioConverter : public Video::TheoraDecoder::SampleConverter {
 public:
 	TheoraAudioConverter();

@@ -29,6 +29,7 @@
 #include "engines/grim/renderdroid/rd.h"
 #include "engines/grim/sputroom.h"
 #include "engines/grim/std/std_conffile.h"
+#include "engines/grim/std/std_display.h"
 #include "engines/grim/std/std_sys.h"
 
 namespace Grim {
@@ -53,7 +54,6 @@ HotspotManager::~HotspotManager() {
 	clear();
 }
 
-// Legacy and game screen coordinates to the canvas, the sizes have no offset
 void HotspotManager::convertCoords1080(int *x, int *y, int mode, bool isSize) {
 	if (mode == kCoordsLegacy) {
 		*x = kPlayWidth * *x / kLegacyWidth + (isSize ? 0 : kPlayOffset);
@@ -74,6 +74,17 @@ void HotspotManager::convertCoordsNative(int *x, int *y, int mode, bool isSize) 
 	}
 }
 
+void HotspotManager::convertRectNative(StdRect *rect, int mode) {
+	if (mode == kCoordsLegacy) {
+		rect->x = kLegacyWidth * (rect->x - kPlayOffset) / kPlayWidth;
+		rect->y = kLegacyHeight * rect->y / kCanvasHeight;
+		rect->width = kLegacyWidth * rect->width / kPlayWidth;
+		rect->height = kLegacyHeight * rect->height / kCanvasHeight;
+	} else if (mode == kCoordsGameScreen) {
+		rect->x -= kPlayOffset;
+	}
+}
+
 bool HotspotManager::isCompatible(int mode, int type, int cursor) {
 	switch (mode) {
 	case kModeNormal:
@@ -91,7 +102,6 @@ bool HotspotManager::isCompatible(int mode, int type, int cursor) {
 	}
 }
 
-// Special and overlay hotspots are tested before the others
 bool HotspotManager::isPriorityCompatible(int mode, int type) {
 	if (mode == kModeOnlyPath || mode == kModeSpecial)
 		return true;
@@ -99,7 +109,6 @@ bool HotspotManager::isPriorityCompatible(int mode, int type) {
 	return mode == kModeNormal && type != kTypeSpecial;
 }
 
-// Even-odd test with integer math
 bool HotspotManager::isInside(int (*poly)[2], int numPoints, int x, int y) {
 	bool inside = false;
 
@@ -126,7 +135,6 @@ void HotspotManager::clear() {
 	_setName[0] = 0;
 }
 
-// The next handle that no hotspot has. The handle 0 is a valid one.
 int HotspotManager::newHandle() {
 	for (;;) {
 		_serial = (_serial + 1) % kNumHandles;
@@ -143,7 +151,6 @@ int HotspotManager::newHandle() {
 	}
 }
 
-// The file ended in the middle of a hotspot: the half read hotspot goes
 void HotspotManager::discardLastHotspot() {
 	warning("HotspotManager::parseSetup(): incomplete hotspot, the rest of the file is ignored");
 
@@ -170,8 +177,6 @@ void HotspotManager::getCentroid(int (*poly)[2], int numPoints, int *x, int *y) 
 	*y = numPoints > 0 ? sumY / numPoints : 0;
 }
 
-// The polygon of a hotspot linked to an actor moves to the projected offset point and stays there.
-// False when the hotspot has no actor or the point is not on the screen.
 bool HotspotManager::updateDynamicPolygon(Hotspot *hotspot) {
 	if (hotspot->actorIndex == -1)
 		return false;
@@ -211,8 +216,6 @@ bool HotspotManager::updateDynamicPolygon(Hotspot *hotspot) {
 	return true;
 }
 
-// The file of a set has the name of the set with .hot instead of .set. When the file can not be
-// opened nothing changes. The hotspots of the previous set go, the ones that the scripts added stay.
 void HotspotManager::load(const char *setName) {
 	if (!setName) {
 		warning("HotspotManager::load(): no set name");
@@ -278,7 +281,6 @@ void HotspotManager::load(const char *setName) {
 	delete conffile;
 }
 
-// Finds the next line that starts with the key followed by a space or a tab and returns the rest of it
 const char *HotspotManager::parseLine(StdConffile *conffile, const char *key) {
 	if (!conffile->readLine())
 		return nullptr;
@@ -316,7 +318,6 @@ const char *HotspotManager::parseLine(StdConffile *conffile, const char *key) {
 	}
 }
 
-// The hotspots of one camera setup. The fields that a line does not give keep the values they have.
 void HotspotManager::parseSetup(StdConffile *conffile, int setup) {
 	int num = 0;
 	const char *argument = parseLine(conffile, "num_hotspots:");
@@ -326,7 +327,7 @@ void HotspotManager::parseSetup(StdConffile *conffile, int setup) {
 		return;
 	}
 
-	// The results of the point and region scans are not checked: a failed scan leaves the previous values
+	// A failed scan leaves the previous values
 	float offsetX = 0.0f;
 	float offsetY = 0.0f;
 	float offsetZ = 0.0f;
@@ -501,7 +502,6 @@ int HotspotManager::getActiveHotspots(int canvasX, int canvasY, const Hotspot **
 	int setup = room->curSetup;
 	int count = 0;
 
-	// Every hover image hides, the special and overlay hotspots under the point show theirs
 	for (int i = 0; i < _numHotspots; i++) {
 		Hotspot *hotspot = _hotspots[i];
 
@@ -527,7 +527,7 @@ int HotspotManager::getActiveHotspots(int canvasX, int canvasY, const Hotspot **
 		}
 	}
 
-	// The other hotspots. A hover image of these stays hidden, only its layer grows.
+	// A hover image of these stays hidden, only its layer grows
 	for (int i = 0; i < _numHotspots; i++) {
 		Hotspot *hotspot = _hotspots[i];
 
@@ -619,7 +619,6 @@ int HotspotManager::addHotspot(const char *id, int x, int y, int width, int heig
 		}
 	}
 
-	// At most 127 hotspots. The overlay of a hotspot that does not fit stays.
 	if (_numHotspots + 1 >= kMaxHotspots)
 		warning("HotspotManager::addHotspot(): too many hotspots");
 
@@ -639,7 +638,7 @@ int HotspotManager::addHotspot(const char *id, int x, int y, int width, int heig
 	return handle;
 }
 
-// The last hotspot takes the place of the removed one, so the order of the queries changes
+// The last hotspot takes the place of the removed one
 void HotspotManager::removeHotspot(int handle) {
 	for (int i = 0; i < _numHotspots; i++) {
 		if (_hotspots[i]->handle != handle)
@@ -660,7 +659,6 @@ void HotspotManager::removeHotspot(int handle) {
 	}
 }
 
-// Moves the polygon so that its center is on the point
 void HotspotManager::updateHotspot(const char *id, int x, int y, int coords) {
 	int pointX = x;
 	int pointY = y;
@@ -759,7 +757,6 @@ int HotspotManager::deserialize(Common::ReadStream *stream) {
 	stream->read(_setName, kSetNameSize);
 	_setName[kSetNameSize - 1] = 0;
 
-	// The serial is one past the last handle that was given, so it can be 1024
 	if (stream->err() || stream->eos() || num < 0 || num > kMaxHotspots || _serial < 0 || _serial > kNumHandles) {
 		warning("HotspotManager::deserialize(): invalid hotspot header");
 		return 1;

@@ -53,7 +53,6 @@ struct HdTextInfo;
 struct SputActor;
 
 enum {
-	// The remastered texts can be up to 8191 characters long, the others keep 511
 	kTextEventCapacity = 8192,
 	kTextEventClassicCapacity = 512
 };
@@ -70,7 +69,6 @@ struct SputTextEvent {
 	SputActor *actor;
 	int flags;
 	int serial;
-	// Remastered only: the lines to show and the layout of the HD text
 	int firstLine;
 	int lineCount;
 	HdTextCache *hdCache;
@@ -105,7 +103,6 @@ public:
 	int getTextObjectParams(TextParams *params, lua_Object tableObj, SputTextEvent *event);
 	int getCoordsFromTable(lua_Object tableObj);
 	void getHdClip(StdRect *clip, int coords);
-	void queueBlastEvent(SputTextEvent *event);
 	int getTextCapacity() const;
 	bool queryTextObject(SputTextEvent *event, int *x, int *y, int *width, int *height);
 	int getHdLineCount(SputTextEvent *event);

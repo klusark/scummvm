@@ -36,8 +36,6 @@ enum {
 	kLogBufferSize = 520
 };
 
-// Opcodes of the mouse, the hotspots, the path finder and the dialog log of the remastered
-
 lua_Object Lua_V1::makeVectorTable(const float *vector) {
 	lua_Object table = lua_createtable();
 
@@ -75,8 +73,6 @@ void Lua_V1::PathfinderMode() {
 	g_grim->_sputActor->setPathfinderMode(luaFtol(lua_getnumber(lua_getparam(1))));
 }
 
-// Table with a key for each line of the log, from 0, that holds the slot of the line. The number of
-// lines is in count.
 void Lua_V1::DialogLogGetLineCount() {
 	DialogLog *dialogLog = g_grim->_dialogLog;
 	lua_Object result = lua_createtable();
@@ -107,7 +103,6 @@ void Lua_V1::DialogLogGetLineCount() {
 	lua_pushobject(result);
 }
 
-// The first parameter is the table of the line count, the second one is a slot of the log
 void Lua_V1::DialogLogGetLine() {
 	lua_Object tableObj = lua_getparam(1);
 	lua_Object slotObj = lua_getparam(2);
@@ -144,8 +139,6 @@ void Lua_V1::DialogLogAddLine() {
 	g_grim->_dialogLog->addLine(text);
 }
 
-// A table for each hotspot under the pointer, the first one has the priority. The ones that walk
-// have the points to walk to in path.
 void Lua_V1::QueryActiveHotspots() {
 	int mode = luaFtol(lua_getnumber(lua_getparam(1)));
 	SputMouse *mouse = g_grim->_sputMouse;
@@ -167,7 +160,6 @@ void Lua_V1::QueryActiveHotspots() {
 
 		lua_Object entry = lua_createtable();
 
-		// The points of a walk hotspot are the first key of the table
 		if (hotspot->type == HotspotManager::kTypeWalk) {
 			lua_pushobject(entry);
 			lua_pushstring("path");
@@ -245,8 +237,7 @@ void Lua_V1::SetCursor() {
 	g_grim->_sputMouse->setCursor(luaFtol(lua_getnumber(lua_getparam(1))));
 }
 
-// Position of the actor along an axis that the pointer points to, and which side of the actor it is.
-// The actor is the one of handle 0 when the first parameter is not an actor.
+// The actor is the one of handle 0 when the first parameter is not an actor
 void Lua_V1::ProjectToAxis() {
 	SputActor *actor = getSputActor(lua_getparam(1));
 	RdVector3 axis;
@@ -268,7 +259,6 @@ void Lua_V1::ShowCursor() {
 	g_grim->_sputMouse->showCursor(luaFtol(lua_getnumber(lua_getparam(1))) != 0);
 }
 
-// AddHotspot(id, x, y, width, height, cursor, boost, menu type, hover image, hover layer, coords)
 void Lua_V1::AddHotspot() {
 	const char *id = lua_getstring(lua_getparam(1));
 
@@ -316,7 +306,6 @@ void Lua_V1::CursorAnimation() {
 	g_grim->_sputMouse->cursorAnimation(first, last);
 }
 
-// UpdateHotspot(id, x, y, coords)
 void Lua_V1::UpdateHotspot() {
 	const char *id = lua_getstring(lua_getparam(1));
 	int coords = luaFtol(lua_getnumber(lua_getparam(4)));
@@ -331,7 +320,6 @@ void Lua_V1::UpdateHotspot() {
 	g_grim->_sputMouse->getHotspots()->updateHotspot(id, x, y, coords);
 }
 
-// LinkHotspot(id, actor): the hotspot follows the actor, anything else unlinks it
 void Lua_V1::LinkHotspot() {
 	const char *id = lua_getstring(lua_getparam(1));
 	lua_Object actorObj = lua_getparam(2);

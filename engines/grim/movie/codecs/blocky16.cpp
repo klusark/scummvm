@@ -23,6 +23,7 @@
 #include "common/util.h"
 #include "common/textconsole.h"
 
+#include "engines/grim/grim.h"
 #include "engines/grim/movie/codecs/blocky16.h"
 
 namespace Grim {
@@ -476,17 +477,21 @@ void Blocky16::level2(byte *d_dst) {
 		// The disasm writes at least one entry, even when the list is empty
 		int l = tmp_ptr[96];
 		int16 *tmp_ptr2 = (int16 *)tmp_ptr;
-		do {
-			WRITE_2X1_LINE(d_dst + READ_LE_UINT16(tmp_ptr2) * 2, val);
-			tmp_ptr2++;
-		} while (l-- > 1);
+		if (l > 0 || !_remasterFixes) {
+			do {
+				WRITE_2X1_LINE(d_dst + READ_LE_UINT16(tmp_ptr2) * 2, val);
+				tmp_ptr2++;
+			} while (l-- > 1);
+		}
 		l = tmp_ptr[97];
 		val >>= 16;
 		tmp_ptr2 = (int16 *)(tmp_ptr + 32);
-		do {
-			WRITE_2X1_LINE(d_dst + READ_LE_UINT16(tmp_ptr2) * 2, val);
-			tmp_ptr2++;
-		} while (l-- > 1);
+		if (l > 0 || !_remasterFixes) {
+			do {
+				WRITE_2X1_LINE(d_dst + READ_LE_UINT16(tmp_ptr2) * 2, val);
+				tmp_ptr2++;
+			} while (l-- > 1);
+		}
 	} else if (code >= 0xF9) {
 		if (code == 0xFD) {
 			t = *_d_src++;
@@ -561,17 +566,21 @@ void Blocky16::level1(byte *d_dst) {
 		byte *tmp_ptr = _tableBig + (tmp * 388);
 		int l = tmp_ptr[384];
 		int16 *tmp_ptr2 = (int16 *)tmp_ptr;
-		do {
-			WRITE_2X1_LINE(d_dst + READ_LE_UINT16(tmp_ptr2) * 2, val);
-			tmp_ptr2++;
-		} while (l-- > 1);
+		if (l > 0 || !_remasterFixes) {
+			do {
+				WRITE_2X1_LINE(d_dst + READ_LE_UINT16(tmp_ptr2) * 2, val);
+				tmp_ptr2++;
+			} while (l-- > 1);
+		}
 		l = tmp_ptr[385];
 		val >>= 16;
 		tmp_ptr2 = (int16 *)(tmp_ptr + 128);
-		do {
-			WRITE_2X1_LINE(d_dst + READ_LE_UINT16(tmp_ptr2) * 2, val);
-			tmp_ptr2++;
-		} while (l-- > 1);
+		if (l > 0 || !_remasterFixes) {
+			do {
+				WRITE_2X1_LINE(d_dst + READ_LE_UINT16(tmp_ptr2) * 2, val);
+				tmp_ptr2++;
+			} while (l-- > 1);
+		}
 	} else if (code >= 0xF9) {
 		if (code == 0xFD) {
 			t = *_d_src++;
@@ -635,9 +644,12 @@ void Blocky16::init(int width, int height) {
 	_deltaBufs[0] = _deltaBuf;
 	_deltaBufs[1] = _deltaBuf + _bufSize;
 	_curBuf = _deltaBuf + _bufSize * 2;
+	_lastShown = nullptr;
 }
 
 Blocky16::Blocky16() {
+	_remasterFixes = g_grim->useRemasterFixes();
+	_lastShown = nullptr;
 	_tableBig = new byte[99328]();
 	_tableSmall = new byte[32768]();
 	_deltaBuf = nullptr;
@@ -742,6 +754,65 @@ static void bompDecodeMain(byte *dst, const byte *src, int size) {
 	}
 }
 
+uint16 Blocky16::blockOffset(uint16 first, uint16 second) const {
+	int blue = (first & 0x1F) + (second & 0x1F);
+	int green = ((second & 0x7E0) + (first & 0x7E0)) & 0xFC0;
+	int red = ((second & 0xF800) + (first & 0xF800)) & 0x1F000;
+
+	return (uint16)((blue | green | red) >> 1);
+}
+
+void Blocky16::upscaleFrame(byte *dest, const byte *source, int width, int height, const byte *palette) {
+	if (width <= 0 || height <= 0)
+		return;
+
+	int pitch = width * 2;
+	byte *row = dest + pitch;
+	int position = 0;
+
+	for (int rowPairs = (height + 1) >> 1; rowPairs > 0; rowPairs--) {
+		uint16 current = palette ? READ_LE_UINT16(palette + source[position] * 2) : READ_LE_UINT16(source + position * 2);
+		position++;
+
+		WRITE_LE_UINT16(row, current);
+		WRITE_LE_UINT16(row + 2, current);
+		row += 4;
+
+		if (width - 2 > 0) {
+			for (int pairs = (width - 1) >> 1; pairs > 0; pairs--) {
+				uint16 previous = current;
+
+				current = palette ? READ_LE_UINT16(palette + source[position] * 2) : READ_LE_UINT16(source + position * 2);
+				position++;
+
+				WRITE_LE_UINT16(row, blockOffset(previous, current));
+				WRITE_LE_UINT16(row + 2, current);
+				row += 4;
+			}
+		}
+
+		row += pitch;
+	}
+
+	memcpy(dest, dest + pitch, pitch);
+
+	row = dest + pitch * 2;
+
+	if (height - 2 > 0) {
+		for (int rows = (height - 1) >> 1; rows > 0; rows--) {
+			for (int x = 0; x < width; x++) {
+				uint16 below = READ_LE_UINT16(row + pitch);
+				uint16 above = READ_LE_UINT16(row - pitch);
+
+				WRITE_LE_UINT16(row, blockOffset(below, above));
+				row += 2;
+			}
+
+			row += pitch;
+		}
+	}
+}
+
 void Blocky16::decode(byte *dst, const byte *src, int flags) {
 	_offset1 = ((_deltaBufs[1] - _curBuf) / 2) * 2;
 	_offset2 = ((_deltaBufs[0] - _curBuf) / 2) * 2;
@@ -775,6 +846,8 @@ void Blocky16::decode(byte *dst, const byte *src, int flags) {
 		return;
 	}
 
+	byte *shown = _curBuf;
+
 	switch (src[18]) {
 	case 0:
 #if defined(SCUMM_BIG_ENDIAN)
@@ -786,11 +859,16 @@ void Blocky16::decode(byte *dst, const byte *src, int flags) {
 #endif
 		break;
 	case 1:
-		error("blocky16: not implemented decode1 proc");
+		if (!_remasterFixes)
+			error("blocky16: not implemented decode1 proc");
+
+		upscaleFrame(_curBuf, gfx_data, _width, _height, nullptr);
 		break;
 	case 2:
 		if (seq_nb == _prevSeqNb + 1) {
 			decode2(_curBuf, gfx_data, _width, _height, src + 24, src + 40);
+		} else if (_remasterFixes) {
+			shown = _lastShown;
 		}
 
 		break;
@@ -814,7 +892,10 @@ void Blocky16::decode(byte *dst, const byte *src, int flags) {
 			break;
 		}
 	case 7:
-		error("blocky16: not implemented decode7 proc");
+		if (!_remasterFixes)
+			error("blocky16: not implemented decode7 proc");
+
+		upscaleFrame(_curBuf, gfx_data, _width, _height, src + 40);
 		break;
 	case 8:
 		{
@@ -827,9 +908,18 @@ void Blocky16::decode(byte *dst, const byte *src, int flags) {
 			};
 			break;
 		}
+	default:
+		if (_remasterFixes)
+			shown = _lastShown;
+
+		break;
 	}
 
-	memcpy(dst, _curBuf, _frameSize);
+	if (shown)
+		memcpy(dst, shown, _frameSize);
+
+	if (_remasterFixes && shown == _curBuf)
+		_lastShown = _curBuf;
 
 	if (seq_nb == _prevSeqNb + 1) {
 		byte *tmp_ptr = nullptr;

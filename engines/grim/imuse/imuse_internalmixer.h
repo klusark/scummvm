@@ -55,6 +55,7 @@ private:
 	int _sampleRate = 0;
 	bool _lowLatencyMode = false;
 	bool _demo = false;
+	bool _remastered = false;
 	int _outputChannelVolume = Audio::Mixer::kMaxChannelVolume;
 
 	void mix16(const int16 *srcBuf, int32 inFrameCount, uint32 feedSize, int32 mixBufStartIndex, int volume);

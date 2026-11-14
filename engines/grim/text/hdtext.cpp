@@ -38,6 +38,7 @@
 #include FT_FREETYPE_H
 #include FT_IMAGE_H
 #include FT_OUTLINE_H
+#include FT_TRUETYPE_TABLES_H
 
 #include "engines/grim/remastered/hdcanvas.h"
 #include "engines/grim/text/blasttext.h"
@@ -96,18 +97,50 @@ HdFont::~HdFont() {
 		delete[] _glyphs[i].alpha;
 }
 
-int HdFont::floorDiv64(long value) {
-	if (value >= 0)
-		return (int)(value / 64);
+int HdFont::readGlyphBox(FT_FaceRec_ *face, int locFormat, int glyph, int *xMin, int *yMin, int *xMax, int *yMax) {
+	*xMin = 0;
+	*yMin = 0;
+	*xMax = 0;
+	*yMax = 0;
 
-	return -(int)((-value + 63) / 64);
-}
+	if (locFormat < 0 || locFormat > 1)
+		return -1;
 
-int HdFont::ceilDiv64(long value) {
-	if (value >= 0)
-		return (int)((value + 63) / 64);
+	if (glyph < 0 || glyph >= (int)face->num_glyphs)
+		return 1;
 
-	return -(int)((-value) / 64);
+	byte entry[8];
+	FT_ULong length = (locFormat == 0) ? 4 : 8;
+	FT_ULong first;
+	FT_ULong second;
+
+	if (FT_Load_Sfnt_Table(face, FT_MAKE_TAG('l', 'o', 'c', 'a'), (FT_ULong)glyph * (locFormat == 0 ? 2 : 4), entry, &length) != 0)
+		return -1;
+
+	if (locFormat == 0) {
+		first = (FT_ULong)((entry[0] << 8) | entry[1]) * 2;
+		second = (FT_ULong)((entry[2] << 8) | entry[3]) * 2;
+	} else {
+		first = ((FT_ULong)entry[0] << 24) | ((FT_ULong)entry[1] << 16) | ((FT_ULong)entry[2] << 8) | (FT_ULong)entry[3];
+		second = ((FT_ULong)entry[4] << 24) | ((FT_ULong)entry[5] << 16) | ((FT_ULong)entry[6] << 8) | (FT_ULong)entry[7];
+	}
+
+	if (first == second)
+		return 1;
+
+	byte header[10];
+
+	length = 10;
+
+	if (FT_Load_Sfnt_Table(face, FT_MAKE_TAG('g', 'l', 'y', 'f'), first, header, &length) != 0)
+		return -1;
+
+	*xMin = (int16)((header[2] << 8) | header[3]);
+	*yMin = (int16)((header[4] << 8) | header[5]);
+	*xMax = (int16)((header[6] << 8) | header[7]);
+	*yMax = (int16)((header[8] << 8) | header[9]);
+
+	return 0;
 }
 
 void HdFont::spanCallback(int y, int count, const FT_Span_ *spans, void *user) {
@@ -139,7 +172,15 @@ void HdFont::loadGlyphs(FT_LibraryRec_ *library, const byte *data, long dataSize
 		return;
 	}
 
-	long cell = (long)face->ascender - (long)face->descender;
+	TT_HoriHeader *hhea = (TT_HoriHeader *)FT_Get_Sfnt_Table(face, FT_SFNT_HHEA);
+	TT_Header *head = (TT_Header *)FT_Get_Sfnt_Table(face, FT_SFNT_HEAD);
+	int locFormat = head ? (int)head->Index_To_Loc_Format : -1;
+	long cell;
+
+	if (hhea)
+		cell = (long)hhea->Ascender - (long)hhea->Descender;
+	else
+		cell = (long)face->ascender - (long)face->descender;
 
 	if (cell <= 0) {
 		warning("HdFont: '%s' has no usable metrics", _path.c_str());
@@ -147,7 +188,6 @@ void HdFont::loadGlyphs(FT_LibraryRec_ *library, const byte *data, long dataSize
 		return;
 	}
 
-	// The size goes in steps of 1/8 pixel and the scale makes the cell (ascent minus descent) that tall
 	float pixels = ceilf(_requestedSize * 8.0f) / 8.0f;
 
 	if (pixels < (float)minPixels)
@@ -180,16 +220,32 @@ void HdFont::loadGlyphs(FT_LibraryRec_ *library, const byte *data, long dataSize
 		if (slot->format != FT_GLYPH_FORMAT_OUTLINE || slot->outline.n_points == 0)
 			continue;
 
+		int boxXMin;
+		int boxYMin;
+		int boxXMax;
+		int boxYMax;
+
+		if (readGlyphBox(face, locFormat, (int)index, &boxXMin, &boxYMin, &boxXMax, &boxYMax) < 0) {
+			FT_BBox box;
+
+			FT_Outline_Get_CBox(&slot->outline, &box);
+
+			boxXMin = (int)box.xMin;
+			boxYMin = (int)box.yMin;
+			boxXMax = (int)box.xMax;
+			boxYMax = (int)box.yMax;
+		}
+
 		FT_Outline_Transform(&slot->outline, &matrix);
 
-		FT_BBox box;
-
-		FT_Outline_Get_CBox(&slot->outline, &box);
-
-		int left = floorDiv64((long)box.xMin);
-		int bottom = floorDiv64((long)box.yMin);
-		int right = ceilDiv64((long)box.xMax);
-		int top = ceilDiv64((long)box.yMax);
+		float scaledXMin = (float)((double)boxXMin * (double)scale);
+		float scaledYMin = (float)((double)boxYMin * (double)scale);
+		float scaledXMax = (float)((double)boxXMax * (double)scale);
+		float scaledYMax = (float)((double)boxYMax * (double)scale);
+		int left = (int)floor((double)scaledXMin);
+		int bottom = (int)floor((double)scaledYMin);
+		int right = (int)ceil((double)scaledXMax);
+		int top = (int)ceil((double)scaledYMax);
 		int width = right - left;
 		int height = top - bottom;
 
@@ -356,54 +412,6 @@ int HdText::getTextPage(int flags) {
 	return page;
 }
 
-void HdText::convertCoords1080(int *x, int *y, int mode, bool isSize) {
-	switch (mode) {
-	case 0:
-		*x = (int)((int64)1440 * *x / 640) + (isSize ? 0 : 240);
-		*y = (int)((int64)1080 * *y / 480);
-		break;
-	case 1:
-		if (!isSize)
-			*x += 240;
-
-		break;
-	default:
-		break;
-	}
-}
-
-void HdText::convertCoordsNative(int *x, int *y, int mode, bool isSize) {
-	switch (mode) {
-	case 0:
-		*x = (int)((int64)640 * (*x - (isSize ? 0 : 240)) / 1440);
-		*y = (int)((int64)480 * *y / 1080);
-		break;
-	case 1:
-		if (!isSize)
-			*x -= 240;
-
-		break;
-	default:
-		break;
-	}
-}
-
-void HdText::convertRectNative(StdRect *rect, int mode) {
-	switch (mode) {
-	case 0:
-		rect->x = (int)((int64)640 * (rect->x - 240) / 1440);
-		rect->y = (int)((int64)480 * rect->y / 1080);
-		rect->width = (int)((int64)640 * rect->width / 1440);
-		rect->height = (int)((int64)480 * rect->height / 1080);
-		break;
-	case 1:
-		rect->x -= 240;
-		break;
-	default:
-		break;
-	}
-}
-
 bool HdText::isWordCharacter(int c) {
 	if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
 		return true;
@@ -428,7 +436,6 @@ void HdText::layout(const HdTextInfo &info, HdTextCache *cache) {
 	int baseLine = (int)ceilf(cache->pixelSize);
 	float penX = 0.0f;
 
-	// One box per byte, with two pixels around the glyph for the outline
 	for (const byte *p = (const byte *)info.text; *p; p++) {
 		const HdFont::Glyph *glyph = font->getGlyph(*p);
 		HdTextQuad quad;
@@ -517,7 +524,6 @@ void HdText::measure(HdTextCache *cache) const {
 		float right = left + (float)cache->quads[i].width;
 		float bottom = top + (float)cache->quads[i].height;
 
-		// A new line starts where the horizontal position does not increase
 		if (previousLeft >= left) {
 			HdTextRow newRow;
 
@@ -550,7 +556,6 @@ void HdText::measure(HdTextCache *cache) const {
 		row->numQuads++;
 	}
 
-	// These two are the largest right and bottom coordinates, taken before the alignment
 	cache->maxRight = maxRight;
 	cache->maxBottom = maxBottom;
 }
@@ -559,12 +564,11 @@ void HdText::align(HdTextCache *cache, float alignX, float alignY) const {
 	int numRows = (int)cache->rows.size();
 	float height = cache->pixelSize;
 
-	// The block is one line high plus 1.2 lines for every other line (not rounded here)
 	int firstLines = numRows > 1 ? 1 : numRows;
 	int otherLines = numRows - 1 > 0 ? numRows - 1 : 0;
 	float firstHeight = (float)((double)firstLines * (double)height);
 
-	// 1.2f widened to double; the sum is stored to float once, then the product with the alignment
+	// 1.2f widened to double
 	float blockHeight = (float)(((double)height * 1.2000000476837158) * (double)otherLines + (double)firstHeight);
 	float shiftY = ceilf((float)((double)(-alignY) * (double)blockHeight));
 	float blockMinX = 999999.0f;
@@ -611,7 +615,6 @@ void HdText::buildDraw(const HdTextInfo &info, const HdTextCache *cache, const H
 	if (numRows == 0)
 		return;
 
-	// The origin is computed in double and rounded to float once. The text canvas is centered by the 1920 - width shift.
 	bool stretch = canvas.stretched && !canvas.boxingHD;
 	float scaleX;
 	float scaleY;
@@ -627,8 +630,6 @@ void HdText::buildDraw(const HdTextInfo &info, const HdTextCache *cache, const H
 	draw->originX = (float)((double)info.x * (double)scaleX + (double)offsetX);
 	draw->originY = (float)((double)info.y * (double)scaleY + (double)offsetY);
 
-	// The first line is clamped to the last one, the count to the lines there are, and the
-	// block always has at least its first line
 	int firstRow = info.firstLine;
 
 	if (numRows - 1 <= firstRow)
@@ -647,7 +648,6 @@ void HdText::buildDraw(const HdTextInfo &info, const HdTextCache *cache, const H
 	if (lastRow < firstRow)
 		lastRow = firstRow;
 
-	// A last line past the end draws everything that is left
 	int firstQuad = cache->rows[firstRow].firstQuad;
 	int endQuad = (int)cache->quads.size();
 
@@ -681,7 +681,6 @@ void HdText::queryText(const HdTextInfo &info, const HdTextCache *cache, const H
 		scaleY = uniform;
 	}
 
-	// The position is cut from the exact product, the sum and the quotients are rounded to float
 	int textX = (int)((double)info.x * (double)scaleX);
 	int textY = (int)((double)info.y * (double)scaleY);
 	float sumX = (float)((double)cache->minX + (double)textX);
@@ -689,7 +688,6 @@ void HdText::queryText(const HdTextInfo &info, const HdTextCache *cache, const H
 	*x = (int)floorf((float)((double)sumX / (double)scaleX));
 	*y = (int)floorf((float)((double)textY / (double)scaleY));
 
-	// With the stretch the size of the text keeps the shape: both axes use the smaller scale
 	if (stretch) {
 		uniform = scaleY > scaleX ? scaleX : scaleY;
 		scaleX = uniform;

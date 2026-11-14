@@ -149,7 +149,6 @@ public:
 	bool useRemasterFixes() const { return _remasterFixes != 0; }
 	StdControl *getStdControl() const { return _stdControl; }
 
-	// Interface languages of the remastered, in the order of the Language registry value
 	enum {
 		kLanguageEnglish,
 		kLanguageGerman,
@@ -160,13 +159,11 @@ public:
 		kNumLanguages
 	};
 
-	// Values of the RenderingMode registry value
 	enum {
 		kRenderingModeHd = 0,
 		kRenderingModeClassic = 1
 	};
 
-	// Library modes set by the remastered scripts (SetGameRenderMode)
 	enum {
 		kLibModeNormal = 2,
 		kLibModeUser = 4,
@@ -203,7 +200,6 @@ public:
 	void restore();
 	int zread(void *buffer, int size);
 
-	// Savegames of the remastered: the requests are done at the start of the next frame
 	void requestRemasteredSave(int slot, const char *mural, int setIndex, const char *title);
 	void requestRemasteredLoad(int slot, bool loadLast);
 	void requestRemasteredErase(int slot);
@@ -255,7 +251,6 @@ public:
 	int justLoaded();
 	int getLibMode() const { return _libMode; }
 	void setLibMode(int mode) { _libMode = mode; }
-	// Width of the canvas of the text of the remastered, only SetGameRenderMode changes it
 	int getTextCanvasWidth() const { return _textCanvasWidth; }
 	void setTextCanvasWidth(int width) { _textCanvasWidth = width; }
 	int getDebugKeys() const { return _debugKeys; }
@@ -456,7 +451,6 @@ protected:
 	Common::String _libSaveGameFileName;
 	int _libJustLoaded = 0;
 
-	// The save requests of the remastered scripts
 	int _remasteredSaveStatus = 0;
 	int _remasteredSaveSlot = 0;
 	int _remasteredSaveSetIndex = 0;

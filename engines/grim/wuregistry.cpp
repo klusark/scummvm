@@ -174,7 +174,6 @@ static const WuRegistryMapping mappings[] = {
 	{ "CrossSaveAutoSync", "cross_save_auto_sync", kMapOptionalInt }
 };
 
-// The remastered stores the last slot as a number; the original games store a string
 static const WuRegistryMapping remasteredLastSavedGame = { "LastSavedGame", "last_saved_game", kMapOptionalInt };
 
 static uint convertVolumeToMixer(uint volume) {
@@ -370,7 +369,6 @@ int WuRegistry::startup(const char *version) {
 
 	ConfMan.set("joystick", "false");
 
-	// The remastered does not keep a version
 	if (!g_grim->isRemastered()) {
 		char storedVersion[128];
 
@@ -408,7 +406,6 @@ void WuRegistry::shutdown() {
 	freeIndex();
 	_started = 0;
 
-	// The remastered writes the registry only when the scripts ask for it
 	if (!g_grim->isRemastered())
 		ConfMan.flushToDisk();
 }
@@ -737,8 +734,6 @@ void WuRegistry::saveRegistry() {
 	ConfMan.flushToDisk();
 }
 
-// The folders of the saves have no way to tell when a file was written, so the time is kept here
-// as the date of the C locale followed by hours and minutes
 static Common::String getSlotTimeKey(int slot) {
 	return Common::String::format("save_time_%d", slot);
 }

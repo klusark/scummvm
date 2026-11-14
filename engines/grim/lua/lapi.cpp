@@ -933,8 +933,6 @@ enum {
 	kNumListsRemastered
 };
 
-// The main table of the remastered, in the order of its executable. It has no hardware list:
-// Is3DHardwareEnabled moved here
 static const char *const luaFuncIdNamesMainRemastered[] = {
 	"EnginePause", "EngineResume", "EngineDisplay", "PrintStack", "GetPlatform", "SearchForFileOrSwapCDs", "CheckForFile", "New", "Load", "Save",
 	"Erase", "GetSaveStatus", "StartCheckOfCrossSaveStatus", "GetCrossSaveStatus", "UnlockAchievement", "ResetAchievements", "AreAchievementsInstalled", "GlobalSaveResolved", "UnlockCutscene", "IsCutsceneUnlocked",
@@ -1004,8 +1002,7 @@ static const LuaFuncIdList luaFuncIdListsRemastered[kNumListsRemastered] = {
 	{ "mouse", luaFuncIdNamesMouseRemastered, ARRAYSIZE(luaFuncIdNamesMouseRemastered), 14, true }
 };
 
-// In the remastered PrintError, PrintWarning and PrintDebug are three functions, the three
-// light manager entries are three functions too, and only these pairs share a function
+// Only these pairs share a function
 static const LuaFuncIdAlias luaFuncIdAliasesRemastered[] = {
 	{ kListRemMain, "ImStartSound", kGroupPlay },
 	{ kListRemMain, "play", kGroupPlay },
@@ -1017,7 +1014,6 @@ static const LuaFuncIdAlias luaFuncIdAliasesRemastered[] = {
 	{ kListRemMain, "vfx", kGroupVoiceEffect }
 };
 
-// The most lists a model has, for the arrays that follow
 enum {
 	kMaxLists = kNumListsRemastered
 };
@@ -1100,9 +1096,6 @@ static lua_CFunction findLibraryFunction(const Common::Array<luaL_libList *> &li
 	return nullptr;
 }
 
-// The ids of a saved state come from the model, so a live list that does not match it leaves
-// functions unresolved. Report the lists of the model that have no live list, and the names
-// that are missing or in another position in the lists that have one.
 static void checkLiveListsOfModel(const Common::Array<luaL_libList *> &live) {
 	bool hasUnmatched = false;
 	int numEngineLists = 0;

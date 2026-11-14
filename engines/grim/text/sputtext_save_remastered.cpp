@@ -31,9 +31,6 @@
 
 namespace Grim {
 
-// The events of the savegames of the remastered: the text takes 8192 bytes, the pointers of the
-// surface, the clip and the font and the serial of the event take 8, and there are four more
-// values for the highlight, the coordinates and the alpha
 int SputText::saveRemastered(Common::WriteStream *stream) {
 	int numEvents = 0;
 
@@ -46,7 +43,6 @@ int SputText::saveRemastered(Common::WriteStream *stream) {
 		return 1;
 
 	for (SputTextEvent *event = _textQueue; event; event = event->next) {
-		// The surface and the clip only have to be different from zero
 		stream->write(event->text, kTextEventCapacity);
 		stream->writeSint32LE(event->params.surface ? 1 : 0);
 		stream->writeSint32LE(0);
@@ -83,8 +79,6 @@ int SputText::saveRemastered(Common::WriteStream *stream) {
 	stream->writeSint32LE(0);
 	stream->writeSint32LE(_res->serialFromHandle(_defaultTextParams.font));
 	stream->writeSint32LE(0);
-	// The third value is the address of the font of the canvas, not a font: no resource has it as
-	// serial, so the canvas gets the system font back when the game is loaded
 	stream->writeUint32LE((uint32)(uintptr)&_blastTextParams.font);
 	stream->writeSint32LE(0);
 
@@ -112,7 +106,6 @@ int SputText::restoreRemastered(Common::ReadStream *stream) {
 
 		stream->read(event->text, kTextEventCapacity);
 
-		// The pointers of the surface and the clip: only the fact that they are there matters
 		int hasSurface = stream->readSint32LE();
 
 		stream->readSint32LE();

@@ -56,7 +56,10 @@ void start_script() {
 	lua_Object paramObj = lua_getparam(1);
 	lua_Type type = paramObj == LUA_NOOBJECT ? LUA_T_NIL : ttype(Address(paramObj));
 
-	if (luaIsEmi) {
+	if (luaIsRemastered) {
+		if (!lua_isfunction(paramObj))
+			return;
+	} else if (luaIsEmi) {
 		if (!lua_isfunction(paramObj)) {
 			LuaBase *lua = LuaBase::instance();
 			if (lua)
@@ -100,7 +103,7 @@ void next_script() {
 	lua_Object paramObj = lua_getparam(1);
 	lua_Type type = paramObj == LUA_NOOBJECT ? LUA_T_NIL : ttype(Address(paramObj));
 
-	if (luaIsEmi) {
+	if (luaIsEmi || luaIsRemastered) {
 		if (paramObj == LUA_NOOBJECT)
 			lua_error("Too few arguments to nextscript! Specify nil or a task handle.");
 
@@ -190,7 +193,57 @@ static void stop_script_v2() {
 	}
 }
 
+static void stop_script_remastered() {
+	lua_Object paramObj = lua_getparam(1);
+
+	if (paramObj == LUA_NOOBJECT)
+		lua_error("Too few arguments to stopscript! Specify the name of a function or a task handle.");
+
+	if (!lua_isfunction(paramObj) && !lua_istask(paramObj))
+		lua_error("Argument to stopscript must be a task handle or function!");
+
+	LState *state;
+
+	if (lua_istask(paramObj)) {
+		uint32 task = (uint32)lua_gettask(paramObj);
+
+		for (state = lua_rootState->next; state != nullptr; state = state->next) {
+			if (state->id == task)
+				break;
+		}
+
+		if (!state)
+			return;
+
+		if (state == lua_state)
+			lua_error("Current task is committing suicide!\n");
+
+		lua_statedeinit(state);
+		luaM_free(state);
+		return;
+	}
+
+	TObject function = *Address(paramObj);
+
+	for (state = lua_rootState->next; state != nullptr;) {
+		if (isSameFunction(&state->taskFunc, &function) && state != lua_state) {
+			LState *nextState = state->next;
+
+			lua_statedeinit(state);
+			luaM_free(state);
+			state = nextState;
+		} else {
+			state = state->next;
+		}
+	}
+}
+
 void stop_script() {
+	if (luaIsRemastered) {
+		stop_script_remastered();
+		return;
+	}
+
 	if (luaIsEmi) {
 		stop_script_v2();
 		return;
@@ -239,7 +292,7 @@ void identify_script() {
 	lua_Object paramObj = lua_getparam(1);
 	lua_Type type = paramObj == LUA_NOOBJECT ? LUA_T_NIL : ttype(Address(paramObj));
 
-	if (luaIsEmi) {
+	if (luaIsEmi || luaIsRemastered) {
 		if (paramObj == LUA_NOOBJECT)
 			lua_error("Too few arguments to identifyscript! Specify nil or a task handle.");
 
@@ -329,7 +382,56 @@ static void find_script_v2() {
 	lua_pushnumber(state->paused ? 1.0f : 0.0f);
 }
 
+static void find_script_remastered() {
+	lua_Object paramObj = lua_getparam(1);
+
+	if (paramObj == LUA_NOOBJECT)
+		lua_error("Too few arguments to findscript! Specify a function or a task handle.");
+
+	if (!lua_isfunction(paramObj) && !lua_istask(paramObj))
+		lua_error("Argument to findscript must be a function or task handle!");
+
+	LState *state;
+
+	if (lua_istask(paramObj)) {
+		uint32 task = (uint32)lua_gettask(paramObj);
+
+		for (state = lua_rootState->next; state != nullptr; state = state->next) {
+			if (state->id == task) {
+				lua_pushobject(paramObj);
+				lua_pushnumber(1.0f);
+				return;
+			}
+		}
+	} else {
+		TObject function = *Address(paramObj);
+		int count = 0;
+		uint32 handle = 0;
+
+		for (state = lua_rootState->next; state != nullptr; state = state->next) {
+			if (isSameFunction(&state->taskFunc, &function)) {
+				count++;
+				handle = state->id;
+			}
+		}
+
+		if (count) {
+			lua_pushtask(handle);
+			lua_pushnumber((float)count);
+			return;
+		}
+	}
+
+	lua_pushnil();
+	lua_pushnumber(0.0f);
+}
+
 void find_script() {
+	if (luaIsRemastered) {
+		find_script_remastered();
+		return;
+	}
+
 	if (luaIsEmi) {
 		find_script_v2();
 		return;
@@ -438,6 +540,15 @@ void pause_scripts() {
 	LState *t;
 	lua_Object boolObj = lua_getparam(1);
 
+	if (luaIsRemastered) {
+		for (t = lua_rootState->next; t != nullptr; t = t->next) {
+			if (t != lua_state)
+				t->all_paused = 1;
+		}
+
+		return;
+	}
+
 	if (luaIsEmi) {
 		for (t = lua_rootState->next; t != nullptr; t = t->next) {
 			if (t != lua_state) {
@@ -516,6 +627,13 @@ void unpause_script() {
 void unpause_scripts() {
 	LState *t;
 	lua_Object boolObj = lua_getparam(1);
+
+	if (luaIsRemastered) {
+		for (t = lua_rootState->next; t != nullptr; t = t->next)
+			t->all_paused = 0;
+
+		return;
+	}
 
 	if (luaIsEmi) {
 		for (t = lua_rootState->next; t != nullptr; t = t->next) {

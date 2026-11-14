@@ -64,7 +64,6 @@ public:
 	virtual int shutdown();
 	virtual int findSystemFiles();
 	virtual int boot(int saveGameResume, const char *bootParam);
-	// The remastered: the part of the boot that starts the game in the given set
 	int bootSecondStage(const char *defaultSet);
 	virtual void update();
 
@@ -87,7 +86,6 @@ public:
 	virtual int doCharacterCallback(int character);
 	virtual void saveGameCallback();
 
-	// The remastered: tells the scripts how a key press for the key mapping ended
 	void notifyKeyMapped(int result);
 	void resetLastInputMode() { _lastInputMode = 0; }
 
@@ -350,7 +348,6 @@ protected:
 	DECLARE_LUA_OPCODE(IrisClear);
 	DECLARE_LUA_OPCODE(LightMgrShutdown);
 
-	// Opcodes that only the remastered has, see lua_v1_remastered.cpp
 	DECLARE_LUA_OPCODE(GetPlatform);
 	DECLARE_LUA_OPCODE(UnlockAchievement);
 	DECLARE_LUA_OPCODE(ResetAchievements);
@@ -380,7 +377,6 @@ protected:
 	DECLARE_LUA_OPCODE(LoadRemappedKeys);
 	DECLARE_LUA_OPCODE(SaveRemappedKeys);
 
-	// Mouse, hotspots, path finder and dialog log of the remastered, see lua_v1_mouse.cpp
 	DECLARE_LUA_OPCODE(WalkActorToMouseTarget);
 	DECLARE_LUA_OPCODE(PathfinderMode);
 	DECLARE_LUA_OPCODE(DialogLogGetLineCount);
@@ -463,7 +459,6 @@ protected:
 	DECLARE_LUA_OPCODE(GetKeyLength);
 	DECLARE_LUA_OPCODE(GetSmushLength);
 
-	// The remastered: the default handlers of the system table, two functions that do nothing
 	DECLARE_LUA_OPCODE(DefaultCamChangeHandler);
 	DECLARE_LUA_OPCODE(DefaultControlHandler);
 

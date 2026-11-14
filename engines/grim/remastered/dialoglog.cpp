@@ -37,8 +37,6 @@ void DialogLog::clear() {
 	_tail = 0;
 }
 
-// The ring never fills up: when the tail reaches the head, the oldest line is dropped.
-// A text of 150 characters or more fills the slot and has no end.
 void DialogLog::addLine(const char *text) {
 	char *slot = _lines[_tail];
 
@@ -110,7 +108,6 @@ bool DialogLog::copyLine(int slot, char *buffer, int bufferSize, int length) con
 	if (!getLine(slot))
 		return false;
 
-	// The slots follow each other: a line without an end goes on in the next one
 	const char *text = &_lines[0][0] + slot * kLineSize;
 	int available = kMaxLines * kLineSize - slot * kLineSize;
 

@@ -102,7 +102,6 @@ public:
 		kKeyMousePing = 289
 	};
 
-	// Size of the canvas the remastered scripts use for the cursor position
 	enum {
 		kCanvasWidth = 1920,
 		kCanvasHeight = 1080,
@@ -110,7 +109,6 @@ public:
 		kCanvasPlayOffset = 240
 	};
 
-	// Number of keys of the remastered that can be remapped
 	enum {
 		kNumRemappedKeys = 13
 	};
@@ -121,7 +119,6 @@ public:
 	int isStarted() const { return _startup; }
 	int isOpen() const { return _open; }
 
-	// Cursor position on the 1920x1080 canvas, menuMode is true while the library mode is 5
 	void getMouseCanvasPosition(bool menuMode, int *x, int *y) const;
 
 	int startup();
@@ -137,7 +134,6 @@ public:
 	int readKey(int key, int *pressCount, int *doubleClick, int *longPress = nullptr);
 	void setActivation(int active);
 
-	// Key remapping of the remastered. The keys are SDL key codes, the ones the registry stores.
 	void setKeyMappingMode(int slot);
 	void resetKeyMappingToDefault();
 	int getRemappedKey(int slot) const;

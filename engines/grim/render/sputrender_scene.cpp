@@ -166,7 +166,6 @@ void SputRender::update() {
 	bool remastered = _grim->isRemastered();
 
 	if (remastered) {
-		// Nothing is drawn before the engine runs or while it exits
 		if (mode == 0 || mode == GrimEngine::kLibModeExiting)
 			return;
 
@@ -179,7 +178,6 @@ void SputRender::update() {
 			mode = _grim->getLibMode();
 		}
 
-		// The whole scene is redrawn every frame, so it comes back by itself after the menus blank it
 		StdRect redrawRect;
 
 		redrawRect.x = 0;
@@ -299,112 +297,114 @@ void SputRender::update() {
 	for (SputObjectState *state = setup->ObjectStates; state; state = state->next)
 		state->update(1, _backBuffer, _zBuffer);
 
-	// The demo advances the frame at the end of the main loop
-	if (!(_grim->getGameFlags() & ADGF_DEMO))
-		_rd->advanceFrame();
+	if (!(remastered && _movieJustFinished)) {
+		// The demo advances the frame at the end of the main loop
+		if (!(_grim->getGameFlags() & ADGF_DEMO))
+			_rd->advanceFrame();
 
-	sortActors();
+		sortActors();
 
-	if (_numSortActors || (!(_grim->getGameFlags() & ADGF_DEMO) && (_debugFlags & 1))) {
-		_grim->setPerfCounter(5);
+		if (_numSortActors || (!(_grim->getGameFlags() & ADGF_DEMO) && (_debugFlags & 1))) {
+			_grim->setPerfCounter(5);
 
-		int numSorted = 0;
+			int numSorted = 0;
 
-		for (int i = 0; i < _numSortActors; i++) {
-			if (_sortedActors[i]->kind == 0) {
-				SputActor *enumActor = &_actors[_sortedActors[i]->actorIndex];
+			for (int i = 0; i < _numSortActors; i++) {
+				if (_sortedActors[i]->kind == 0) {
+					SputActor *enumActor = &_actors[_sortedActors[i]->actorIndex];
 
-				_sputActor->enumCostumeComponents(enumActor->costumeStack->costumeInstance);
-			}
-
-			numSorted++;
-		}
-
-		_grim->queryPerfCounterDiff(5);
-
-		if (_debugFlags & 1) {
-			_stdDisplay->vBufferLock(_backBuffer);
-
-			if (_debugFlags & 8)
-				drawWalkPlanes();
-			else
-				drawBoundingBox();
-
-			_stdDisplay->vBufferUnlock(_backBuffer);
-		}
-
-		_grim->setPerfCounter(6);
-
-		for (int i = numSorted - 1; i >= 0; i--) {
-			ActorSortInfo *entry = _sortedActors[i];
-			SputActor *actor = &_actors[entry->actorIndex];
-			float (*orient)[3] = _sputActor->getOrientMatrix(actor);
-
-			if (actor->scale != 1.0f) {
-				RdVector3 scale;
-
-				scale[0] = actor->scale;
-				scale[1] = actor->scale;
-				scale[2] = actor->scale;
-				_rd->preScale34(orient, scale);
-			}
-
-			if (entry->kind == 0) {
-				RdColormap *colormap;
-
-				if (!actor->colorMap)
-					warning("SputRender::update(): actor without colormap reference");
-
-				if (actor->colorMap && actor->colorMap->valid) {
-					colormap = static_cast<RdColormap *>(actor->colorMap->handle);
-				} else {
-					ResRef *colormapRef = &_lastRoom->colormaps[_lastRoom->curColormap];
-
-					if (!colormapRef->valid)
-						error("SputRender::update(): Bad Colormap Reference");
-
-					colormap = static_cast<RdColormap *>(colormapRef->handle);
+					_sputActor->enumCostumeComponents(enumActor->costumeStack->costumeInstance);
 				}
 
-				_rd->_colormap.setCurrent(colormap);
-
-				if (_setPaletteFunc)
-					_setPaletteFunc(colormap->colors, 0);
-
-				_sputActor->drawCostume(actor->costumeStack, orient);
-
-				if (_debugFlags & 1)
-					drawActorDebug(actor);
-			} else if (entry->kind == 1) {
-				if (!_b3DAcceleration)
-					_stdDisplay->vBufferLock(_backBuffer);
-
-				drawActor(actor);
-
-				if (!_b3DAcceleration)
-					_stdDisplay->vBufferUnlock(_backBuffer);
-
-				markDirtyRect(&actor->drawnRect, 1);
+				numSorted++;
 			}
 
-			if (actor->scale != 1.0f) {
-				RdVector3 scale;
+			_grim->queryPerfCounterDiff(5);
 
-				scale[0] = (float)(1.0 / (double)actor->scale);
-				scale[1] = scale[0];
-				scale[2] = scale[0];
-				orient = _sputActor->getOrientMatrix(actor);
-				_rd->preScale34(orient, scale);
+			if (_debugFlags & 1) {
+				_stdDisplay->vBufferLock(_backBuffer);
+
+				if (_debugFlags & 8)
+					drawWalkPlanes();
+				else
+					drawBoundingBox();
+
+				_stdDisplay->vBufferUnlock(_backBuffer);
 			}
+
+			_grim->setPerfCounter(6);
+
+			for (int i = numSorted - 1; i >= 0; i--) {
+				ActorSortInfo *entry = _sortedActors[i];
+				SputActor *actor = &_actors[entry->actorIndex];
+				float (*orient)[3] = _sputActor->getOrientMatrix(actor);
+
+				if (actor->scale != 1.0f) {
+					RdVector3 scale;
+
+					scale[0] = actor->scale;
+					scale[1] = actor->scale;
+					scale[2] = actor->scale;
+					_rd->preScale34(orient, scale);
+				}
+
+				if (entry->kind == 0) {
+					RdColormap *colormap;
+
+					if (!actor->colorMap)
+						warning("SputRender::update(): actor without colormap reference");
+
+					if (actor->colorMap && actor->colorMap->valid) {
+						colormap = static_cast<RdColormap *>(actor->colorMap->handle);
+					} else {
+						ResRef *colormapRef = &_lastRoom->colormaps[_lastRoom->curColormap];
+
+						if (!colormapRef->valid)
+							error("SputRender::update(): Bad Colormap Reference");
+
+						colormap = static_cast<RdColormap *>(colormapRef->handle);
+					}
+
+					_rd->_colormap.setCurrent(colormap);
+
+					if (_setPaletteFunc)
+						_setPaletteFunc(colormap->colors, 0);
+
+					_sputActor->drawCostume(actor->costumeStack, orient);
+
+					if (_debugFlags & 1)
+						drawActorDebug(actor);
+				} else if (entry->kind == 1) {
+					if (!_b3DAcceleration)
+						_stdDisplay->vBufferLock(_backBuffer);
+
+					drawActor(actor);
+
+					if (!_b3DAcceleration)
+						_stdDisplay->vBufferUnlock(_backBuffer);
+
+					markDirtyRect(&actor->drawnRect, 1);
+				}
+
+				if (actor->scale != 1.0f) {
+					RdVector3 scale;
+
+					scale[0] = (float)(1.0 / (double)actor->scale);
+					scale[1] = scale[0];
+					scale[2] = scale[0];
+					orient = _sputActor->getOrientMatrix(actor);
+					_rd->preScale34(orient, scale);
+				}
+			}
+
+			_grim->queryPerfCounterDiff(6);
+			_grim->setPerfCounter(7);
+			_rd->finishFrame();
+			_grim->queryPerfCounterDiff(7);
+
+			for (SputObjectState *state = setup->ObjectStates; state; state = state->next)
+				state->update(2, _backBuffer, _zBuffer);
 		}
-
-		_grim->queryPerfCounterDiff(6);
-		_grim->setPerfCounter(7);
-		_rd->finishFrame();
-		_grim->queryPerfCounterDiff(7);
-
-		for (SputObjectState *state = setup->ObjectStates; state; state = state->next)
-			state->update(2, _backBuffer, _zBuffer);
 	}
 
 	if (_grim->getGameFlags() & ADGF_DEMO) {
@@ -421,7 +421,7 @@ void SputRender::update() {
 	if (!(_grim->getGameFlags() & ADGF_DEMO) && (_debugFlags & 1))
 		drawRoomDebug();
 
-	if (_renderFlags & 4) {
+	if ((_renderFlags & 4) && !(remastered && _sputTime->getGameTime() == _irisStart)) {
 		int gameTime = _sputTime->getGameTime();
 		double ratio;
 
@@ -575,20 +575,23 @@ void SputRender::preRendered(int bitmap, int zBuffer) {
 		markDirtyRectInternal(&rect, 1, i);
 }
 
-void SputRender::reverseProject(int x, int y, float *out) {
+bool SputRender::reverseProject(int x, int y, float *out) {
+	if (_grim->isRemastered())
+		return reverseProjectRemastered(x, y, out);
+
 	RdCamera *camera = _rd->_camera.getCurrent();
 
 	if (!camera)
-		return;
+		return false;
 
 	RdCanvas *canvas = camera->canvas;
 
 	if (!canvas)
-		return;
+		return false;
 
 	if (!_zBuffer || !_zBuffer->pixels || !_camera || x < 0 || y < 0 || x >= _zBuffer->tex.width || y >= _zBuffer->tex.height) {
 		warning("SputRender::reverseProject(): the point is outside the Z buffer");
-		return;
+		return false;
 	}
 
 	uint16 zPixel = ((uint16 *)_zBuffer->pixels)[_zBuffer->tex.width * y + x];
@@ -599,7 +602,7 @@ void SputRender::reverseProject(int x, int y, float *out) {
 	if (depth == 0.0f || focalDepth == 0.0) {
 		// The original could divide by zero here, let's avoid that...
 		warning("SputRender::reverseProject(): the Z buffer value is zero");
-		return;
+		return false;
 	}
 
 	RdVector3 point;
@@ -608,6 +611,8 @@ void SputRender::reverseProject(int x, int y, float *out) {
 	point[0] = (float)(((double)x - (double)canvas->xCenter) * (1.0 / focalDepth));
 	point[2] = (float)(((double)y - (double)canvas->yCenter) * (-1.0 / focalDepth));
 	_rd->transformPoint34(out, point, _camera->posMatrix);
+
+	return true;
 }
 
 int SputRender::buildShadowBitmap(float *out, float *pointA, float *pointB, float a, float b, float c, float d) {
@@ -678,6 +683,20 @@ void SputRender::restoreDirtyRects(StdVBuffer *dst, StdVBuffer *zBuffer) {
 
 	while (node) {
 		StdRect *rect = &node->rect;
+
+		if (_grim->isRemastered()) {
+			if (rect->x < 0)
+				rect->x = 0;
+
+			if (rect->y < 0)
+				rect->y = 0;
+
+			if (rect->width > 640)
+				rect->width = 640;
+
+			if (rect->height > 480)
+				rect->height = 480;
+		}
 
 		if (zBuffer && node->page) {
 			if (_renderFlags & 2) {

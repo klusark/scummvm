@@ -32,15 +32,11 @@
 
 namespace Grim {
 
-// The canvas of the overlays and the text
 enum {
 	kCanvasWidth = 1920,
 	kCanvasHeight = 1080
 };
 
-// The main table has the order of the remastered. A saved Lua state stores every C function
-// as (number of lists registered after its list << 16) | index in the list, and the id model
-// in lua/lapi.cpp lists the same names in the same order.
 static struct luaL_reg remasteredMainOpcodes[] = {
 	{ "EnginePause", LUA_OPCODE(Lua_V1, EnginePause) },
 	{ "EngineResume", LUA_OPCODE(Lua_V1, EngineResume) },
@@ -236,11 +232,11 @@ static struct luaL_reg remasteredMainOpcodes[] = {
 	{ "LightMgrSetChange", LUA_OPCODE(Lua_V1, LightMgrSetChange) },
 	{ "ImStartRecording", LUA_OPCODE(Lua_V1, ImStartRecording) },
 	{ "ImStopRecording", LUA_OPCODE(Lua_V1, ImStopRecording) },
-	{ "ImStartSound", LUA_OPCODE(Lua_V1, ImStartSound) }, // same function as play
-	{ "play", LUA_OPCODE(Lua_V1, ImStartSound) }, // same function as ImStartSound
+	{ "ImStartSound", LUA_OPCODE(Lua_V1, ImStartSound) },
+	{ "play", LUA_OPCODE(Lua_V1, ImStartSound) },
 	{ "ImStopSound", LUA_OPCODE(Lua_V1, ImStopSound) },
-	{ "ImStopAllSounds", LUA_OPCODE(Lua_V1, ImStopAllSounds) }, // same function as quiet
-	{ "quiet", LUA_OPCODE(Lua_V1, ImStopAllSounds) }, // same function as ImStopAllSounds
+	{ "ImStopAllSounds", LUA_OPCODE(Lua_V1, ImStopAllSounds) },
+	{ "quiet", LUA_OPCODE(Lua_V1, ImStopAllSounds) },
 	{ "ImGetParam", LUA_OPCODE(Lua_V1, ImGetParam) },
 	{ "ImSetParam", LUA_OPCODE(Lua_V1, ImSetParam) },
 	{ "ImFadeParam", LUA_OPCODE(Lua_V1, ImFadeParam) },
@@ -262,8 +258,8 @@ static struct luaL_reg remasteredMainOpcodes[] = {
 	{ "ImSetCuePoint", LUA_OPCODE(Lua_V1, ImSetCuePoint) },
 	{ "ImPause", LUA_OPCODE(Lua_V1, ImPause) },
 	{ "ImResume", LUA_OPCODE(Lua_V1, ImResume) },
-	{ "vfx", LUA_OPCODE(Lua_V1, ImSetVoiceEffect) }, // same function as ImSetVoiceEffect
-	{ "ImSetVoiceEffect", LUA_OPCODE(Lua_V1, ImSetVoiceEffect) }, // same function as vfx
+	{ "vfx", LUA_OPCODE(Lua_V1, ImSetVoiceEffect) },
+	{ "ImSetVoiceEffect", LUA_OPCODE(Lua_V1, ImSetVoiceEffect) },
 	{ "ImGetMemoryFootprint", LUA_OPCODE(Lua_V1, ImGetMemoryFootprint) },
 	{ "ImGetSoundCacheSize", LUA_OPCODE(Lua_V1, ImGetSoundCacheSize) },
 	{ "LoadBundle", LUA_OPCODE(Lua_Remastered, NoOpLoadBundle) },
@@ -408,8 +404,6 @@ static struct luaL_reg remasteredMouseOpcodes[] = {
 	{ "CursorMovieEnabled", LUA_OPCODE(Lua_V1, CursorMovieEnabled) }
 };
 
-// The functions that are only recognized by their number: the two fallbacks and the default
-// handlers of the system table, which are two different functions
 static struct luaL_reg remasteredExtraOpcodes[] = {
 	{ "  concatfallback", LUA_OPCODE(LuaBase, concatFallback) },
 	{ "  typeoverride", LUA_OPCODE(LuaBase, typeOverride) },
@@ -440,7 +434,6 @@ void Lua_Remastered::registerPrimitiveOpcodes() {
 	luaL_openlib(remasteredMouseOpcodes, ARRAYSIZE(remasteredMouseOpcodes));
 }
 
-// Is3DHardwareEnabled moved to the main table and the device opcodes do not exist
 void Lua_Remastered::registerHardwareOpcodes() {
 }
 
@@ -458,7 +451,6 @@ void Lua_Remastered::reportStub(const char *opcode, const char *module) {
 	warning("Lua_Remastered::%s(): the %s is not implemented yet, the call is ignored or answered with a neutral value", opcode, module);
 }
 
-// Load(slot, loadLast): the last one is true when the game continues from the last save
 void Lua_Remastered::Load() {
 	lua_Object slotObj = lua_getparam(1);
 	lua_Object lastObj = lua_getparam(2);
@@ -471,7 +463,6 @@ void Lua_Remastered::Load() {
 	g_grim->requestRemasteredLoad(luaFtol(lua_getnumber(slotObj)), loadLast);
 }
 
-// Save(slot, puzzles, set, title): the puzzles are one character each, '1' when solved
 void Lua_Remastered::Save() {
 	lua_Object slotObj = lua_getparam(1);
 	lua_Object muralObj = lua_getparam(2);
@@ -485,7 +476,6 @@ void Lua_Remastered::Save() {
 			lua_getstring(titleObj));
 }
 
-// A debug aid of the Lua library that no script calls
 void Lua_Remastered::PrintStack() {
 }
 
@@ -502,13 +492,10 @@ void Lua_Remastered::Erase() {
 	g_grim->requestRemasteredErase(luaFtol(lua_getnumber(slotObj)));
 }
 
-// -1 while the request is waiting, then 0 or the number of the error
 void Lua_Remastered::GetSaveStatus() {
 	lua_pushnumber((float)g_grim->getRemasteredSaveStatus());
 }
 
-// The list is a table with an entry from 0 for each save. The date of a save is there when it
-// is known.
 void Lua_Remastered::FindSaveGames() {
 	if (_foundSaves.empty()) {
 		lua_pushnil();
@@ -561,7 +548,6 @@ void Lua_Remastered::FindSaveGames() {
 	lua_pushobject(list);
 }
 
-// The folders are read at once, so the list is ready when the scripts ask
 void Lua_Remastered::InitiateFindSaveGames() {
 	SaveStore::listSlots(_foundSaves);
 	_findSaveGamesStatus = 1;
@@ -571,11 +557,9 @@ void Lua_Remastered::GetFindSaveGameStatus() {
 	lua_pushnumber((float)_findSaveGamesStatus);
 }
 
-// The original works out a scale for the mouse speed that nothing reads
 void Lua_Remastered::SetMouseSpeedScale() {
 }
 
-// The next key pressed is taken for the slot, and NotifyKeyMapped tells the scripts about it
 void Lua_Remastered::SetKeyMappingMode() {
 	int slot = luaFtol(lua_getnumber(lua_getparam(1)));
 
@@ -598,8 +582,6 @@ void Lua_Remastered::GetRemappedKeyName() {
 	lua_pushstring(StdControl::getSdlKeyName(g_grim->getStdControl()->getRemappedKey(slot)).c_str());
 }
 
-// Answers the picture of the key and the text for it. Keys without a picture get the empty one
-// and their name as the text.
 void Lua_Remastered::GetRemappedKeyHint() {
 	int slot = luaFtol(lua_getnumber(lua_getparam(1)));
 
@@ -675,12 +657,10 @@ void Lua_Remastered::NoOpLoadBundle() {
 void Lua_Remastered::NoOpUnloadBundle() {
 }
 
-// The remastered tells the scripts about the device in use, see Lua_V1::controlCallbackRemastered
 int Lua_Remastered::controlCallback(float frameTime) {
 	return controlCallbackRemastered(frameTime);
 }
 
-// Answers the handle of the overlay, or -1 when the name is not a string or there is no room for it
 void Lua_Remastered::OverlayCreate() {
 	lua_Object nameObj = lua_getparam(1);
 	lua_Object xObj = lua_getparam(2);
@@ -763,7 +743,6 @@ void Lua_Remastered::OverlayDestroy() {
 	g_grim->getHdCanvas()->getOverlays()->destroy(luaFtol(lua_getnumber(handleObj)));
 }
 
-// Answers the width and the height, both 0 for a handle that does not exist
 void Lua_Remastered::OverlayDimensions() {
 	lua_Object handleObj = lua_getparam(1);
 	int width = 0;
@@ -788,17 +767,14 @@ void Lua_Remastered::OverlayFade() {
 			lua_getnumber(valueObj));
 }
 
-// The overlays and the text use the canvas of the remastered whatever the output is
 void Lua_Remastered::OverlayGetScreenSize() {
 	lua_pushnumber((float)kCanvasWidth);
 	lua_pushnumber((float)kCanvasHeight);
 }
 
-// The boxing of the overlays only has an effect when the output is not 1920x1080
 void Lua_Remastered::OverlayScreenBoxingMode() {
 }
 
-// Shows or hides the icon of the saves, at the center of the position
 void Lua_Remastered::OverlayShowLoadSpinner() {
 	lua_Object showObj = lua_getparam(1);
 	lua_Object xObj = lua_getparam(2);
@@ -809,12 +785,10 @@ void Lua_Remastered::OverlayShowLoadSpinner() {
 	g_grim->getHdCanvas()->getOverlays()->showLoadSpinner(luaFtol(lua_getnumber(showObj)) != 0, x, y);
 }
 
-// 1 normally, 0.75 when the widescreen option stretches the 4:3 area
 void Lua_Remastered::WidescreenCorrectionFactor() {
 	lua_pushnumber(g_grim->getHdCanvas()->getWidescreenCorrection());
 }
 
-// The name of the commentary of the room, an unknown one clears it
 void Lua_Remastered::SetCommentary() {
 	lua_Object nameObj = lua_getparam(1);
 
@@ -828,12 +802,10 @@ void Lua_Remastered::ClearCommentary() {
 	g_grim->getCommentary()->clearCommentary();
 }
 
-// Starts the commentary that is set, or stops the one that plays
 void Lua_Remastered::PlayCurrentCommentary() {
 	g_grim->getCommentary()->playCurrentCommentary();
 }
 
-// Only turning it off has an effect here, the option itself is a registry value
 void Lua_Remastered::EnableCommentary() {
 	lua_Object enableObj = lua_getparam(1);
 
@@ -845,7 +817,6 @@ void Lua_Remastered::StopCommentaryImmediately() {
 	g_grim->getCommentary()->stopImmediately();
 }
 
-// Answers 1 for a commentary that was started before, nil for the others and for unknown names
 void Lua_Remastered::HasHeardCommentary() {
 	lua_Object nameObj = lua_getparam(1);
 

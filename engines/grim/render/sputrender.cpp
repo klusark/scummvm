@@ -270,6 +270,17 @@ void SputRender::setPageFlip(int enable) {
 }
 
 int SputRender::pageFlip() {
+	if (_grim->isRemastered()) {
+		int flipResult = 0;
+
+		if (_pageFlipFunc)
+			flipResult = _pageFlipFunc();
+
+		_movieJustFinished = 0;
+
+		return flipResult;
+	}
+
 	int result = _pageFlipEnable;
 
 	if (_pageFlipEnable) {

@@ -31,9 +31,6 @@ class WalkPlane;
 class WalkSystem;
 struct SputActor;
 
-// Paths over the walkable planes of the set. The planes are merged into polygons and the boxes of
-// the actors in the way are cut out of them. The reflex corners of the outline are the nodes of a
-// visibility graph, the shortest route is found with A* and its corners are rounded.
 class PathFinder {
 public:
 	enum {
@@ -44,14 +41,11 @@ public:
 	explicit PathFinder(WalkSystem *walkSystem);
 	~PathFinder();
 
-	// Drops the polygons, the flag that asks for a rebuild is not touched
 	void freePolygons();
 
 	void markDirty() { _dirty = 1; }
 	void setDirect(bool direct) { _direct = direct ? 1 : 0; }
 
-	// Writes the points from the start to the goal and returns how many, -1 when the polygons can
-	// not be made. The goal and the start are moved into the polygons.
 	int buildPath(SputActorModule *actorModule, SputActor *actor, float *goal, float *start, float (*outPath)[3], int maxPoints, SputActor *avoid);
 
 private:

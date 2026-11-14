@@ -34,7 +34,6 @@ static const int kMaxWalkPoints = 64;
 static const int kMaxWalkPointsRemastered = 128;
 static const int kRetailPathPoints = 30;
 
-// Actors that the scripts allocate as not being the main character walk on the walk boxes only
 static const int kActorFlagNotMain = 0x80;
 static const int kPlaneTypeWalk = 0x1000;
 
@@ -55,8 +54,6 @@ void SputActorModule::setPathfinderMode(int mode) {
 	_walkSystem->getPathFinder()->setDirect(mode != 0);
 }
 
-// The global path building of the remastered: the path finder first, the walk boxes when it is not
-// allowed or fails. The points stay in the working path.
 bool SputActorModule::buildPath(SputActor *actor, float *start, float *goal, int tighten, unsigned *failFlag, SputActor *avoid) {
 	unsigned notMain = actor->flags & kActorFlagNotMain;
 	bool skip = failFlag ? ((notMain | *failFlag) != 0) : (notMain != 0);
@@ -119,7 +116,6 @@ void SputActorModule::actorWalkTo(SputActor *actor, float *pos, float *goal, Spu
 	bool remastered = _grim->isRemastered();
 
 	if (_grim->useRemasterFixes() && !(_grim->getGameFlags() & ADGF_DEMO)) {
-		// The actor is moved onto the walk plane when it is just off it
 		if (!_walkSystem->planeAt(actor->actorPos, kPlaneTypeWalk)) {
 			WalkPlane *closest = _walkSystem->planeClosest(actor->actorPos, kPlaneTypeWalk);
 			RdVector3 snapped;
@@ -756,8 +752,6 @@ int SputActorModule::actorWalkToImplRemastered(SputActor *actor, SputActor *targ
 	return numOut;
 }
 
-// The corners of the boxes of the actors that are near the actor, or are the one to walk around.
-// Each box has four points. Actors that lie down have no box.
 void SputActorModule::getCollisionBoxes(SputActor *actor, int *count, int maxPoints, float (*points)[3], SputActor *avoid) {
 	*count = 0;
 

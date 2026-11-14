@@ -27,7 +27,6 @@
 namespace Grim {
 
 enum {
-	// The remastered saves the name of the movie in 255 bytes
 	kRemasteredMovieNameSize = 255
 };
 
@@ -88,7 +87,6 @@ int SputSmush::restoreRemastered(Common::ReadStream *stream) {
 	return 0;
 }
 
-// The movies that have a HD version are not restarted by a load
 bool SputSmush::isHdMovieName(const char *name) {
 	static const char *const hdMovieNames[] = {
 		"albinizod.snm", "brunopk.snm", "byebye.snm", "byeruba.snm",

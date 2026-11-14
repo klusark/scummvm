@@ -200,9 +200,7 @@ static const ControlSymbol controlSymbolTable[kNumControlSymbols] = {
 	{ 2, 14, 0, "AXIS_MOUSE_Z" }
 };
 
-// Symbol order of the remastered, the Lua state stores the index. The codes are the same
-// internal codes of the table above. The second F11 entry (the F10 key) keeps the name of the
-// original, and the pad buttons 11 and 12 share their codes with the first two hat codes.
+// The second F11 entry is the F10 key
 static const ControlSymbol controlSymbolTableRemastered[kNumControlSymbolsRemastered] = {
 	{ 4, 1, 0, "KEY_ESCAPE" },
 	{ 4, 2, 0, "KEY_1" },

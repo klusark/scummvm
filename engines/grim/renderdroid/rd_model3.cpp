@@ -133,7 +133,14 @@ void RenderDroid::Model3Module::calcBoundingBoxes(RdModel3 *model3) {
 	model3->geomCenter[0] = (float)(((double)model3->bound.max[0] - model3->bound.min[0]) * 0.5 + model3->bound.min[0]);
 	model3->geomCenter[1] = (float)centerY;
 	model3->geomCenter[2] = (float)centerZ;
-	model3->radius = (float)(sqrt(dxSquared + dy * dy + dz * dzStored) * 0.5);
+
+	if (_rd->_remastered) {
+		float diagonal = (float)sqrt((dy * dy + dx * dx) + dz * dz);
+
+		model3->radius = (float)(diagonal * 0.5);
+	} else {
+		model3->radius = (float)(sqrt(dxSquared + dy * dy + dz * dzStored) * 0.5);
+	}
 }
 
 void RenderDroid::Model3Module::calcRadii(RdModel3 *model3) {
@@ -143,7 +150,12 @@ void RenderDroid::Model3Module::calcRadii(RdModel3 *model3) {
 
 		for (uint j = 0; j < mesh->numVertices; j++) {
 			float *vertex = mesh->vertices[j];
-			double length = sqrt((double)vertex[1] * vertex[1] + (double)vertex[2] * vertex[2] + (double)vertex[0] * vertex[0]);
+			double length;
+
+			if (_rd->_remastered)
+				length = sqrt(((double)vertex[1] * vertex[1] + (double)vertex[0] * vertex[0]) + (double)vertex[2] * vertex[2]);
+			else
+				length = sqrt((double)vertex[1] * vertex[1] + (double)vertex[2] * vertex[2] + (double)vertex[0] * vertex[0]);
 
 			if (length > maxLength) {
 				float stored = (float)length;
@@ -151,7 +163,10 @@ void RenderDroid::Model3Module::calcRadii(RdModel3 *model3) {
 			}
 		}
 
-		mesh->radius = (float)(maxLength * 0.1 + maxLength);
+		if (_rd->_remastered)
+			mesh->radius = (float)(maxLength * 0.1f + maxLength);
+		else
+			mesh->radius = (float)(maxLength * 0.1 + maxLength);
 	}
 
 	_maxGeoRadius = 0.0f;
@@ -234,10 +249,17 @@ void RenderDroid::Model3Module::calcVertexNormals(RdModel3 *model3) {
 
 						for (uint m = 0; m < face->numVertices; m++) {
 							if ((uint)face->vertices[m] == vertex) {
-								sumX = sumX + face->normal[0];
-								sumY = sumY + face->normal[1];
-								sumZ = sumZ + face->normal[2];
-								count = count - -1.0;
+								if (_rd->_remastered) {
+									sumX = (float)((double)face->normal[0] + sumX);
+									sumY = (float)((double)face->normal[1] + sumY);
+									sumZ = (float)((double)face->normal[2] + sumZ);
+									count = (float)(count + 1.0);
+								} else {
+									sumX = sumX + face->normal[0];
+									sumY = sumY + face->normal[1];
+									sumZ = sumZ + face->normal[2];
+									count = count - -1.0;
+								}
 								break;
 							}
 						}
@@ -259,15 +281,29 @@ void RenderDroid::Model3Module::calcVertexNormals(RdModel3 *model3) {
 						float *previous = mesh->vertices[firstFace->vertices[numFaceVertices - 1]];
 						float *next = mesh->vertices[firstFace->vertices[1 % numFaceVertices]];
 						float *first = mesh->vertices[0];
-						float dyPrevious = (float)((double)first[1] - previous[1]);
-						double dzNext = (double)first[2] - next[2];
-						double dxNext = (double)first[0] - next[0];
-						float dzPrevious = (float)((double)first[2] - previous[2]);
-						double dxPrevious = (double)first[0] - previous[0];
 
-						normal[1] = (float)(((double)first[1] - next[1]) + dyPrevious);
-						normal[2] = (float)(dzNext + dzPrevious);
-						normal[0] = (float)(dxNext + dxPrevious);
+						if (_rd->_remastered) {
+							float dxPreviousStored = (float)((double)first[0] - previous[0]);
+							float dyPreviousStored = (float)((double)first[1] - previous[1]);
+							float dzPreviousStored = (float)((double)first[2] - previous[2]);
+							float dxNextStored = (float)((double)first[0] - next[0]);
+							float dyNextStored = (float)((double)first[1] - next[1]);
+							float dzNextStored = (float)((double)first[2] - next[2]);
+
+							normal[0] = (float)((double)dxNextStored + dxPreviousStored);
+							normal[1] = (float)((double)dyNextStored + dyPreviousStored);
+							normal[2] = (float)((double)dzNextStored + dzPreviousStored);
+						} else {
+							float dyPrevious = (float)((double)first[1] - previous[1]);
+							double dzNext = (double)first[2] - next[2];
+							double dxNext = (double)first[0] - next[0];
+							float dzPrevious = (float)((double)first[2] - previous[2]);
+							double dxPrevious = (double)first[0] - previous[0];
+
+							normal[1] = (float)(((double)first[1] - next[1]) + dyPrevious);
+							normal[2] = (float)(dzNext + dzPrevious);
+							normal[0] = (float)(dxNext + dxPrevious);
+						}
 					} else {
 						normal[0] = (float)(sumX / countStored);
 						normal[1] = (float)((double)sumYStored / countStored);
@@ -1391,7 +1427,13 @@ int RenderDroid::Model3Module::draw(RdThing *thing, RdMatrix34 mat) {
 
 			double distSquared;
 
-			if (light->type >= 2) {
+			if (light->type >= 2 && _rd->_remastered) {
+				float dxStored = (float)((double)mat[3][0] - camera->lightPos[i][0]);
+				float dyStored = (float)((double)mat[3][1] - camera->lightPos[i][1]);
+				float dzStored = (float)((double)mat[3][2] - camera->lightPos[i][2]);
+
+				distSquared = (float)(((double)dyStored * dyStored + (double)dxStored * dxStored) + (double)dzStored * dzStored);
+			} else if (light->type >= 2) {
 				double dy = (double)mat[3][1] - camera->lightPos[i][1];
 				double dz = (double)mat[3][2] - camera->lightPos[i][2];
 				double dx = (double)mat[3][0] - camera->lightPos[i][0];
@@ -1471,10 +1513,17 @@ void RenderDroid::Model3Module::drawMesh(RdModel3Mesh *mesh, RdMatrix34 mat) {
 		return;
 
 	if (_clipPlaneActive) {
-		double side = ((double)mat[3][1] - _clipPt[1]) * _clipNorm[1] + ((double)mat[3][2] - _clipPt[2]) * _clipNorm[2] + ((double)mat[3][0] - _clipPt[0]) * _clipNorm[0];
+		if (_rd->_remastered) {
+			float sideStored = (float)((((double)mat[3][1] - _clipPt[1]) * _clipNorm[1] + ((double)mat[3][0] - _clipPt[0]) * _clipNorm[0]) + ((double)mat[3][2] - _clipPt[2]) * _clipNorm[2]);
 
-		if (!(-_curMesh->radius <= side))
-			return;
+			if (-_curMesh->radius > sideStored)
+				return;
+		} else {
+			double side = ((double)mat[3][1] - _clipPt[1]) * _clipNorm[1] + ((double)mat[3][2] - _clipPt[2]) * _clipNorm[2] + ((double)mat[3][0] - _clipPt[0]) * _clipNorm[0];
+
+			if (!(-_curMesh->radius <= side))
+				return;
+		}
 	}
 
 	_rd->multiply34(modelView, camera->viewMatrix, mat);
@@ -1516,7 +1565,15 @@ void RenderDroid::Model3Module::drawMesh(RdModel3Mesh *mesh, RdMatrix34 mat) {
 			const float *lightPos = camera->lightPos[light->id];
 			bool inRange;
 
-			if (lightingMode == 2) {
+			if (lightingMode == 2 && _rd->_remastered) {
+				float dxStored = (float)((double)lightPos[0] - mat[3][0]);
+				float dyStored = (float)((double)lightPos[1] - mat[3][1]);
+				float dzStored = (float)((double)lightPos[2] - mat[3][2]);
+				float distance = (float)sqrt(((double)dyStored * dyStored + (double)dxStored * dxStored) + (double)dzStored * dzStored);
+				double range = (double)light->falloffMin + _curMesh->radius;
+
+				inRange = range > distance;
+			} else if (lightingMode == 2) {
 				double dx = (double)lightPos[0] - mat[3][0];
 				double dy = (double)lightPos[1] - mat[3][1];
 				float dyStored = (float)dy;
@@ -1528,7 +1585,13 @@ void RenderDroid::Model3Module::drawMesh(RdModel3Mesh *mesh, RdMatrix34 mat) {
 			} else {
 				double distSquared;
 
-				if (light->type >= 2) {
+				if (light->type >= 2 && _rd->_remastered) {
+					float dxStored = (float)((double)lightPos[0] - mat[3][0]);
+					float dyStored = (float)((double)lightPos[1] - mat[3][1]);
+					float dzStored = (float)((double)lightPos[2] - mat[3][2]);
+
+					distSquared = (float)(((double)dyStored * dyStored + (double)dxStored * dxStored) + (double)dzStored * dzStored);
+				} else if (light->type >= 2) {
 					double dx = (double)lightPos[0] - mat[3][0];
 					double dy = (double)lightPos[1] - mat[3][1];
 					double dz = (double)lightPos[2] - mat[3][2];
@@ -1587,16 +1650,28 @@ void RenderDroid::Model3Module::drawMesh(RdModel3Mesh *mesh, RdMatrix34 mat) {
 		RdFace3 *face = &mesh->faces[i];
 		const float *vertex = _curMesh->vertices[face->vertices[0]];
 		double facing;
+		bool facingBack;
 
-		// The demo adds the terms in z, y, x order
-		if (_rd->isDemo())
-			facing = ((double)_localCamera[2] - vertex[2]) * face->normal[2] + ((double)_localCamera[1] - vertex[1]) * face->normal[1] + ((double)_localCamera[0] - vertex[0]) * face->normal[0];
-		else
-			facing = ((double)_localCamera[2] - vertex[2]) * face->normal[2] + ((double)_localCamera[0] - vertex[0]) * face->normal[0] + ((double)_localCamera[1] - vertex[1]) * face->normal[1];
+		if (_rd->_remastered) {
+			float dxStored = (float)((double)_localCamera[0] - vertex[0]);
+			float dyStored = (float)((double)_localCamera[1] - vertex[1]);
+			float dzStored = (float)((double)_localCamera[2] - vertex[2]);
+
+			facing = (float)(((double)face->normal[1] * dyStored + (double)face->normal[0] * dxStored) + (double)face->normal[2] * dzStored);
+			facingBack = !(facing > 0.0);
+		} else {
+			// The demo adds the terms in z, y, x order
+			if (_rd->isDemo())
+				facing = ((double)_localCamera[2] - vertex[2]) * face->normal[2] + ((double)_localCamera[1] - vertex[1]) * face->normal[1] + ((double)_localCamera[0] - vertex[0]) * face->normal[0];
+			else
+				facing = ((double)_localCamera[2] - vertex[2]) * face->normal[2] + ((double)_localCamera[0] - vertex[0]) * face->normal[0] + ((double)_localCamera[1] - vertex[1]) * face->normal[1];
+
+			facingBack = facing <= 0.0;
+		}
 
 		int backface = 0;
 
-		if (facing <= 0.0) {
+		if (facingBack) {
 			backface = 1;
 
 			if (!(face->type & 1) && (_rd->_curRenderOptions & 1))

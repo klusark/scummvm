@@ -377,7 +377,6 @@ public:
 	void soundsSaveLoadBlock(Common::Serializer &ser, bool isImSave, bool legacyLayout);
 	void soundsSaveLoadBlockData(Common::Serializer &ser, bool isImSave);
 
-	// The save format of the remastered: pointers in slots of 8 bytes, file names of 33 bytes
 	void soundsSaveLoadRemastered(Common::Serializer &ser);
 	void soundsSaveLoadBlockRemastered(Common::Serializer &ser, bool isImSave);
 	void soundsSaveLoadBlockDataRemastered(Common::Serializer &ser, bool isImSave);

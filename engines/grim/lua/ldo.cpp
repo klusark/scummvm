@@ -450,6 +450,22 @@ static void build_name (const char *str, char *name, int size) {
 }
 
 int32 lua_dostring(const char *str) {
+	if (luaIsRemastered) {
+		if (!str)
+			return 1;
+
+		char name[SIZE_PREF + 25];
+		ZIO z;
+
+		snprintf(name, sizeof(name), "(dostring) >> %." SSIZE_PREF "s", str);
+		char *newline = strchr(name, '\n');
+		if (newline)
+			*newline = 0;
+
+		luaZ_mopen(&z, str, strlen(str), name);
+		return do_main(&z, 0);
+	}
+
 	return lua_dobuffer(str, strlen(str), nullptr);
 }
 

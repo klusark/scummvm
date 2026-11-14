@@ -28,15 +28,14 @@
 
 #include "engines/grim/std/std_display.h"
 
-// FreeType types, declared here so that only hdtext.cpp includes the FreeType headers
 struct FT_LibraryRec_;
+struct FT_FaceRec_;
 struct FT_Span_;
 
 namespace Grim {
 
 struct BlastTextFont;
 
-// A TrueType font at one pixel size, with the glyphs 0..254 rasterized once
 class HdFont {
 public:
 	enum {
@@ -66,8 +65,7 @@ private:
 	HdFont &operator=(const HdFont &);
 
 	static void spanCallback(int y, int count, const FT_Span_ *spans, void *user);
-	static int floorDiv64(long value);
-	static int ceilDiv64(long value);
+	static int readGlyphBox(FT_FaceRec_ *face, int locFormat, int glyph, int *xMin, int *yMin, int *xMax, int *yMax);
 
 	void loadGlyphs(FT_LibraryRec_ *library, const byte *data, long dataSize, int minPixels);
 
@@ -79,7 +77,6 @@ private:
 	Glyph _emptyGlyph;
 };
 
-// One glyph box of the layout, in canvas pixels relative to the origin of the text
 struct HdTextQuad {
 	float x;
 	float y;
@@ -98,7 +95,6 @@ struct HdTextRow {
 	float height;
 };
 
-// What the layout needs to know about a text object (all in canvas pixels)
 struct HdTextInfo {
 	const char *text;
 	const HdFont *font;
@@ -113,9 +109,6 @@ struct HdTextInfo {
 	int lineCount;
 };
 
-// Layout of one text object, kept until the object changes. The last four fields are
-// coordinates, not sizes: the right and bottom edges of the unaligned text, and the
-// top left corner of the aligned one.
 class HdTextCache {
 public:
 	HdTextCache();
@@ -129,14 +122,12 @@ public:
 	float maxBottom;
 };
 
-// The state of the text canvas of the renderer
 struct HdTextCanvas {
 	int width;
 	bool boxingHD;
 	bool stretched;
 };
 
-// What the canvas draws for one text object: the boxes in order and the constants of the text shader
 struct HdTextDraw {
 	HdTextDraw();
 
@@ -159,7 +150,6 @@ public:
 	HdText();
 	~HdText();
 
-	// Finds FontsHD/<NAME>.txt for a locked font and links the TrueType font to it
 	void attachFont(BlastTextFont *font, const char *name);
 	const HdFont *getCustomFont();
 
@@ -170,10 +160,6 @@ public:
 			int *width, int *height);
 	static int getFontHeight(const HdFont *font);
 	static int getTextPage(int flags);
-
-	static void convertCoords1080(int *x, int *y, int mode, bool isSize);
-	static void convertCoordsNative(int *x, int *y, int mode, bool isSize);
-	static void convertRectNative(StdRect *rect, int mode);
 
 private:
 	HdText(const HdText &);

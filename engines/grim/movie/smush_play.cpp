@@ -28,6 +28,7 @@
 
 #include "graphics/surface.h"
 
+#include "engines/grim/grim.h"
 #include "engines/grim/movie/codecs/smush_decoder.h"
 #include "engines/grim/movie/smush_animator.h"
 #include "engines/grim/movie/smush_mixer.h"
@@ -256,7 +257,7 @@ int SmushPlay::updateMovie(int *finished) {
 
 			int fps = 15;
 
-			if (_movieInfo.frameDelay)
+			if (_movieInfo.frameDelay && !g_grim->isRemastered())
 				fps = (_movieInfo.frameDelay / 2 + 1000000) / _movieInfo.frameDelay;
 
 			restartAnim(fps);
@@ -325,6 +326,9 @@ int SmushPlay::getMovieLength(const char *path) {
 	getInfo(stream, &info);
 	delete stream;
 	stream = nullptr;
+
+	if (g_grim->useRemasterFixes())
+		return (int)((double)info.frames * (double)66.666664f);
 
 	return (int)((double)info.frames * 66.666664);
 }

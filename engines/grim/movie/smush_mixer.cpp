@@ -24,6 +24,7 @@
 #include "common/system.h"
 #include "common/util.h"
 
+#include "engines/grim/grim.h"
 #include "engines/grim/movie/smush_mixer.h"
 #include "engines/grim/movie/smush_sound.h"
 #include "engines/grim/movie/smush_timer.h"
@@ -184,12 +185,13 @@ void SmushMixer::mixMono16(const int16 *srcBuf, int32 inFrameCount, uint32 feedS
 	uint32 ratio = ((uint32)inFrameCount << 16) / feedSize;
 	uint32 position = 0;
 	int32 interpolated;
+	int nextOffset = g_grim->useRemasterFixes() ? 1 : 2;
 
 	switch (ratio) {
 	case 0x8000:
 		for (int i = 0; i < inFrameCount - 1; i++) {
 			// The disasm interpolates with the sample two positions ahead
-			interpolated = (srcBuf[0] + srcBuf[2]) >> 1;
+			interpolated = (srcBuf[0] + srcBuf[nextOffset]) >> 1;
 
 			mixBufCurCell[0] += srcBuf[0] * leftAmp;
 			mixBufCurCell[1] += srcBuf[0] * rightAmp;

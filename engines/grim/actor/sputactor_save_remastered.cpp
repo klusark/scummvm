@@ -35,8 +35,6 @@
 
 namespace Grim {
 
-// The actors in the savegames of the remastered: the serials, the handles, the pointers and the
-// sound id take 8 bytes and the path has 128 points
 int SputActorModule::saveRemastered(Common::WriteStream *stream) {
 	stream->writeSint32LE(_maxActors);
 	stream->writeSint32LE(_numActors);
@@ -394,7 +392,6 @@ int SputActorModule::restoreRemastered(Common::ReadStream *stream) {
 			int mumbleChore;
 			ResRef costumeRef;
 
-			// The instance of the costume is made again
 			stream->readSint32LE();
 			stream->readSint32LE();
 

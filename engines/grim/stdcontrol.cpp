@@ -31,13 +31,10 @@
 
 namespace Grim {
 
-// The default keys of the remastered, in the order of the slots that can be remapped, as SDL key codes
 static const int remappableKeyDefaults[StdControl::kNumRemappedKeys] = {
 	0x40000052, 0x40000051, 0x40000050, 0x4000004f, 0x400000e1, 0x65, 0x75, 0x70, 0x69, 0x7f, 0x2e, 8, 0x7a
 };
 
-// The keys that have a picture in the menus, as SDL key codes. The text goes under the picture
-// of the keypad, and the name is the one SDL gives to the key.
 struct StdControlKeyGlyph {
 	int sdlKey;
 	Common::KeyCode keycode;
@@ -120,7 +117,6 @@ int StdControl::startup() {
 	memset(_axes, 0, sizeof(_axes));
 	memset(_axisPos, 0, sizeof(_axisPos));
 
-	// Starting the input again puts back the keys that the player changed
 	if (_remastered)
 		resetKeyMappingToDefault();
 
@@ -128,7 +124,6 @@ int StdControl::startup() {
 	initMouse();
 	reset();
 
-	// The scripts of the remastered draw their own cursor, the system one is never shown again
 	if (_remastered)
 		CursorMan.showMouse(false);
 
@@ -293,7 +288,6 @@ int StdControl::readKey(int key, int *pressCount, int *doubleClick, int *longPre
 	if (doubleClick)
 		*doubleClick = keyPointer->doubleClick;
 
-	// A press that lasts more than 400 ms is reported once as a long press
 	if (longPress) {
 		*longPress = 0;
 
@@ -312,7 +306,6 @@ void StdControl::setActivation(int active) {
 	if (!_open)
 		return;
 
-	// The system cursor of the remastered stays hidden, see startup()
 	if (active) {
 		if (_readMouse)
 			CursorMan.showMouse(false);
@@ -378,7 +371,6 @@ void StdControl::initJoysticks() {
 
 void StdControl::initMouse() {
 	if (_remastered) {
-		// Absolute position over the 640x480 play area
 		enableAxis(12, 0, 640, 0.0f);
 		enableAxis(13, 0, 480, 0.0f);
 
@@ -429,7 +421,6 @@ void StdControl::readKeyboard() {
 	if (_disableKeyboard)
 		return;
 
-	// The remastered takes the keyboard events as they come, before the update of the frame
 	if (_remastered)
 		applyKeyboardEvents();
 
@@ -536,7 +527,6 @@ void StdControl::readJoysticks() {
 			buttonMask *= 2;
 		}
 
-		// The remastered has no hat codes, buttons 11 and 12 use them
 		if (!_remastered && (state->flags & 0x200)) {
 			int pov = state->pov;
 			int povA = pov >= 22500 && pov <= 31500;
@@ -579,8 +569,6 @@ void StdControl::readMouse() {
 	_input.mouse.y = 0;
 	_input.mouse.z = 0;
 
-	// The remastered looks at the state of the buttons once for each update, the long tap key
-	// follows the first button
 	if (_remastered) {
 		int now = _curReadTime;
 
@@ -664,7 +652,6 @@ void StdControl::getMouseCanvasPosition(bool menuMode, int *x, int *y) const {
 	} else {
 		HdCanvas::computeScaling(canvas->isStretched(), kCanvasPlayWidth, kCanvasHeight, &scaleX, &scaleY, &offsetX, &offsetY);
 
-		// The 4:3 play area sits in the middle of the canvas
 		offsetX = (float)((double)offsetX - (double)scaleX * (double)kCanvasPlayOffset);
 	}
 
@@ -712,7 +699,6 @@ void StdControl::updateKey(StdControlKey *key, int down, int time, bool canLongP
 	key->lastPressTime = time;
 }
 
-// The next key pressed becomes the key of the slot
 void StdControl::setKeyMappingMode(int slot) {
 	_mappingSlot = slot;
 	_keyMappingActive = true;
@@ -741,7 +727,6 @@ void StdControl::setRemappedKey(int slot, int sdlKey) {
 	_remappedKeys[slot] = sdlKey;
 }
 
-// A key that is the remapped key of a slot acts as the default key of that slot
 Common::KeyCode StdControl::translateKey(Common::KeyCode keycode) const {
 	if (_keyMappingActive)
 		return keycode;
@@ -762,8 +747,6 @@ Common::KeyCode StdControl::translateKey(Common::KeyCode keycode) const {
 	return keycode;
 }
 
-// Answers 0 when the key was taken, 1 for a key that cannot be used, 2 for a slot that does not
-// exist, 3 for a key that is already used and 4 when the player cancels with Escape
 int StdControl::endKeyMapping(Common::KeyCode keycode) {
 	int sdlKey = getSdlKey(keycode);
 
@@ -849,7 +832,6 @@ Common::KeyCode StdControl::getKeyCode(int sdlKey) {
 	return Common::KEYCODE_INVALID;
 }
 
-// The name SDL gives to the key
 Common::String StdControl::getSdlKeyName(int sdlKey) {
 	for (uint i = 0; i < ARRAYSIZE(keyGlyphs); i++) {
 		if (keyGlyphs[i].sdlKey == sdlKey)
@@ -862,7 +844,6 @@ Common::String StdControl::getSdlKeyName(int sdlKey) {
 	if (sdlKey >= kSdlKeyFirstPrintable && sdlKey <= kSdlKeyLastPrintable) {
 		int character = sdlKey;
 
-		// The letter keys are named by their capital
 		if (character >= 'a' && character <= 'z')
 			character -= 'a' - 'A';
 
@@ -872,7 +853,6 @@ Common::String StdControl::getSdlKeyName(int sdlKey) {
 	return Common::String();
 }
 
-// The picture and the text under it of a key that has one, either of them can be missing
 bool StdControl::getKeyGlyph(int sdlKey, const char **glyphFile, const char **glyphText) {
 	for (uint i = 0; i < ARRAYSIZE(keyGlyphs); i++) {
 		if (keyGlyphs[i].sdlKey == sdlKey) {

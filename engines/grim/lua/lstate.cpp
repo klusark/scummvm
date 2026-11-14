@@ -54,6 +54,7 @@ LState *lua_state = nullptr;
 LState *lua_rootState = nullptr;
 
 bool luaIsEmi = false;
+bool luaIsRemastered = false;
 
 int globalTaskSerialId = 0;
 
@@ -71,6 +72,7 @@ static void lua_openthr() {
 }
 
 #define STACK_UNIT      256
+#define STACK_UNIT_REMASTERED 128
 
 void lua_stateinit(LState *state) {
 	state->prev = nullptr;
@@ -93,9 +95,11 @@ void lua_stateinit(LState *state) {
 	state->sleepFor = luaIsEmi ? -1 : 0;
 	state->pauseSticky = false;
 
-	state->stack.stack = luaM_newvector(STACK_UNIT, TObject);
+	int32 stackUnit = luaIsRemastered ? STACK_UNIT_REMASTERED : STACK_UNIT;
+
+	state->stack.stack = luaM_newvector(stackUnit, TObject);
 	state->stack.top = state->stack.stack;
-	state->stack.last = state->stack.stack + (STACK_UNIT - 1);
+	state->stack.last = state->stack.stack + (stackUnit - 1);
 }
 
 void lua_statedeinit(LState *state) {
@@ -204,10 +208,11 @@ void callHook(lua_Function func, const char *filename, int32 line) {
 	fprintf(output, "\n");
 }
 
-void lua_open(bool isEmi) {
+void lua_open(bool isEmi, bool isRemastered) {
 	if (lua_state)
 		return;
 	luaIsEmi = isEmi;
+	luaIsRemastered = isRemastered;
 	lua_rootState = lua_state = luaM_new(LState);
 	lua_stateinit(lua_state);
 	lua_resetglobals();
@@ -245,7 +250,9 @@ void lua_close() {
 	IMtable = nullptr;
 	refArray = nullptr;
 	lua_rootState = lua_state = nullptr;
-	globalTaskSerialId = 0;
+
+	if (!luaIsRemastered)
+		globalTaskSerialId = 0;
 
 #ifdef LUA_DEBUG
 	printf("total de blocos: %ld\n", numblocks);

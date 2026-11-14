@@ -51,15 +51,19 @@ static int32 validevent(int32 t, int32 e) { // ORDER LUA_T
 }
 
 static void init_entry(int32 tag) {
-	for (int32 i = 0; i < IM_N; i++)
-		ttype(luaT_getim(tag, i)) = LUA_T_NIL;
+	for (int32 i = 0; i < IM_N; i++) {
+		TObject *im = luaT_getim(tag, i);
+
+		memset(&im->value, 0, sizeof(Value));
+		ttype(im) = LUA_T_NIL;
+	}
 }
 
 static bool tmFBAdded = false;
 
 void luaT_init() {
 	IMtable_size = NUM_TAGS * 2;
-	last_tag = -(NUM_TAGS - 1);
+	last_tag = luaIsRemastered ? -(IMtable_size - 1) : -(NUM_TAGS - 1);
 	IMtable = luaM_newvector(IMtable_size, struct IM);
 	for (int32 t = -(IMtable_size - 1); t <= 0; t++)
 		init_entry(t);
@@ -69,8 +73,14 @@ void luaT_init() {
 
 int32 lua_newtag() {
 	--last_tag;
-	if (-last_tag >= IMtable_size)
+	if (-last_tag >= IMtable_size) {
 		IMtable_size = luaM_growvector(&IMtable, IMtable_size, struct IM, memEM, MAX_INT);
+
+		if (luaIsRemastered) {
+			for (int32 t = 1 - IMtable_size; t <= last_tag; t++)
+				init_entry(t);
+		}
+	}
 	init_entry(last_tag);
 	return last_tag;
 }

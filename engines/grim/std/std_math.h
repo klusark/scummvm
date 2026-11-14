@@ -42,7 +42,10 @@ public:
 	float arcTan4(float y, float x);
 
 private:
+	float arcSin2Remastered(float value);
 	float arcSin3Remastered(float value);
+	float arcTan4Remastered(float y, float x);
+	int tableIndex(float value, int quadrant);
 
 	static const float kSinCosTable[4096];
 	static const float kTanTable[4096];

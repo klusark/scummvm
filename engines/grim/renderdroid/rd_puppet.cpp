@@ -146,6 +146,10 @@ void RenderDroid::PuppetModule::advanceTrack(RdPuppet *puppet, int trackNum, flo
 	track->curFrame = newFrame;
 
 	double numFrames = (double)keyframe->numFrames;
+
+	if (_rd->_remastered)
+		numFrames = (float)keyframe->numFrames;
+
 	if (newFrame >= numFrames) {
 		uint status = track->status;
 
@@ -156,9 +160,14 @@ void RenderDroid::PuppetModule::advanceTrack(RdPuppet *puppet, int trackNum, flo
 			track->curFrame = (float)numFrames;
 			track->status = status | 0x10;
 		} else if ((status & 0x80) == 0) {
-			float turns = (float)((double)newFrame / numFrames);
-			wraps = _rd->_stdMath->rint(turns);
-			track->curFrame = (float)((double)track->curFrame - (double)track->keyframe->numFrames * wraps);
+			if (_rd->_remastered) {
+				wraps = (float)floor((double)newFrame / numFrames);
+				track->curFrame = (float)((double)newFrame - numFrames * wraps);
+			} else {
+				float turns = (float)((double)newFrame / numFrames);
+				wraps = _rd->_stdMath->rint(turns);
+				track->curFrame = (float)((double)track->curFrame - (double)track->keyframe->numFrames * wraps);
+			}
 
 			uint numHNodes = puppet->thing->data.model3->numHNodes;
 			if (numHNodes >= 64)
@@ -230,7 +239,14 @@ int RenderDroid::PuppetModule::updateTracks(RdPuppet *puppet, float delta) {
 			double fade = (double)track->fadeSpeed * delta + track->fade;
 			track->fade = (float)fade;
 
-			if (!(fade < 1.0)) {
+			bool faded;
+
+			if (_rd->_remastered)
+				faded = track->fade >= 1.0f;
+			else
+				faded = !(fade < 1.0);
+
+			if (faded) {
 				track->fade = 1.0f;
 				track->status &= 0xFFFFFFFB;
 			}
@@ -238,7 +254,14 @@ int RenderDroid::PuppetModule::updateTracks(RdPuppet *puppet, float delta) {
 			double fade = (double)track->fade - (double)track->fadeSpeed * delta;
 			track->fade = (float)fade;
 
-			if (fade <= 0.0) {
+			bool faded;
+
+			if (_rd->_remastered)
+				faded = track->fade <= 0.0f;
+			else
+				faded = fade <= 0.0;
+
+			if (faded) {
 				if (track->status & 0x100)
 					track->status = (track->status & 0xFFFFFFF7) | 0x10;
 				else
@@ -368,6 +391,9 @@ void RenderDroid::PuppetModule::buildJointMatrices(RdThing *thing, RdMatrix34 ba
 				else
 					delta = (double)track->curFrame - entry->frame;
 
+				if (_rd->_remastered)
+					delta = (float)delta;
+
 				float curPos[3];
 				float curPyr[3];
 
@@ -449,9 +475,19 @@ void RenderDroid::PuppetModule::buildJointMatrices(RdThing *thing, RdMatrix34 ba
 				}
 			}
 
-			if (topFade >= 1.0f || secondFade <= 0.0f) {
+			bool topOnly;
+
+			if (_rd->_remastered)
+				topOnly = !(topFade < 1.0f) || !(secondFade > 0.0f);
+			else
+				topOnly = topFade >= 1.0f || secondFade <= 0.0f;
+
+			if (topOnly) {
 				if (topFade > 1.0f) {
 					double scale = 1.0 / topFade;
+
+					if (_rd->_remastered)
+						scale = (float)scale;
 
 					for (int k = 0; k < 3; k++) {
 						topPos[k] = (float)(topPos[k] * scale);
@@ -462,6 +498,9 @@ void RenderDroid::PuppetModule::buildJointMatrices(RdThing *thing, RdMatrix34 ba
 				if (secondFade > 1.0f) {
 					double scale = 1.0 / secondFade;
 
+					if (_rd->_remastered)
+						scale = (float)scale;
+
 					for (int k = 0; k < 3; k++) {
 						secondPos[k] = (float)(secondPos[k] * scale);
 						secondPyr[k] = (float)(secondPyr[k] * scale);
@@ -469,6 +508,9 @@ void RenderDroid::PuppetModule::buildJointMatrices(RdThing *thing, RdMatrix34 ba
 				}
 
 				double remaining = 1.0 - topFade;
+
+				if (_rd->_remastered)
+					remaining = (float)remaining;
 
 				for (int k = 0; k < 3; k++) {
 					topPos[k] = (float)(secondPos[k] * remaining + topPos[k]);

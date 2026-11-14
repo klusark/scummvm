@@ -6,6 +6,7 @@
 #define FORBIDDEN_SYMBOL_EXCEPTION_setjmp
 #define FORBIDDEN_SYMBOL_EXCEPTION_longjmp
 
+#include "common/textconsole.h"
 #include "common/util.h"
 
 #include "engines/grim/lua/lauxlib.h"
@@ -408,7 +409,17 @@ fraction:
 						return WRONGTOKEN;
 					}
 					do {
-						e = 10 * e + (LS->current - '0');
+						if (luaIsRemastered) {
+							double wideExponent = (double)e * 10.0 + (double)(LS->current - '0');
+							if (wideExponent >= 2147483648.0 || wideExponent <= -2147483649.0) {
+								warning("luaY_lex(): the exponent does not fit an int");
+								e = INT_MIN;
+							} else {
+								e = (int32)wideExponent;
+							}
+						} else {
+							e = 10 * e + (LS->current - '0');
+						}
 						save_and_next(LS);
 					} while (Common::isDigit(LS->current));
 					for (ea = neg ? 0.1 : 10.0; e > 0; e >>= 1) {

@@ -29,13 +29,6 @@
 
 namespace Grim {
 
-/**
- * The Lua layer of the remastered: the main table with its own order, plus the commentary,
- * overlay and mouse tables. The opcodes that only read or write engine state are Lua_V1
- * members (lua_v1_remastered.cpp). The ones whose module does not exist yet are stubs here:
- * each one reports once that it is not implemented and answers with a neutral value, and
- * is meant to be replaced by a call into its module.
- */
 class Lua_Remastered : public Lua_V1 {
 public:
 	typedef Lua_Remastered LuaClass;
@@ -51,15 +44,12 @@ public:
 	int controlCallback(float frameTime) override;
 
 protected:
-	// The remastered calls these with other arguments than the original (slot numbers)
 	DECLARE_LUA_OPCODE(Load) override;
 	DECLARE_LUA_OPCODE(Save) override;
 	DECLARE_LUA_OPCODE(Is3DHardwareEnabled) override;
 
-	// Debugging
 	DECLARE_LUA_OPCODE(PrintStack);
 
-	// Save module, through the requests of the engine
 	DECLARE_LUA_OPCODE(New);
 	DECLARE_LUA_OPCODE(Erase);
 	DECLARE_LUA_OPCODE(GetSaveStatus);
@@ -67,15 +57,12 @@ protected:
 	DECLARE_LUA_OPCODE(InitiateFindSaveGames);
 	DECLARE_LUA_OPCODE(GetFindSaveGameStatus);
 
-	// Input module
 	DECLARE_LUA_OPCODE(SetMouseSpeedScale);
 	DECLARE_LUA_OPCODE(SetKeyMappingMode);
 	DECLARE_LUA_OPCODE(ResetKeyMappingToDefault);
 	DECLARE_LUA_OPCODE(GetRemappedKeyName);
 	DECLARE_LUA_OPCODE(GetRemappedKeyHint);
 
-	// The functions that do nothing: the original has one for each name, and the number a saved
-	// state keeps for a function depends on the function, so each one needs its own
 	DECLARE_LUA_OPCODE(NoOpPutActorAtOrigin);
 	DECLARE_LUA_OPCODE(NoOpGetClippedPos);
 	DECLARE_LUA_OPCODE(NoOpDriveActorTo);
@@ -93,7 +80,6 @@ protected:
 	DECLARE_LUA_OPCODE(NoOpLoadBundle);
 	DECLARE_LUA_OPCODE(NoOpUnloadBundle);
 
-	// Overlay module
 	DECLARE_LUA_OPCODE(OverlayCreate);
 	DECLARE_LUA_OPCODE(OverlayMove);
 	DECLARE_LUA_OPCODE(OverlaySetLayer);
@@ -106,7 +92,6 @@ protected:
 	DECLARE_LUA_OPCODE(OverlayShowLoadSpinner);
 	DECLARE_LUA_OPCODE(WidescreenCorrectionFactor);
 
-	// Commentary module
 	DECLARE_LUA_OPCODE(SetCommentary);
 	DECLARE_LUA_OPCODE(ClearCommentary);
 	DECLARE_LUA_OPCODE(PlayCurrentCommentary);

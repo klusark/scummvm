@@ -53,7 +53,29 @@ void RenderDroid::clampVector(RdVector3 vec, float eps) {
 	}
 }
 
+int RenderDroid::pointsCollinearRemastered(RdVector3 a, RdVector3 b, RdVector3 c) {
+	RdVector3 first;
+	RdVector3 second;
+
+	first[0] = (float)((double)b[0] - a[0]);
+	first[1] = (float)((double)b[1] - a[1]);
+	first[2] = (float)((double)b[2] - a[2]);
+	second[0] = (float)((double)c[0] - a[0]);
+	second[1] = (float)((double)c[1] - a[1]);
+	second[2] = (float)((double)c[2] - a[2]);
+
+	normalize3Acc(first);
+	normalize3Acc(second);
+
+	float dot = (float)fabs(((double)second[1] * first[1] + (double)second[0] * first[0]) + (double)second[2] * first[2]);
+
+	return dot >= 0.999f && dot <= 1.001f;
+}
+
 int RenderDroid::pointsCollinear(RdVector3 a, RdVector3 b, RdVector3 c) {
+	if (_remastered)
+		return pointsCollinearRemastered(a, b, c);
+
 	RdVector3 first;
 	RdVector3 second;
 

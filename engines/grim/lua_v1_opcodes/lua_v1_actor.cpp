@@ -469,7 +469,17 @@ void Lua_V1::PutActorAt() {
 	pos[0] = lua_getnumber(xObj);
 	pos[1] = lua_getnumber(yObj);
 	pos[2] = lua_getnumber(zObj);
-	g_grim->_sputActor->setActorPosition(actor, pos);
+
+	bool clearWalk = true;
+
+	if (g_grim->isRemastered()) {
+		lua_Object keepObj = lua_getparam(5);
+
+		if (lua_isnumber(keepObj))
+			clearWalk = lua_getnumber(keepObj) <= 0.0f;
+	}
+
+	g_grim->_sputActor->setActorPosition(actor, pos, clearWalk);
 }
 
 void Lua_V1::GetActorPos() {

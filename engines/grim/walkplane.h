@@ -98,14 +98,17 @@ public:
 	int _axisU;
 	int _axisV;
 	int _alwaysMerge;
-	// Triangles of the Remastered sector files: three indices of the vertices of the plane each
 	int _numTriangles;
 	int _triangles[kMaxTriangles][3];
 
 private:
+	void setTypeRemastered(int newType);
 	int closestPointRemastered(float *point);
 	int withinRemastered(float *point, uint flags);
 	double intersectionRemastered(float *a, float *b, float *out, float *edge);
+	void jumpOutRemastered(Puck *puck);
+	float *getConstraintVectorRemastered(Puck *puck);
+	int clipPolyRemastered(const float *poly, int numPoly, float *out);
 
 	WalkSystem *_system;
 };
@@ -139,7 +142,6 @@ public:
 	PathFinder *getPathFinder();
 	void markPathFinderDirty();
 
-	// Walk box path of the remastered: the working path holds 128 points
 	int getPathRemastered(float **path);
 	float (*getWorkingPath())[3] { return _workingPath; }
 	int getNumWorkingPathPoints() const { return _numWorkingPathPoints; }
@@ -161,6 +163,7 @@ private:
 			int numTriangles, int (*triangles)[3]);
 	WpVertex *addVertexDemo(float *pos);
 	int buildPathWithFixes(float *from, float *to, int tighten);
+	void shrinkBoxesRemastered(float amount);
 
 	RenderDroid *_rd;
 	StdMath *_stdMath;

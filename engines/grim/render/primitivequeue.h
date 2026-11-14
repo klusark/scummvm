@@ -52,7 +52,6 @@ struct SputPrimitiveObject {
 	int pattern;
 	int filled;
 
-	// Remastered only: the 24-bit color (red, green << 8, blue << 16) and the opacity of the rectangles on the canvas
 	uint colorRgb;
 	float alpha;
 };

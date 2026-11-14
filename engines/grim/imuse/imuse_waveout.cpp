@@ -127,7 +127,6 @@ void IMuse::waveOutWrite(uint8 **audioData, int &feedSize, int &sampleRate) {
 int IMuse::waveOutDeinit() {
 	_waveOutDisableWrite = 1;
 
-	// The remastered closes its audio device here (zg_Audio_Shutdown), the next init opens a new one
 	if (_remastered)
 		_internalMixer->closeOutput();
 

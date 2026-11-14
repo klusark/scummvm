@@ -37,6 +37,7 @@ class SputActorModule;
 class SputRoom;
 class StdConffile;
 class SysStruct;
+struct StdRect;
 
 struct Hotspot {
 	enum {
@@ -64,8 +65,6 @@ struct Hotspot {
 	float wait;
 };
 
-// Click areas of the scenes (the .hot file of each set) and the ones that the
-// scripts add. Polygon points are in the coordinates of the hotspot (coordMode).
 class HotspotManager {
 public:
 	enum {
@@ -97,7 +96,6 @@ public:
 		kCursorArrowDown
 	};
 
-	// Modes of the query, the numbers of the HOTSPOT_* constants of the scripts
 	enum QueryMode {
 		kModeNormal = 0,
 		kModeSpecial = 1,
@@ -115,32 +113,25 @@ public:
 	HotspotManager(SysStruct *hs, SputRoom *sputRoom, SputActorModule *sputActor, RenderDroid *rd);
 	~HotspotManager();
 
-	// The overlays that show an image when the pointer is on a hotspot
 	void setOverlays(OverlayManager *overlays) { _overlays = overlays; }
 	OverlayManager *getOverlays() const { return _overlays; }
 
-	// The 1920x1080 canvas and the coordinate spaces of the scripts
 	static void convertCoords1080(int *x, int *y, int mode, bool isSize);
 	static void convertCoordsNative(int *x, int *y, int mode, bool isSize);
+	static void convertRectNative(StdRect *rect, int mode);
 
-	// Reads the .hot file of a set (the name of the .set file) unless it is the loaded one. The
-	// hotspots added by the scripts stay. Called when the current set changes and when a room is restored.
 	void load(const char *setName);
 
-	// Forgets every hotspot, the overlays of the hotspots stay
 	void clear();
 
-	// Hotspots under a point of the canvas, the ones with priority come first
 	int getActiveHotspots(int canvasX, int canvasY, const Hotspot **out, int max, int mode);
 
-	// Returns the handle, or -1 when the table is full
 	int addHotspot(const char *id, int x, int y, int width, int height, int cursor, int boost, int menuType,
 			const char *hoverImage, int hoverLayer, int coords);
 	void removeHotspot(int handle);
 	void updateHotspot(const char *id, int x, int y, int coords);
 	void linkHotspot(const char *id, int actorHandle);
 
-	// Block of the save game after the two cursor handles
 	int serialize(Common::WriteStream *stream) const;
 	int deserialize(Common::ReadStream *stream);
 

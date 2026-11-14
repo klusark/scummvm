@@ -206,7 +206,10 @@ static void tonumber() {
 			e++; // skip trailing spaces
 		if (*e)
 			return; // invalid format: return nil
-		lua_pushnumber(n);
+		if (luaIsRemastered)
+			lua_pushnumber((float)(uint32)n);
+		else
+			lua_pushnumber(n);
 	}
 }
 
@@ -533,11 +536,54 @@ static struct luaL_reg int_funcs[] = {
 	{ "dofile", luaI_dofile }
 };
 
+static struct luaL_reg int_funcs_remastered[] = {
+	{ "setfallback", luaT_setfallback },
+	{ "assert", luaI_assert },
+	{ "call", luaI_call },
+	{ "collectgarbage", luaI_collectgarbage },
+	{ "dofile", luaI_dofile },
+	{ "copytagmethods", copytagmethods },
+	{ "dostring", internaldostring },
+	{ "error", luaI_error },
+	{ "foreach", foreach },
+	{ "foreachvar", foreachvar },
+	{ "getglobal", getglobal },
+	{ "newtag", newtag },
+	{ "next", next },
+	{ "nextvar", nextvar },
+	{ "print", luaI_print },
+	{ "rawgetglobal", rawgetglobal },
+	{ "rawgettable", rawgettable },
+	{ "rawsetglobal", rawsetglobal },
+	{ "rawsettable", rawsettable },
+	{ "seterrormethod", seterrormethod },
+	{ "setglobal", setglobal },
+	{ "settagmethod", settagmethod },
+	{ "gettagmethod", gettagmethod },
+	{ "settag", settag },
+	{ "tonumber", tonumber },
+	{ "tostring", bi_tostring },
+	{ "tag", luatag },
+	{ "type", luaI_type },
+	{ "start_script", start_script },
+	{ "stop_script", stop_script },
+	{ "next_script", next_script },
+	{ "identify_script", identify_script },
+	{ "pause_scripts", pause_scripts },
+	{ "unpause_scripts", unpause_scripts },
+	{ "find_script", find_script },
+	{ "break_here", break_here }
+};
+
 void luaB_predefine() {
 	// pre-register mem error messages, to avoid loop when error arises
 	luaS_newfixedstring(tableEM);
 	luaS_newfixedstring(memEM);
-	luaL_openlib(int_funcs, ARRAYSIZE(int_funcs));
+
+	if (luaIsRemastered)
+		luaL_openlib(int_funcs_remastered, ARRAYSIZE(int_funcs_remastered));
+	else
+		luaL_openlib(int_funcs, ARRAYSIZE(int_funcs));
 	lua_pushstring(LUA_VERSION);
 	lua_setglobal("_VERSION");
 }

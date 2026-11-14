@@ -133,7 +133,6 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 
 	_showFps = ConfMan.getBool("show_fps");
 
-	// The remastered keeps the plain type neutral: the movies use it, and the output of iMUSE has its own level
 	_mixer->setVolumeForSoundType(Audio::Mixer::kPlainSoundType, isRemastered() ? Audio::Mixer::kMaxMixerVolume : 192);
 	_mixer->setVolumeForSoundType(Audio::Mixer::kSFXSoundType, ConfMan.getInt("sfx_volume"));
 	_mixer->setVolumeForSoundType(Audio::Mixer::kSpeechSoundType, ConfMan.getInt("speech_volume"));
@@ -217,7 +216,6 @@ Common::KeymapArray GrimEngine::initKeymapsGrim(const char *target) {
 	Keymap *engineKeyMap = new Keymap(Keymap::kKeymapTypeGame, "grim", "Grim Fandango");
 	Action *act;
 
-	// The remastered scripts read the pad buttons directly, so they stay out of the keymap
 	const bool remastered = target && ConfMan.get("extra", target).contains("Remastered");
 
 	engineKeyMap->setPartialMatchAllowed(false);
@@ -327,7 +325,6 @@ int GrimEngine::applyStickAction(int *axes, const Common::Event &event) {
 
 int GrimEngine::getJoystickButtonIndex(int button, bool remastered) {
 	if (remastered) {
-		// Button order of the remastered scripts
 		switch (button) {
 		case Common::JOYSTICK_BUTTON_A:
 			return 0;
@@ -772,7 +769,6 @@ void GrimEngine::destroyModules() {
 uint GrimEngine::getHardwareBackends() const {
 	uint mask = 0;
 
-	// The remastered composes its 1920x1080 output in system memory
 	if (isRemastered())
 		return mask;
 
@@ -988,7 +984,7 @@ void GrimEngine::setLanguage(int language) {
 }
 
 void GrimEngine::setRenderingMode(int mode) {
-	// The classic renderer is the only one available, so the requested mode is not applied
+	// Only the classic renderer exists
 }
 
 void GrimEngine::grimMain() {
@@ -1496,7 +1492,6 @@ int GrimEngine::loop(int render, int manualTicks) {
 void GrimEngine::timedPageFlip() {
 	setPerfCounter(8);
 
-	// The frame in which the menus end is black with only the borders, the next frame redraws the scene
 	if (isRemastered() && _libMode != kLibModeExiting) {
 		if (_displayPrevMode == kLibModeMenu && _libMode != kLibModeMenu && _renderingMode != kRenderingModeHd) {
 			_sputRender->getIris(1.0f, 320, 240);
@@ -1508,7 +1503,6 @@ void GrimEngine::timedPageFlip() {
 	}
 
 	if (isRemastered()) {
-		// The canvas shows each picture one flip after it is made, so every mode flips but the exit
 		if (_libMode != kLibModeExiting)
 			_sputRender->pageFlip();
 
@@ -1539,7 +1533,6 @@ void GrimEngine::timedPageFlip() {
 	queryPerfCounterDiff(8);
 }
 
-// The widescreen option 2 stretches the 4:3 area over the whole output
 bool GrimEngine::isWidescreenStretched() {
 	return (int)_wuRegistry->getFloat("Widescreen", 0.0f) == 2;
 }
@@ -2403,7 +2396,6 @@ int GrimEngine::selectDisplayMode(int deviceIndex, int modeIndex, int threeDInde
 	} else {
 		Graphics::PixelFormat pixelFormat(2, 5, 6, 5, 0, 11, 5, 0, 0);
 
-		// The remastered has the scene in the 640x480 surface and puts it on a 1920x1080 screen
 		if (_hdCanvas) {
 			_hdCanvas->open();
 		} else {
@@ -2882,7 +2874,6 @@ void GrimEngine::pumpEvents() {
 		case Common::EVENT_LBUTTONUP:
 			addMouseButtonEvent(12, 0);
 			break;
-		// The remastered numbers the buttons left, middle, right
 		case Common::EVENT_RBUTTONDOWN:
 			addMouseButtonEvent(isRemastered() ? 14 : 13, 0x80);
 			break;
@@ -2901,7 +2892,6 @@ void GrimEngine::pumpEvents() {
 		case Common::EVENT_X1BUTTONUP:
 			addMouseButtonEvent(15, 0);
 			break;
-		// The remastered takes a pad axis inside the dead zone for 0
 		case Common::EVENT_JOYAXIS_MOTION:
 			if (event.joystick.axis < 6) {
 				int position = event.joystick.position;
@@ -2970,8 +2960,6 @@ void GrimEngine::handleFocus(int hasFocus) {
 void GrimEngine::handleKey(Common::EventType type, const Common::KeyState &key, bool repeat) {
 	Common::KeyCode keycode = key.keycode;
 
-	// The player can choose the keys in the remastered. While a key is being chosen the next press
-	// is taken for it and the controls do not see it, otherwise a chosen key acts as the key it replaces.
 	if (isRemastered()) {
 		if (type == Common::EVENT_KEYDOWN && !repeat && _stdControl->isKeyMappingActive()) {
 			_luaV1->notifyKeyMapped(_stdControl->endKeyMapping(keycode));
@@ -2993,7 +2981,6 @@ void GrimEngine::handleKey(Common::EventType type, const Common::KeyState &key, 
 		return;
 	}
 
-	// The remastered controls take the repeats of a held key as presses too
 	if (scanCode && (!repeat || isRemastered()))
 		addKeyboardEvent(scanCode, 0x80);
 

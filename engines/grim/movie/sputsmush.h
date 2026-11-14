@@ -80,13 +80,10 @@ public:
 	virtual int pause(int pause);
 	virtual void blitFrame() {}
 
-	// Remastered: true while a HD movie plays (the commentary checks it before it ducks the movie audio)
 	bool isHdMoviePlaying() const { return videoIsPlayingMovie(); }
 	bool videoIsPlayingMovie() const;
 	bool videoIsVisible() const { return _isVideoVisible; }
 
-	// Remastered: the commentary module sets this while a commentary plays. The audio of the HD movie
-	// is then limited to 5% of the full gain; it is cleared when the commentary stops.
 	void setCommentaryDucking(bool ducking) { _commentaryDucking = ducking; }
 
 protected:
@@ -123,8 +120,6 @@ protected:
 	uint _startTime;
 	uint _lastPeriodicTime;
 
-	// HD movie (remastered): the Theora decoder, the surface that holds the last frame and the surface
-	// of a stopped movie (freed later, the canvas may still read it in the current frame)
 	Video::TheoraDecoder *_videoClip;
 	Graphics::Surface *_movieSurface;
 	Graphics::Surface *_releasedSurface;
@@ -137,8 +132,6 @@ protected:
 	bool _wasPlayingMovie;
 	bool _commentaryDucking;
 
-	// Pacing of the clip: the frame decoded but not shown yet, the frame rate of the stream,
-	// and the time at which the decoder ran out of video and audio
 	const Graphics::Surface *_videoPendingFrame;
 	int _videoFpsNumerator;
 	int _videoFpsDenominator;
@@ -146,13 +139,10 @@ protected:
 	bool _videoEnded;
 	uint32 _videoEndedTime;
 
-	// Changes every time the pixels of the movie surface change, so the canvas knows when a frame is the same
 	int _movieSerial;
 
-	// YCbCr to RGBX conversion of the HD movie frames, created with the first movie
 	TheoraConverter *_theoraConverter;
 
-	// Volume gain and 16 bit conversion of the audio of the HD movie playing, created with each movie
 	TheoraAudioConverter *_theoraAudioConverter;
 };
 

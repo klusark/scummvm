@@ -971,7 +971,6 @@ int Res::sysLoad(Common::ReadStream *stream) {
 	return 0;
 }
 
-// The remastered keeps the serial in a slot of 8 bytes
 int Res::sysSaveRemastered(Common::WriteStream *stream) {
 	int numNodes = 0;
 

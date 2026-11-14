@@ -20,9 +20,12 @@
  */
 
 #include "common/algorithm.h"
+#include "common/textconsole.h"
 #include "common/util.h"
 
 #include "engines/grim/actor/sputactor.h"
+#include "engines/grim/renderdroid/rd.h"
+#include "engines/grim/sputroom.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/movie/sputsmush.h"
 #include "engines/grim/remastered/hdcanvas.h"
@@ -36,7 +39,6 @@
 
 namespace Grim {
 
-// Layers of the overlays and pages of the text that the remastered scripts use
 enum {
 	kOverlayBack = 1,
 	kOverlayUi = 2,
@@ -55,13 +57,11 @@ enum {
 	kTextPageMotherDuck = 4
 };
 
-// The overlays that have the whole canvas for themselves do not follow the 4:3 area
 enum {
 	kBoxingNone = 0,
 	kBoxingFull = 1
 };
 
-// Rows of the 640x480 software surface that the movies and the menus black out
 void SputRender::clearSceneBuffer() {
 	if (!_backBuffer->pixels)
 		return;
@@ -71,7 +71,6 @@ void SputRender::clearSceneBuffer() {
 	_stdDisplay->vBufferUnlock(_backBuffer);
 }
 
-// The 3D scene is not drawn in the menus, and not in the movies unless a movie is playing
 bool SputRender::disable3DRendering() {
 	int mode = _grim->getLibMode();
 
@@ -82,7 +81,6 @@ void SputRender::updateTextPage(int force, int page) {
 	_sputText->update(force, page);
 }
 
-// The movie frame of the remastered: true when the movie just finished and the frame goes on as a normal one
 bool SputRender::updateMovieRemastered() {
 	OverlayManager *overlays = _grim->getHdCanvas()->getOverlays();
 
@@ -95,8 +93,7 @@ bool SputRender::updateMovieRemastered() {
 		_movieJustFinished = 1;
 	}
 
-	// The scene buffer is black behind a movie in its first two frames of the whole run and in the frame where a
-	// movie ends. The counter is never reset.
+	// The counter is never reset
 	if (_clearedBehindMovie < 2 || _movieJustFinished) {
 		StdRect rect;
 
@@ -131,7 +128,6 @@ bool SputRender::updateMovieRemastered() {
 	return _movieJustFinished != 0;
 }
 
-// The layers drawn over the scene in a normal or menu frame, in the order of the original
 void SputRender::drawOverlayLayers(int mode) {
 	HdCanvas *canvas = _grim->getHdCanvas();
 	OverlayManager *overlays = canvas->getOverlays();
@@ -163,7 +159,6 @@ void SputRender::drawOverlayLayers(int mode) {
 	drawLastLayers();
 }
 
-// The layers that every frame with a render mode of the menus has: the loading screen and the cursor
 void SputRender::drawLastLayers() {
 	OverlayManager *overlays = _grim->getHdCanvas()->getOverlays();
 
@@ -172,7 +167,6 @@ void SputRender::drawLastLayers() {
 	overlays->render(kOverlayCursor, kBoxingNone);
 }
 
-// The frame when no room is set: the loading screen of the boot
 void SputRender::drawNoRoomRemastered() {
 	OverlayManager *overlays = _grim->getHdCanvas()->getOverlays();
 
@@ -181,8 +175,48 @@ void SputRender::drawNoRoomRemastered() {
 	updateTextPage(1, kTextPageMotherDuck);
 }
 
-// The filled rectangles of a pass are also put on the canvas, in its own pixels and in the order of the
-// original. The other rectangles, the lines and the polygons are only drawn in the 640x480 surface.
+bool SputRender::reverseProjectRemastered(int x, int y, float *out) {
+	RdCamera *camera = _rd->_camera.getCurrent();
+
+	if (!camera || !camera->canvas)
+		return false;
+
+	if (x < 0 || y < 0 || x >= 640 || y >= 480)
+		return false;
+
+	if (!_cleanZBuffer || !_cleanZBuffer->pixels || !_camera || camera->focalLen == 0.0f ||
+			x >= _cleanZBuffer->tex.width || y >= _cleanZBuffer->tex.height) {
+		warning("SputRender::reverseProjectRemastered(): the Z buffer or the camera cannot be used");
+		return false;
+	}
+
+	RdCanvas *canvas = camera->canvas;
+	uint16 zValue = ((const uint16 *)_cleanZBuffer->pixels)[_cleanZBuffer->tex.width * y + x];
+	int shiftedZ = (int)((uint)zValue << (canvas->zScaleShift & 31));
+	float scaledZ = (float)((double)shiftedZ * 0.0000152587890625);
+
+	// The original could divide by zero here, let's avoid that...
+	if (scaledZ == 0.0f)
+		return false;
+
+	float distance = (float)(1.0 / (double)scaledZ - 1.0);
+
+	if (distance > 100.0f)
+		return false;
+
+	double focalLen = camera->focalLen;
+	double centerX = (double)canvas->xCenter - 0.5;
+	double centerY = (double)canvas->yCenter - 0.5;
+	RdVector3 point;
+
+	point[0] = (float)((((double)x - centerX) * distance) / focalLen);
+	point[1] = distance;
+	point[2] = (float)(-((((double)y - centerY) * distance) / focalLen));
+	_rd->transformPoint34(out, point, _camera->posMatrix);
+
+	return true;
+}
+
 void SputRender::drawPrimitivesCanvas(int layerMask) {
 	if (_skipPrimitives)
 		return;

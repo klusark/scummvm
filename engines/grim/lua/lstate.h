@@ -111,6 +111,7 @@ struct LState {
 
 extern LState *lua_state, *lua_rootState;
 extern bool luaIsEmi;
+extern bool luaIsRemastered;
 
 extern int globalTaskSerialId;
 

@@ -73,7 +73,7 @@ void PathFinder::freePolygons() {
 	_numPolygons = 0;
 }
 
-// The SSE min and max return the second operand when the first is not smaller or larger, or is NaN
+// The second operand is returned when the first is NaN
 float PathFinder::sseMin(float a, float b) {
 	return (a < b) ? a : b;
 }
@@ -96,7 +96,6 @@ PathFinder::Polygon *PathFinder::newPolygon() const {
 	return poly;
 }
 
-// The index of the vertex at the position, which is added when there is none. -1 when the pool is full.
 int PathFinder::vertIndex(const float *pos) {
 	if (_numVertices > 0) {
 		for (int i = 0; i < _numVertices; i++) {
@@ -126,7 +125,6 @@ int PathFinder::vertIndex(const float *pos) {
 	return index;
 }
 
-// The box around the first vertices of the segments, a little larger than they are
 void PathFinder::computeBoundingBox(Polygon *poly) const {
 	for (int i = 0; i < 3; i++) {
 		poly->boxMin[i] = kFarValue;
@@ -143,7 +141,6 @@ void PathFinder::computeBoundingBox(Polygon *poly) const {
 	}
 }
 
-// The outline of a plane as directed segments. Null when the vertices or the segments do not fit.
 PathFinder::Polygon *PathFinder::fromWalkPlane(const WalkPlane *plane) {
 	Polygon *poly = newPolygon();
 	int numVerts = plane->_numVerts;
@@ -190,7 +187,6 @@ int PathFinder::addSegment(Polygon *poly, const Segment &segment) const {
 	return poly->numSegments <= 255 ? poly->numSegments - 1 : -1;
 }
 
-// Winding number of the segments around a point, on the plane of x and y
 bool PathFinder::pointInPoly2D(const Polygon *poly, const float *point) const {
 	int winding = 0;
 
@@ -215,7 +211,6 @@ bool PathFinder::pointInPoly2D(const Polygon *poly, const float *point) const {
 	return winding != 0;
 }
 
-// True when the point is on one of the segments
 bool PathFinder::onEdge(const Polygon *poly, const float *point) const {
 	for (int i = 0; i < poly->numSegments; i++) {
 		const float *p0 = _vertices[poly->segments[i].v0].pos;
@@ -228,7 +223,7 @@ bool PathFinder::onEdge(const Polygon *poly, const float *point) const {
 		double denominator = (double)(float)((double)dx * dx) + (float)((double)dy * dy);
 		float t = (float)(numerator / denominator);
 
-		// A value that is not below 1, or not a number, becomes 1
+		// A NaN becomes 1
 		if (!(t < 1.0f))
 			t = 1.0f;
 		else if (!(0.0f < t))
@@ -247,7 +242,6 @@ bool PathFinder::onEdge(const Polygon *poly, const float *point) const {
 	return false;
 }
 
-// True when the middle of the segment is inside the polygon and not on its outline
 bool PathFinder::segmentInPoly2D(const Polygon *poly, const Segment &segment) const {
 	if (poly->numSegments <= 0)
 		return false;
@@ -271,7 +265,6 @@ bool PathFinder::segmentInPoly2D(const Polygon *poly, const Segment &segment) co
 	return !onEdge(poly, middle);
 }
 
-// The height of the first vertex of the segment that is nearest to the point
 float PathFinder::getSectorHeight(const Polygon *poly, const float *point) const {
 	float bestDistance = kFarValue;
 	float height = kFarValue;
@@ -295,7 +288,6 @@ float PathFinder::getSectorHeight(const Polygon *poly, const float *point) const
 	return height;
 }
 
-// True when a segment of the polygon starts at a vertex where a segment of another polygon starts
 bool PathFinder::sharesVertexWithOther(Polygon **polys, int count, int index) const {
 	bool starts[kMaxVertices];
 	const Polygon *poly = polys[index];
@@ -319,9 +311,6 @@ bool PathFinder::sharesVertexWithOther(Polygon **polys, int count, int index) co
 	return false;
 }
 
-// Moves the point into the polygons when it is outside of them and returns the polygon it is in.
-// After the first point the polygons that are not joined to the others are skipped, except the one
-// of the start index.
 int PathFinder::projectIntoPolygons(float *point, Polygon **polys, int count, int startIndex) const {
 	if (count <= 0) {
 		point[0] = kFarValue;
@@ -359,7 +348,6 @@ int PathFinder::projectIntoPolygons(float *point, Polygon **polys, int count, in
 	if (best >= 0)
 		return best;
 
-	// Outside of everything: the nearest point of any outline
 	int result = -1;
 	float bestDistance = kFarValue;
 	float snapped[3] = { kFarValue, kFarValue, kFarValue };
@@ -425,7 +413,6 @@ int PathFinder::projectIntoPolygons(float *point, Polygon **polys, int count, in
 	return result;
 }
 
-// Makes the polygons of the walkable area and the graph of its corners
 int PathFinder::rebuild() {
 	for (int i = 0; i < _numPolygons; i++) {
 		if (_polygons[i]) {
@@ -457,7 +444,6 @@ int PathFinder::rebuild() {
 		}
 	}
 
-	// Planes that touch become one polygon
 	bool changed;
 
 	do {
@@ -484,7 +470,6 @@ int PathFinder::rebuild() {
 		}
 	} while (changed);
 
-	// The boxes of the actors are cut out
 	if (_numBoxPoints > 3) {
 		for (int box = 0; box < _numBoxPoints / 4; box++) {
 			if (_numPolygons >= kMaxPolygons) {
@@ -554,8 +539,6 @@ int PathFinder::rebuild() {
 	return 1;
 }
 
-// Cuts the segment at the parameter t, which has to be inside of the segment. Returns 1 when it was
-// cut or failed, 0 when t is too near to the end points.
 int PathFinder::splitSegment(Polygon *poly, int index, float t, unsigned *fail) {
 	if (!(t > kSplitLow && t < kSplitHigh))
 		return 0;
@@ -600,7 +583,6 @@ int PathFinder::splitSegment(Polygon *poly, int index, float t, unsigned *fail) 
 	return 1;
 }
 
-// Cuts the segment at the projections of the two points, which lie on the line of the segment
 bool PathFinder::linearSplit(Polygon *poly, int index, const float *first, const float *second, unsigned *fail) {
 	const float *p0 = _vertices[poly->segments[index].v0].pos;
 	const float *p1 = _vertices[poly->segments[index].v1].pos;
@@ -703,8 +685,6 @@ bool PathFinder::linearSplit(Polygon *poly, int index, const float *first, const
 	return current != index;
 }
 
-// True when the segments cross or, when they are parallel, lie on one line and overlap. Gives the
-// position of the crossing on both segments.
 bool PathFinder::crossSegments(const float *a0, const float *a1, const float *b0, const float *b1, float *tA, float *tB) const {
 	float ex = a1[0] - a0[0];
 	float ey = a1[1] - a0[1];
@@ -752,8 +732,6 @@ bool PathFinder::crossSegments(const float *a0, const float *a1, const float *b0
 	return true;
 }
 
-// The union (mode 1) of two polygons or the first one without the second (mode 0). Null when they do
-// not touch, are on different floors or do not fit. The polygons get the cuts at the crossings.
 PathFinder::Polygon *PathFinder::combinePolygons(Polygon *a, Polygon *b, unsigned mode) {
 	if (!(b->boxMax[0] > a->boxMin[0]))
 		return nullptr;
@@ -935,7 +913,6 @@ PathFinder::Polygon *PathFinder::combinePolygons(Polygon *a, Polygon *b, unsigne
 	return result;
 }
 
-// Reverses the segments that were not aligned yet when they meet an aligned one the wrong way round
 void PathFinder::alignSegmentDirection(Polygon *poly) const {
 	int numSegments = poly->numSegments;
 	int changed;
@@ -976,8 +953,6 @@ void PathFinder::alignSegmentDirection(Polygon *poly) const {
 	} while (changed);
 }
 
-// A polygon with parts that are not joined becomes one polygon for each part, but only when none of
-// the parts has a negative sum
 int PathFinder::separatePolygons(Polygon **polys, int *count) {
 	int originalCount = *count;
 
@@ -1102,7 +1077,6 @@ int PathFinder::separatePolygons(Polygon **polys, int *count) {
 	return 1;
 }
 
-// Drops the vertices that no segment uses, the last vertices take their place. Returns how many remain.
 int PathFinder::compactVertices(Polygon **polys, int count) {
 	int vertices = _numVertices;
 
@@ -1143,9 +1117,6 @@ int PathFinder::compactVertices(Polygon **polys, int count) {
 	return _numVertices;
 }
 
-// Fills the graph from the node first on with the vertices where the outline turns away from the
-// walkable side, and the ones where several outlines meet. The vertices are also told which polygons
-// they belong to. Returns the next free node, or -1 when an outline is open.
 int PathFinder::getCCWverts(Vertex *graph, Polygon **polys, int count, int first) {
 	int numVerts = _numVertices;
 
@@ -1229,8 +1200,6 @@ int PathFinder::getCCWverts(Vertex *graph, Polygon **polys, int count, int first
 	return out;
 }
 
-// Weights of the edges of the graph: the distance between nodes that see each other, 0 for no edge.
-// The nodes from first to last are connected to all the nodes after them.
 void PathFinder::visibilityGraphNaive(int from, int to) {
 	for (int i = from; i < to; i++) {
 		_adjacency[i][i] = 0.0f;
@@ -1328,7 +1297,6 @@ void PathFinder::visibilityGraphNaive(int from, int to) {
 	}
 }
 
-// A* over the graph. The path is written from the node to back to the node from.
 int PathFinder::findPath(int from, int to, float (*outPath)[3], int maxPoints) const {
 	float targetX = _graph[to].pos[0];
 	float targetY = _graph[to].pos[1];
@@ -1452,8 +1420,6 @@ int PathFinder::findPath(int from, int to, float (*outPath)[3], int maxPoints) c
 	}
 }
 
-// The corners of the path are replaced by arcs of a small circle. The first pass finds the arcs and
-// keeps one point of each, the second pass inserts them, looking at those points for the next corner.
 void PathFinder::smoothenPath(float (*path)[3], int *numPoints, int maxPoints) const {
 	float copy[kMaxPathPoints][3];
 	float out[kMaxCircleOut][3];
@@ -1519,7 +1485,6 @@ void PathFinder::smoothenPath(float (*path)[3], int *numPoints, int maxPoints) c
 	}
 }
 
-// Angle of the direction from the corner to the other point, turned by the angle of the arc radius
 float PathFinder::getCircleAngle(const float *corner, const float *other, bool positive) const {
 	float deltaX = (float)((double)other[0] - corner[0]);
 	float deltaY = (float)((double)other[1] - corner[1]);
@@ -1536,9 +1501,6 @@ float PathFinder::getCircleAngle(const float *corner, const float *other, bool p
 	return (float)((double)angle - arc);
 }
 
-// Writes the points of the path from the point before the corner to the one after it, with an arc
-// around the corner in the middle, to out. Returns how many points the arc adds to the path, or 0
-// when the corner is too close to its neighbours or the arc would cross the outline.
 int PathFinder::addCircleSegments(float (*path)[3], int index, float (*out)[3], const float *nextPoint, const float *prevPoint) const {
 	const float *corner = path[index];
 	const float *following = path[index + 1];

@@ -114,7 +114,6 @@ void HdCanvas::open() {
 	if (!_frame)
 		_frame = new uint32[kWidth * kHeight]();
 
-	// The pixel format may be another one, and the screen was just set up
 	releaseSceneCaches();
 	_composedItems.clear();
 	_composedValid = false;
@@ -137,7 +136,6 @@ void HdCanvas::close() {
 	_scenePitch = 0;
 }
 
-// The storage of the queue is kept from one frame to the next
 void HdCanvas::beginFrame() {
 	_items.resize(0);
 }
@@ -176,7 +174,6 @@ void HdCanvas::queueBitmap(int layer, const byte *rgba, int width, int height, i
 	item.bitmapY = y;
 	item.bitmapAlpha = alpha;
 
-	// The owner of the pixels may change them without telling
 	item.changing = true;
 	_items.push_back(item);
 }
@@ -205,7 +202,6 @@ void HdCanvas::queueOverlay(const byte *premultipliedRgba, int srcWidth, int src
 	item.height = height;
 	item.mirror = mirror;
 
-	// A value that is not below 1 (or is not a number) is 1
 	item.alpha = 1.0f;
 
 	if (alpha <= 1.0f)
@@ -220,8 +216,7 @@ void HdCanvas::queueOverlay(const byte *premultipliedRgba, int srcWidth, int src
 	_items.push_back(item);
 }
 
-// The rectangle of the primitives: the scale is the same on both axes and the text canvas is centered. Every value
-// is computed in double and rounded to float once.
+// Every value is computed in double and rounded to float once
 void HdCanvas::queueFilledRectangle(int left, int top, int right, int bottom, uint colour, float alpha) {
 	int canvasWidth = g_grim->getTextCanvasWidth();
 	float scaleX;
@@ -249,7 +244,6 @@ void HdCanvas::queueFilledRectangle(int left, int top, int right, int bottom, ui
 	_items.push_back(item);
 }
 
-// Hides everything queued so far in the frame: a black quad over the whole output
 void HdCanvas::clearBuffer() {
 	Item item;
 
@@ -274,7 +268,6 @@ void HdCanvas::queueText(const HdTextDraw &draw) {
 	item.text = draw;
 }
 
-// The movie covers a rectangle of the output that depends on its shape
 void HdCanvas::queueMovie(const byte *rgba, int width, int height, int contentSerial) {
 	if (!rgba || width <= 0 || height <= 0)
 		return;
@@ -321,7 +314,6 @@ void HdCanvas::dropPixels(const byte *pixels) {
 			_items[i].pixels = nullptr;
 	}
 
-	// A new buffer may take the address of the freed one
 	_composedValid = false;
 }
 
@@ -329,7 +321,6 @@ float HdCanvas::getAreaScaleX() const {
 	return _stretched ? (float)kWidth / (float)kAreaWidth : 1.0f;
 }
 
-// The scripts shrink some horizontal offsets by it: the smaller scale over the horizontal one
 float HdCanvas::getWidescreenCorrection() const {
 	float scaleX = getAreaScaleX();
 
@@ -345,16 +336,13 @@ HdTextCanvas HdCanvas::getTextCanvas() const {
 
 	canvas.width = g_grim->getTextCanvasWidth();
 
-	// The menus have the 16:9 canvas (aspect above 1.7), the game the 4:3 one
 	canvas.boxingHD = (double)canvas.width / 1080.0 > 1.7;
 	canvas.stretched = _stretched;
 
 	return canvas;
 }
 
-// The scale of an area of the given size over the output: one scale on both axes, centered, or one per axis
-// The sizes are converted to float first. The offsets are the half of what is left, computed in double and rounded
-// to float once.
+// The offsets are computed in double and rounded to float once
 void HdCanvas::computeScaling(bool stretch, int referenceWidth, int referenceHeight, float *scaleX, float *scaleY,
 		float *offsetX, float *offsetY) {
 	float backWidth = (float)(uint32)kWidth;
@@ -388,7 +376,6 @@ int HdCanvas::toByte(float value) {
 	return (int)(value * 255.0f + 0.5f);
 }
 
-// The first pixel whose center is not before the edge, kept inside 0..limit
 int HdCanvas::clampPixel(float value, int limit) {
 	float pixel = ceilf(value - 0.5f);
 
@@ -401,7 +388,6 @@ int HdCanvas::clampPixel(float value, int limit) {
 	return (int)pixel;
 }
 
-// The opacity of the scene: at the start of the run it is 0 and goes up to 1 in 0.75 seconds
 void HdCanvas::updateSoftwareAlpha() {
 	double now = (double)g_system->getMillis();
 
@@ -431,7 +417,7 @@ void HdCanvas::updateSoftwareAlpha() {
 
 		float t = _softwareAlphaBlendTime / 0.75f;
 
-		// The mix is one float store of a double expression, then the smoothstep: 3 - 2x, times x squared
+		// The mix is one float store of a double expression
 		float value = (float)(((double)t * (double)_softwareAlphaEnd) + ((1.0 - (double)t) * (double)_softwareAlphaStart));
 		float clamped = 0.0f;
 
@@ -444,7 +430,6 @@ void HdCanvas::updateSoftwareAlpha() {
 	}
 }
 
-// The front surface has the shape of the surface of the engine; a new one is black
 void HdCanvas::prepareFrontScene(const StdVBuffer *scene) {
 	int pitch = scene->tex.pitchInBytes;
 	int height = scene->tex.height;
@@ -460,7 +445,6 @@ void HdCanvas::prepareFrontScene(const StdVBuffer *scene) {
 	_sceneFormat = scene->tex.format;
 }
 
-// The picture that the next present shows, for the code that draws into it (the progress bar)
 byte *HdCanvas::getFrontScene(const StdVBuffer *engineScene, int *pitchInBytes, int *width, int *height) {
 	if (!engineScene || !engineScene->pixels)
 		return nullptr;
@@ -474,7 +458,6 @@ byte *HdCanvas::getFrontScene(const StdVBuffer *engineScene, int *pitchInBytes, 
 	return _frontScene;
 }
 
-// The surface the engine drew is shown by the next flip, and it gets the one that was shown
 void HdCanvas::swapScene(const StdVBuffer *scene) {
 	if (!scene || !scene->pixels)
 		return;
@@ -522,7 +505,6 @@ void HdCanvas::buildPowTable(PowTable *table, float exponent) {
 	table->valid = true;
 }
 
-// The byte that the power of the value is written as: the number of thresholds that are not above the value
 byte HdCanvas::lookupPow(const PowTable &table, float value) const {
 	if (!(value > 0.0f))
 		return 0;
@@ -545,7 +527,6 @@ void HdCanvas::present(const StdVBuffer *scene, float gamma) {
 	_gamma = gamma;
 	updateSoftwareAlpha();
 
-	// An item that replaces every pixel hides the scene and the items before it
 	int firstItem = findCoveringItem();
 	SceneCache *entry = nullptr;
 	bool matched = false;
@@ -564,7 +545,6 @@ void HdCanvas::present(const StdVBuffer *scene, float gamma) {
 	bool changing = hasChangingItem();
 
 	if (reusable && !changing && _composedValid && sceneToken == _composedSceneToken && sameQueue(_items, _composedItems)) {
-		// The frame would come out as the one on the screen
 		g_system->updateScreen();
 	} else {
 		composeFrame(firstItem, entry, matched);
@@ -583,7 +563,6 @@ void HdCanvas::present(const StdVBuffer *scene, float gamma) {
 
 	swapScene(scene);
 
-	// The option is read after the frame is done
 	_stretched = g_grim->isWidescreenStretched();
 }
 
@@ -592,7 +571,6 @@ void HdCanvas::fillFrame() {
 		_frame[i] = _opaqueMask;
 }
 
-// The scene is the first thing of the frame, then the items in the order they were queued
 void HdCanvas::composeFrame(int firstItem, SceneCache *entry, bool matched) {
 	uint start = 0;
 
@@ -632,8 +610,6 @@ bool HdCanvas::sceneCacheMatches(const SceneCache &entry) const {
 	return memcmp(entry.source, _frontScene, size) == 0;
 }
 
-// The entry of the scene that is going to be drawn: the one that has the same surface and parameters, or the
-// least recently used one, taken over for it
 HdCanvas::SceneCache *HdCanvas::findSceneCache(bool *matched) {
 	_sceneUseCounter++;
 
@@ -685,7 +661,6 @@ HdCanvas::SceneCache *HdCanvas::findSceneCache(bool *matched) {
 	return &entry;
 }
 
-// The frame as it is after the scene: the scene again, not the items
 void HdCanvas::storeSceneFrame(SceneCache *entry) {
 	if (!entry->frame)
 		entry->frame = new uint32[kWidth * kHeight];
@@ -760,7 +735,6 @@ bool HdCanvas::hasChangingItem() const {
 	return false;
 }
 
-// True for the items that write every pixel of the output without reading it: a movie or a solid fill over everything
 bool HdCanvas::coversFrame(const Item &item) const {
 	if (item.kind == kItemMovie) {
 		if (!item.pixels || !(item.width > 0.0f) || !(item.height > 0.0f))
@@ -785,8 +759,6 @@ int HdCanvas::findCoveringItem() const {
 	return -1;
 }
 
-// One row of the scene: the texels are filtered along the row for the columns of the output, with the
-// current column tables of drawScene. Two rows are kept; the one named by keepRow is not replaced.
 const float *HdCanvas::getHorizontalRow(int row, int keepRow) {
 	for (int i = 0; i < 2; i++) {
 		if (_horizontalRowIndex[i] == row)
@@ -823,7 +795,6 @@ const float *HdCanvas::getHorizontalRow(int row, int keepRow) {
 	return destination;
 }
 
-// The surface of the scene is a 16-bit texture with a bilinear filter, shown with the gamma 0.8 * g
 void HdCanvas::drawScene() {
 	if (!_frontScene)
 		return;
@@ -842,7 +813,6 @@ void HdCanvas::drawScene() {
 	_greenMax = (1 << format->greenBits) - 1;
 	_blueMax = (1 << format->blueBits) - 1;
 
-	// A texel is stored in 8 bits, the value of a 5 or 6 bits channel rounded
 	for (int i = 0; i <= _redMax; i++)
 		_redLevels[i] = _byteToFloat[(i * 255 + _redMax / 2) / _redMax];
 
@@ -869,7 +839,6 @@ void HdCanvas::drawScene() {
 	if (left >= right || top >= bottom)
 		return;
 
-	// The texel position of the center of every pixel, in texel centers
 	int columns = right - left;
 
 	_columnFirst.resize(columns);
@@ -888,8 +857,6 @@ void HdCanvas::drawScene() {
 	_horizontalRowIndex[0] = -1;
 	_horizontalRowIndex[1] = -1;
 
-	// The scene is always opaque, whatever the opacity: below 0.999999 the deferred renderer draws the front surface
-	// opaque, and the software layer over it with the opacity gives the same picture
 	buildPowTable(&_scenePow, 0.8f * _gamma);
 
 	for (int y = top; y < bottom; y++) {
@@ -939,7 +906,6 @@ void HdCanvas::writePixel(int x, int y, int red, int green, int blue) {
 	_frame[y * kWidth + x] = packPixel(red, green, blue);
 }
 
-// The blend of the shaders: premultiplied color over the pixel, written back as bytes
 void HdCanvas::blendPixel(int x, int y, float red, float green, float blue, float alpha) {
 	uint32 *destination = &_frame[y * kWidth + x];
 	uint32 value = *destination;
@@ -951,7 +917,6 @@ void HdCanvas::blendPixel(int x, int y, float red, float green, float blue, floa
 	*destination = packPixel(toByte(red + destRed * inverse), toByte(green + destGreen * inverse), toByte(blue + destBlue * inverse));
 }
 
-// A straight bitmap with a global alpha, for the items that are not drawn by the shaders of the original
 void HdCanvas::drawBitmap(const Item &item) {
 	if (!item.pixels || item.bitmapAlpha <= 0)
 		return;
@@ -999,7 +964,6 @@ void HdCanvas::drawBitmap(const Item &item) {
 	}
 }
 
-// The color quad: a constant premultiplied color over the pixels whose centers are inside
 void HdCanvas::drawFill(const Item &item) {
 	int left = clampPixel(item.x, kWidth);
 	int right = clampPixel(item.x + item.width, kWidth);
@@ -1031,7 +995,6 @@ void HdCanvas::drawFill(const Item &item) {
 		return;
 	}
 
-	// The result of the blend only depends on the byte that is under the pixel
 	float inverse = 1.0f - item.alpha;
 	byte redLevels[256];
 	byte greenLevels[256];
@@ -1055,7 +1018,6 @@ void HdCanvas::drawFill(const Item &item) {
 	}
 }
 
-// The textured quad shader: filtered texel, desaturation, power of the gamma, times the opacity, over the pixel
 void HdCanvas::drawOverlay(const Item &item) {
 	if (!item.pixels || !(item.width > 0.0f) || !(item.height > 0.0f))
 		return;
@@ -1076,7 +1038,7 @@ void HdCanvas::drawOverlay(const Item &item) {
 	double rowStart;
 	double rowEnd;
 
-	// The mirror modes are 0 to 3; any other value has all the texture coordinates at the size of the quad
+	// Any mirror mode past 3 has all the texture coordinates at the size of the quad
 	switch (item.mirror) {
 	case 0:
 		columnStart = 0.0;
@@ -1108,7 +1070,6 @@ void HdCanvas::drawOverlay(const Item &item) {
 		rowStart = (double)item.height;
 		rowEnd = rowStart;
 
-		// The position goes through an int below
 		if (columnStart > 1000000000.0) {
 			warning("HdCanvas::drawOverlay(): quad too wide for the mirror mode %d", item.mirror);
 			columnStart = 1000000001.0;
@@ -1156,7 +1117,6 @@ void HdCanvas::drawOverlay(const Item &item) {
 			levelPow[i] = powf(_byteToFloat[i], gamma);
 	}
 
-	// For the texels that are not filtered: what a byte of the image becomes, with the same operations as below
 	if (plain) {
 		for (int i = 0; i < 256; i++) {
 			float level = usePow ? levelPow[i] : _byteToFloat[i];
@@ -1265,7 +1225,6 @@ void HdCanvas::drawOverlay(const Item &item) {
 	}
 }
 
-// The text shader, one box after the other: the glyph and a shadow made of its neighbours, over the pixels
 void HdCanvas::drawText(const Item &item) {
 	static const int tapOffsets[11][2] = {
 		{ -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 }, { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 },
@@ -1293,8 +1252,7 @@ void HdCanvas::drawText(const Item &item) {
 		if (left >= right || top >= bottom)
 			continue;
 
-		// The atlas is sampled at the corner of the texels: every sample is a mix of a block of four, and the
-		// fractions are the same for the whole box
+		// The atlas is sampled at the corner of the texels, every sample is a mix of four
 		float positionX = ((float)left + 0.5f) - quadLeft;
 		float positionY = ((float)top + 0.5f) - quadTop;
 		int startX = (int)floorf(positionX);
@@ -1304,7 +1262,6 @@ void HdCanvas::drawText(const Item &item) {
 		float inverseX = 1.0f - fractionX;
 		float inverseY = 1.0f - fractionY;
 
-		// The filtered values for the offsets -2 .. size of the box, the glyph is at 2 in them
 		int gridWidth = quadWidth + 3;
 		int gridHeight = quadHeight + 3;
 
@@ -1312,7 +1269,6 @@ void HdCanvas::drawText(const Item &item) {
 		_textRowFirst.resize(gridWidth);
 		_textRowSecond.resize(gridWidth);
 
-		// Every row of the grid mixes two rows of the glyph, so the horizontal mix of a glyph row is done once
 		float *upperRow = &_textRowFirst[0];
 		float *lowerRow = &_textRowSecond[0];
 
@@ -1387,7 +1343,6 @@ void HdCanvas::drawText(const Item &item) {
 	}
 }
 
-// The movie: a bilinear filtered frame that replaces the pixels, with the gamma as the exponent
 void HdCanvas::drawMovie(const Item &item) {
 	if (!item.pixels || !(item.width > 0.0f) || !(item.height > 0.0f))
 		return;
@@ -1426,8 +1381,6 @@ void HdCanvas::drawMovie(const Item &item) {
 			aligned = false;
 	}
 
-	// When no texel is filtered, a channel only depends on its byte. The value of a byte is what the filter below
-	// gives for it: a weight of 1 and a weight of 0 leave the value as it is.
 	uint32 redPixels[256];
 	uint32 greenPixels[256];
 	uint32 bluePixels[256];
@@ -1482,8 +1435,6 @@ void HdCanvas::drawMovie(const Item &item) {
 	}
 }
 
-// One row of an image filtered along the row for the current columns: the texels of a column mixed with the weight
-// of its second texel. Two rows are kept; the one named by keepRow is not replaced.
 const float *HdCanvas::getItemRow(const byte *pixels, int srcWidth, int row, int keepRow, int channels, int columns) {
 	for (int i = 0; i < 2; i++) {
 		if (_itemRowIndex[i] == row)

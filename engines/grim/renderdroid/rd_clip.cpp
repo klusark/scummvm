@@ -124,7 +124,49 @@ int RenderDroid::ClipModule::line2(RdCanvas *canvas, int *x0, int *y0, int *x1, 
 	return 1;
 }
 
+int RenderDroid::ClipModule::point3Remastered(RdClipFrustum *clip, RdVector3 pt) {
+	int projectType = _rd->_camera.getCurrent()->projectType;
+	float limit;
+
+	if (pt[1] < clip->zNear)
+		return 0;
+
+	if (clip->clipFar && clip->zFar < pt[1])
+		return 0;
+
+	if (projectType == 1)
+		limit = (float)((double)clip->left * pt[1]);
+	else
+		limit = clip->orthoLeft;
+	if (limit > pt[0])
+		return 0;
+
+	if (projectType == 1)
+		limit = (float)((double)clip->right * pt[1]);
+	else
+		limit = clip->orthoRight;
+	if (limit < pt[0])
+		return 0;
+
+	if (projectType == 1)
+		limit = (float)((double)clip->top * pt[1]);
+	else
+		limit = clip->orthoTop;
+	if (limit < pt[2])
+		return 0;
+
+	if (projectType == 1)
+		limit = (float)((double)clip->bottom * pt[1]);
+	else
+		limit = clip->orthoBottom;
+
+	return !(limit > pt[2]);
+}
+
 int RenderDroid::ClipModule::point3(RdClipFrustum *clip, RdVector3 pt) {
+	if (_rd->_remastered)
+		return point3Remastered(clip, pt);
+
 	RdCamera *camera = _rd->_camera.getCurrent();
 	int projectType = camera->projectType;
 

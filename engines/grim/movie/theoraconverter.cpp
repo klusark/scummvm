@@ -49,7 +49,6 @@ void TheoraConverter::convert(Graphics::Surface *dest, th_pixel_fmt pixelFormat,
 	if (dest->format != Graphics::PixelFormat::createFormatRGBA32())
 		error("TheoraConverter::convert(): the output surface must be RGBA32");
 
-	// The original reads every stream as 4:2:0, whatever its chroma subsampling
 	if (pixelFormat != TH_PF_420 && !_warnedPixelFormat) {
 		warning("TheoraConverter::convert(): the chroma planes are not 4:2:0, the picture will be wrong");
 		_warnedPixelFormat = true;
@@ -96,7 +95,6 @@ void TheoraConverter::decodeRGBX(Graphics::Surface *dest, const th_img_plane &y,
 TheoraAudioConverter::TheoraAudioConverter() : _gain(1.0f), _warnedInvalidSample(false) {
 }
 
-// A negative gain becomes zero, there is no upper limit
 void TheoraAudioConverter::setAudioGain(float gain) {
 	if (gain < 0.0f)
 		_gain = 0.0f;
@@ -114,7 +112,6 @@ int16 TheoraAudioConverter::convert(float sample) {
 	else if (sample < -1.0f)
 		sample = -1.0f;
 
-	// Only a NaN fails this test; the original converts it to zero
 	if (sample != sample) {
 		if (!_warnedInvalidSample) {
 			warning("TheoraAudioConverter::convert(): invalid audio sample");
@@ -124,7 +121,6 @@ int16 TheoraAudioConverter::convert(float sample) {
 		return 0;
 	}
 
-	// The product is exact in a double, the conversion truncates
 	return (int16)(int)((double)sample * 32767.0);
 }
 

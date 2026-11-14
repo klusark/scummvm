@@ -27,8 +27,6 @@
 
 namespace Grim {
 
-// The primitives in the savegames of the remastered have the 24 bit color (red in the low byte)
-// and the alpha between the 16 bit color and the pattern
 int SputPrimitive::saveRemastered(Common::WriteStream *stream) {
 	int numPrimitives = 0;
 

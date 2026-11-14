@@ -52,9 +52,7 @@
 namespace Grim {
 
 enum {
-	// The version of the format of the iMUSE data inside the Serializer
 	kRemasteredSoundsSaveVersion = 30,
-	// The canvas of the text goes back to the 4:3 one when a game is loaded
 	kTextCanvasWidthAfterLoad = 1440
 };
 
@@ -94,10 +92,6 @@ void GrimEngine::requestRemasteredNewGame() {
 	_remasteredNewGameRequest = 1;
 }
 
-// The blocks go one after the other, each one between a tag of its own: the one of the Lua
-// callback, the costumes, the resources, the texts, the rooms, the commentary, the actors, the
-// render state, the primitives, the movie, the overlays, the dialog log, the hotspots, the Lua
-// state and the iMUSE state
 void GrimEngine::saveRemastered() {
 	Common::MemoryWriteStreamDynamic buffer(DisposeAfterUse::YES);
 
@@ -221,7 +215,6 @@ void GrimEngine::restoreRemastered() {
 	int status = SaveStore::readSlot(_remasteredLoadSlot, compressed);
 
 	if (status != SaveStore::kStatusOk) {
-		// The slot of the last game is not there any more: a new game starts instead
 		if (_remasteredLoadLast) {
 			_luaV1->bootSecondStage(newGameSet);
 
@@ -257,7 +250,6 @@ void GrimEngine::restoreRemastered() {
 	Common::SeekableReadStream *stream = _saveReadStream;
 	bool valid = true;
 
-	// The version is not checked: the saves of the remastered are all of the current one
 	stream->readUint32LE();
 
 	valid = SaveStore::readTag(stream, "LCBS") && valid;
@@ -361,23 +353,17 @@ void GrimEngine::restoreRemastered() {
 	if (!valid)
 		warning("GrimEngine::restoreRemastered(): the slot %d has blocks that are not as expected", _remasteredLoadSlot);
 
-	// A load that went on to the end always answers success to the scripts
 	_remasteredSaveStatus = SaveStore::kStatusOk;
 }
 
-// The files are emptied, which takes the slot out of the list
 void GrimEngine::eraseRemastered() {
 	_remasteredEraseRequest = 0;
 	_remasteredSaveStatus = SaveStore::eraseSlot(_remasteredEraseSlot);
 
-	// The stored time stands in for the file time: it goes away only with the files
 	if (_remasteredSaveStatus == SaveStore::kStatusOk)
 		_wuRegistry->removeSlotTime(_remasteredEraseSlot);
 }
 
-// A new game: the sounds, the movie and the resources of the game that is over go away, the
-// modules are shut down and started again (the resources and the display are not touched), the
-// Lua state is made again, the scripts are read again and the boot function runs from the start
 void GrimEngine::newGameRemastered() {
 	_remasteredNewGameRequest = 0;
 

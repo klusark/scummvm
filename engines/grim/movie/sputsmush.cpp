@@ -252,7 +252,6 @@ int SputSmush::startMovie(const char *name, int looping, int x, int y) {
 	_x = x;
 	_y = y;
 
-	// The HD movie is preferred, the classic one is the fallback
 	int libMode = g_grim->getLibMode();
 
 	if (!(g_grim->isRemastered() && videoPlay(name, libMode == GrimEngine::kLibModeMenu || libMode == 0))) {
@@ -453,12 +452,11 @@ bool SputSmush::videoPlay(const char *name, bool playFromMenu) {
 	if (!_theoraAudioConverter)
 		_theoraAudioConverter = new TheoraAudioConverter();
 
-	// A new clip starts with the gain of 1.0 until the first update
 	_theoraAudioConverter->setAudioGain(1.0f);
 
 	Video::TheoraDecoder *decoder = new Video::TheoraDecoder();
 
-	// The mixer must not scale the audio: the volume is the gain of the converter, set in videoUpdate
+	// The volume is applied by the sample converter, not by the mixer
 	decoder->setSoundType(Audio::Mixer::kPlainSoundType);
 	decoder->setAudioLanguage(languageCodes, ARRAYSIZE(languageCodes), hint);
 
@@ -468,7 +466,6 @@ bool SputSmush::videoPlay(const char *name, bool playFromMenu) {
 	decoder->setSampleConverter(_theoraAudioConverter);
 #endif
 
-	// The original decodes without post-processing and converts the frames with its own tables
 	decoder->setPostProcessing(false);
 	decoder->setFrameConverter(_theoraConverter);
 
@@ -559,7 +556,6 @@ void SputSmush::freeVideoResources() {
 	_videoClip = nullptr;
 	_videoPendingFrame = nullptr;
 
-	// The clip uses the converter, so it goes after the clip
 	delete _theoraConverter;
 	_theoraConverter = nullptr;
 
@@ -588,7 +584,6 @@ void SputSmush::videoUpdate(int force) {
 		if (_commentaryDucking && gain > 0.05f)
 			gain = 0.05f;
 
-		// Applied to the audio decoded from now on, as in the original
 		if (_videoClip && _theoraAudioConverter)
 			_theoraAudioConverter->setAudioGain(gain);
 
@@ -649,13 +644,11 @@ const Graphics::Surface *SputSmush::videoGetNextFrame() {
 
 		float start = videoFrameStartTime(_videoClip->getCurFrame());
 
-		// Not due yet
 		if (clipTime < start)
 			return nullptr;
 
 		const Graphics::Surface *frame = _videoPendingFrame;
 
-		// A frame is late when the clock is more than one frame duration past its start
 		if (!((double)start + (double)_videoFrameDuration < (double)clipTime)) {
 			_videoPendingFrame = nullptr;
 
@@ -727,7 +720,6 @@ void SputSmush::queueHdFrame() {
 	if (!canvas)
 		return;
 
-	// The canvas scales the frame itself and does not copy it: it is read until the frame is presented
 	const Graphics::Surface *frame = _movieSurface;
 
 	canvas->queueMovie((const byte *)frame->getPixels(), frame->w, frame->h, _movieSerial);

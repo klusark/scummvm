@@ -668,29 +668,162 @@ int SputActorModule::sweepIntoBox(float *from, float *to, const RdBound3 &box, f
 	return 1;
 }
 
-float SputActorModule::normalize2Remastered(float *vec) {
-	float length = (float)sqrt((double)vec[0] * vec[0] + (double)vec[1] * vec[1]);
+int SputActorModule::sweepIntoBoxRemastered(float *from, float *to, const RdBound3 &box, float *outPos) {
+	int face = 0;
+	float best = 3.4028235e38f;
+	RdVector3 delta;
+	RdVector3 normal = { 0.0f, 0.0f, 0.0f };
 
-	if (length != 0.0f) {
-		vec[0] = (float)((double)vec[0] / length);
-		vec[1] = (float)((double)vec[1] / length);
+	for (int i = 0; i < 3; i++)
+		delta[i] = (float)((double)from[i] - to[i]);
+
+	for (int i = 0; i < 3; i++) {
+		float step = (float)((double)delta[i] * -10.0);
+
+		to[i] = (float)((double)step + to[i]);
 	}
 
-	return length;
-}
+	if ((double)box.max[0] - 0.002 < to[0]) {
+		float denominator = delta[0] < 0.0f ? -delta[0] : delta[0];
+		float t = (float)(((double)box.max[0] - from[0]) / denominator);
+		float tAbs = t < 0.0f ? -t : t;
 
-float SputActorModule::normalize3AccRemastered(float *vec) {
-	float length = (float)sqrt(((double)vec[1] * vec[1] + (double)vec[0] * vec[0]) + (double)vec[2] * vec[2]);
-
-	if (length != 0.0f) {
-		float inverse = (float)(1.0 / length);
-
-		vec[0] = (float)(vec[0] * inverse);
-		vec[1] = (float)(inverse * vec[1]);
-		vec[2] = (float)(inverse * vec[2]);
+		if (tAbs < 3.4028234663852886e38) {
+			face = 1;
+			best = -t;
+			normal[0] = 1.0f;
+			normal[1] = 0.0f;
+			normal[2] = 0.0f;
+		}
 	}
 
-	return length;
+	if ((double)box.min[0] + 0.002 > to[0]) {
+		float denominator = delta[0] < 0.0f ? -delta[0] : delta[0];
+		float t = (float)(((double)box.min[0] - from[0]) / denominator);
+		float tAbs = t < 0.0f ? -t : t;
+		float bestAbs = best < 0.0f ? -best : best;
+
+		if (bestAbs > tAbs) {
+			face = 2;
+			best = t;
+			normal[0] = -1.0f;
+			normal[1] = 0.0f;
+			normal[2] = 0.0f;
+		}
+	}
+
+	if ((double)box.max[1] - 0.002 < to[1]) {
+		float denominator = delta[1] < 0.0f ? -delta[1] : delta[1];
+		float t = (float)(((double)box.max[1] - from[1]) / denominator);
+		float tAbs = t < 0.0f ? -t : t;
+		float bestAbs = best < 0.0f ? -best : best;
+
+		if (bestAbs > tAbs) {
+			face = 3;
+			best = -t;
+			normal[0] = 0.0f;
+			normal[1] = 1.0f;
+			normal[2] = 0.0f;
+		}
+	}
+
+	if ((double)box.min[1] + 0.002 > to[1]) {
+		float denominator = delta[1] < 0.0f ? -delta[1] : delta[1];
+		float t = (float)(((double)box.min[1] - from[1]) / denominator);
+		float tAbs = t < 0.0f ? -t : t;
+		float bestAbs = best < 0.0f ? -best : best;
+
+		if (bestAbs > tAbs) {
+			face = 4;
+			best = t;
+			normal[0] = 0.0f;
+			normal[1] = -1.0f;
+			normal[2] = 0.0f;
+		}
+	}
+
+	if ((double)box.max[2] - 0.002 < to[2]) {
+		float denominator = delta[2] < 0.0f ? -delta[2] : delta[2];
+		float t = (float)(((double)box.max[2] - from[2]) / denominator);
+		float tAbs = t < 0.0f ? -t : t;
+		float bestAbs = best < 0.0f ? -best : best;
+
+		if (bestAbs > tAbs) {
+			face = 5;
+			best = -t;
+			normal[0] = 0.0f;
+			normal[1] = 0.0f;
+			normal[2] = 1.0f;
+		}
+	}
+
+	if ((double)box.min[2] + 0.002 > to[2]) {
+		float denominator = delta[2] < 0.0f ? -delta[2] : delta[2];
+		float t = (float)(((double)box.min[2] - from[2]) / denominator);
+		float tAbs = t < 0.0f ? -t : t;
+		float bestAbs = best < 0.0f ? -best : best;
+
+		if (bestAbs > tAbs) {
+			face = 6;
+			best = t;
+			normal[0] = 0.0f;
+			normal[1] = 0.0f;
+			normal[2] = -1.0f;
+		}
+	}
+
+	if (!face)
+		return 0;
+
+	for (int i = 0; i < 3; i++) {
+		float step = (float)((double)delta[i] * best);
+
+		outPos[i] = (float)((double)step + from[i]);
+	}
+
+	_collisionImpact[0] = outPos[0];
+	_collisionImpact[1] = outPos[1];
+	_collisionImpact[2] = outPos[2];
+
+	float bestAbs = best < 0.0f ? -best : best;
+	RdVector3 sweep;
+
+	for (int i = 0; i < 3; i++)
+		sweep[i] = (float)((double)delta[i] * bestAbs);
+
+	float length = _rd->normalize3AccRemastered(sweep);
+	float dotValue = _rd->dot3Remastered(sweep, normal);
+	float angle = (float)(90.0 - _stdMath->arcSin3(dotValue));
+
+	if (angle < 90.0f)
+		return 0;
+
+	RdVector3 axis;
+	float firstProduct = (float)((double)normal[2] * sweep[1]);
+	float secondProduct = (float)((double)normal[1] * sweep[2]);
+
+	axis[0] = (float)((double)firstProduct - secondProduct);
+	firstProduct = (float)((double)sweep[2] * normal[0]);
+	secondProduct = (float)((double)normal[2] * sweep[0]);
+	axis[1] = (float)((double)firstProduct - secondProduct);
+	firstProduct = (float)((double)sweep[0] * normal[1]);
+	secondProduct = (float)((double)sweep[1] * normal[0]);
+	axis[2] = (float)((double)firstProduct - secondProduct);
+	_rd->normalize3AccRemastered(axis);
+
+	float turnAngle = (float)((double)angle - 90.0);
+	RdMatrix34 turnMatrix;
+
+	_rd->buildFromVectorAngle34Remastered(turnMatrix, axis, turnAngle);
+	_rd->transformVector34AccRemastered(sweep, turnMatrix);
+
+	for (int i = 0; i < 3; i++) {
+		float step = (float)((double)length * sweep[i]);
+
+		outPos[i] = (float)((double)step + outPos[i]);
+	}
+
+	return 1;
 }
 
 int SputActorModule::findSlideCandidates(float *prevCenter, float *otherCenter, float radius, float moved, float *firstPoint, float *secondPoint) {
@@ -722,7 +855,7 @@ int SputActorModule::findSlideCandidates(float *prevCenter, float *otherCenter, 
 
 	direction[0] = (float)deltaX;
 	direction[1] = (float)deltaY;
-	normalize2Remastered(direction);
+	_rd->normalize2Remastered(direction);
 
 	float negativeDirectionY = -direction[1];
 	double along = (double)distance - centerDistance;
@@ -850,7 +983,7 @@ void SputActorModule::sphereCollisionRemastered(SputActor *actor, SputActor *oth
 					aim[0] = (float)((double)center[0] - prevCenterWorld[0]);
 					aim[1] = (float)((double)center[1] - prevCenterWorld[1]);
 					aim[2] = (float)((double)center[2] - prevCenterWorld[2]);
-					normalize3AccRemastered(aim);
+					_rd->normalize3AccRemastered(aim);
 
 					if (puck) {
 						aim[0] = (float)((double)aim[0] + puck->_pos[0]);
@@ -877,7 +1010,7 @@ void SputActorModule::sphereCollisionRemastered(SputActor *actor, SputActor *oth
 		direction[0] = (float)((double)myCenterWorld[0] - otherCenterWorld[0]);
 		direction[1] = (float)((double)myCenterWorld[1] - otherCenterWorld[1]);
 		direction[2] = (float)((double)myCenterWorld[2] - otherCenterWorld[2]);
-		normalize3AccRemastered(direction);
+		_rd->normalize3AccRemastered(direction);
 
 		float ratio = (float)(((double)distance - otherRadius) / myRadius);
 		double pushOut = (double)myRadius * (1.0 - ratio);
@@ -921,8 +1054,12 @@ void SputActorModule::updatePositions() {
 	for (int i = 0; i < _numCollisionActors; i++) {
 		SputActor *actor = _collisionActors[i];
 
-		if (memcmp(actor->actorPos, actor->prevPosition, sizeof(RdVector3)))
-			updatePosition(actor);
+		if (memcmp(actor->actorPos, actor->prevPosition, sizeof(RdVector3))) {
+			if (_grim->isRemastered())
+				updatePositionRemastered(actor);
+			else
+				updatePosition(actor);
+		}
 	}
 }
 
@@ -1100,6 +1237,164 @@ void SputActorModule::updatePosition(SputActor *actor) {
 					actorWalkTo(actor, goalPoint, actor->extra->goal, other);
 				} else {
 					warning("SputActorModule::updatePosition(): the actor has no path to rebuild");
+				}
+
+				_hadDynamicCollision = true;
+			}
+		}
+
+		_lua->collisionHandler(actor, other, _collisionIn, _collisionImpact, _collisionOut);
+	}
+}
+
+void SputActorModule::updatePositionRemastered(SputActor *actor) {
+	if (!actor->extra) {
+		warning("SputActorModule::updatePositionRemastered(): the moving actor has no extra data");
+		return;
+	}
+
+	RdModel3 *model3 = actor->costumeStack->headThing->data.model3;
+	RdVector3 myCenterOffset;
+
+	_rd->transformVector34Remastered(myCenterOffset, model3->geomCenter, getOrientMatrix(actor));
+
+	RdVector3 myCenterWorld;
+
+	myCenterWorld[0] = (float)((double)actor->actorPos[0] + myCenterOffset[0]);
+	myCenterWorld[1] = (float)((double)actor->actorPos[1] + myCenterOffset[1]);
+	myCenterWorld[2] = (float)((double)actor->actorPos[2] + myCenterOffset[2]);
+
+	RdVector3 prevCenterWorld;
+
+	prevCenterWorld[0] = (float)((double)myCenterOffset[0] + actor->prevPosition[0]);
+	prevCenterWorld[1] = (float)((double)myCenterOffset[1] + actor->prevPosition[1]);
+	prevCenterWorld[2] = (float)((double)myCenterOffset[2] + actor->prevPosition[2]);
+
+	float myRadius = (float)((double)actor->extra->collisionScale * model3->radius);
+
+	for (int i = 0; i < _numCollisionActors; i++) {
+		SputActor *other = _collisionActors[i];
+
+		if (other == actor)
+			continue;
+
+		if (!other->extra || !other->extra->collisionMode)
+			continue;
+
+		RdModel3 *otherModel3 = other->costumeStack->headThing->data.model3;
+		RdVector3 otherCenterWorld;
+
+		_rd->transformPoint34Remastered(otherCenterWorld, otherModel3->geomCenter, getOrientMatrix(other));
+
+		double deltaY = (double)myCenterWorld[1] - otherCenterWorld[1];
+		double deltaX = (double)myCenterWorld[0] - otherCenterWorld[0];
+		double deltaZ = (double)myCenterWorld[2] - otherCenterWorld[2];
+		float squareX = (float)(deltaX * deltaX);
+		float squareY = (float)(deltaY * deltaY);
+		float squareZ = (float)(deltaZ * deltaZ);
+		float distance = (float)sqrt(((double)squareX + squareY) + squareZ);
+		float otherRadius = (float)((double)other->extra->collisionScale * otherModel3->radius);
+
+		if (!(distance < (double)otherRadius + myRadius))
+			continue;
+
+		if (other->extra->collisionMode == 2) {
+			sphereCollisionRemastered(actor, other, myCenterOffset, myCenterWorld, prevCenterWorld, otherCenterWorld, myRadius, otherRadius);
+		} else {
+			RdVector3 delta;
+
+			delta[0] = (float)deltaX;
+			delta[1] = (float)deltaY;
+			delta[2] = (float)deltaZ;
+
+			RdVector3 localCurrent;
+
+			_rd->transformVectorOrtho34Remastered(localCurrent, delta, getOrientMatrix(other));
+			localCurrent[0] = (float)((double)otherModel3->geomCenter[0] + localCurrent[0]);
+			localCurrent[1] = (float)((double)otherModel3->geomCenter[1] + localCurrent[1]);
+			localCurrent[2] = (float)((double)otherModel3->geomCenter[2] + localCurrent[2]);
+
+			RdBound3 otherBox;
+			float otherScale = other->extra->collisionScale;
+
+			otherBox.min[0] = (float)((double)otherModel3->bound.min[0] * otherScale - myRadius);
+			otherBox.min[1] = (float)((double)otherModel3->bound.min[1] * otherScale - myRadius);
+			otherBox.min[2] = (float)((double)otherModel3->bound.min[2] * otherScale - myRadius);
+			otherBox.max[0] = (float)((double)otherModel3->bound.max[0] * otherScale + myRadius);
+			otherBox.max[1] = (float)((double)otherModel3->bound.max[1] * otherScale + myRadius);
+			otherBox.max[2] = (float)((double)otherModel3->bound.max[2] * otherScale + myRadius);
+
+			if (!(otherBox.min[2] < localCurrent[2] && otherBox.min[1] < localCurrent[1] && otherBox.max[1] > localCurrent[1] && otherBox.min[0] < localCurrent[0] &&
+					otherBox.max[0] > localCurrent[0] && otherBox.max[2] > localCurrent[2]))
+				continue;
+
+			actor->extra->collided = 1;
+			_collisionIn[0] = actor->actorPos[0];
+			_collisionIn[1] = actor->actorPos[1];
+			_collisionIn[2] = actor->actorPos[2];
+
+			RdVector3 prevDelta;
+
+			prevDelta[0] = (float)((double)actor->prevPosition[0] + myCenterOffset[0]);
+			prevDelta[1] = (float)((double)actor->prevPosition[1] + myCenterOffset[1]);
+			prevDelta[2] = (float)((double)actor->prevPosition[2] + myCenterOffset[2]);
+			prevDelta[0] = (float)((double)prevDelta[0] - otherCenterWorld[0]);
+			prevDelta[1] = (float)((double)prevDelta[1] - otherCenterWorld[1]);
+			prevDelta[2] = (float)((double)prevDelta[2] - otherCenterWorld[2]);
+
+			RdVector3 localPrevious;
+
+			_rd->transformVectorOrtho34Remastered(localPrevious, prevDelta, getOrientMatrix(other));
+			localPrevious[0] = (float)((double)otherModel3->geomCenter[0] + localPrevious[0]);
+			localPrevious[1] = (float)((double)otherModel3->geomCenter[1] + localPrevious[1]);
+			localPrevious[2] = (float)((double)otherModel3->geomCenter[2] + localPrevious[2]);
+
+			RdVector3 hitPos;
+
+			if (!sweepIntoBoxRemastered(localCurrent, localPrevious, otherBox, hitPos)) {
+				RdMatrix34 identity;
+				RdVector3 origin = { 0.0f, 0.0f, 0.0f };
+
+				_rd->identity34(identity);
+				getOuttaTheBoxRemastered(localCurrent, otherBox, identity, origin);
+				hitPos[0] = localCurrent[0];
+				hitPos[1] = localCurrent[1];
+				hitPos[2] = localCurrent[2];
+			}
+
+			_rd->transformPoint34AccRemastered(hitPos, getOrientMatrix(other));
+			hitPos[0] = (float)((double)hitPos[0] - myCenterOffset[0]);
+			hitPos[1] = (float)((double)hitPos[1] - myCenterOffset[1]);
+			hitPos[2] = (float)((double)hitPos[2] - myCenterOffset[2]);
+			actor->prevPosition[0] = actor->actorPos[0];
+			actor->prevPosition[1] = actor->actorPos[1];
+			actor->prevPosition[2] = actor->actorPos[2];
+
+			_rd->transformPoint34AccRemastered(_collisionImpact, getOrientMatrix(other));
+			_collisionImpact[0] = (float)((double)_collisionImpact[0] - myCenterOffset[0]);
+			_collisionImpact[1] = (float)((double)_collisionImpact[1] - myCenterOffset[1]);
+			_collisionImpact[2] = (float)((double)_collisionImpact[2] - myCenterOffset[2]);
+
+			int walking = (actor->mode & 1) != 0;
+
+			setActorPosition(actor, hitPos);
+			_collisionOut[0] = actor->actorPos[0];
+			_collisionOut[1] = actor->actorPos[1];
+			_collisionOut[2] = actor->actorPos[2];
+
+			if (walking) {
+				actor->mode |= 1;
+
+				if (actor->extra->numPathPoints > 0 && actor->extra->numPathPoints <= pathCapacity()) {
+					RdVector3 goalPoint;
+					float *lastPathPoint = actor->extra->path[actor->extra->numPathPoints - 1];
+
+					goalPoint[0] = lastPathPoint[0];
+					goalPoint[1] = lastPathPoint[1];
+					goalPoint[2] = lastPathPoint[2];
+					actorWalkTo(actor, goalPoint, actor->extra->goal, other);
+				} else {
+					warning("SputActorModule::updatePositionRemastered(): the actor has no path to rebuild");
 				}
 
 				_hadDynamicCollision = true;

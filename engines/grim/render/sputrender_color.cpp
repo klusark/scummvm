@@ -50,7 +50,6 @@ void SputRender::buildGammaTable(const StdColorFormat *format, float gamma) {
 		return;
 	}
 
-	// The remastered applies the gamma when the frame is presented
 	double exponent = _grim->isRemastered() ? 1.0 : (double)gamma;
 
 	for (int i = 0; i < 0x10000; i++) {
@@ -91,7 +90,6 @@ void SputRender::setGamma(float gamma) {
 	if (_gammaCorrection != gamma || (_grim->getGameFlags() & ADGF_DEMO)) {
 		_gammaCorrection = gamma;
 
-		// The quads of the canvas use the gamma at the moment they are queued
 		if (_grim->getHdCanvas())
 			_grim->getHdCanvas()->setGamma(gamma);
 
@@ -346,6 +344,10 @@ void SputRender::clearIris() {
 	StdRect rect;
 
 	_renderFlags &= ~0xC;
+
+	if (_grim->isRemastered())
+		_irisDuration = 0.0f;
+
 	rect.width = 640;
 	rect.height = 480;
 	rect.y = 0;
@@ -372,7 +374,6 @@ void SputRender::drawProgressBar(float progress) {
 	if (barWidth > 0.0)
 		filled = (int)barWidth;
 
-	// In the Remastered the bar is drawn into the front surface, which is the picture that the next flip shows
 	HdCanvas *canvas = _grim->getHdCanvas();
 	bool inFrontScene = _grim->isRemastered() && canvas && canvas->isActive();
 	byte *pixels = nullptr;

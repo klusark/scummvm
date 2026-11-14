@@ -174,7 +174,7 @@ public:
 	void update();
 	int loadSetupBackground(const StdColorFormat *format);
 	void preRendered(int bitmap, int zBuffer);
-	void reverseProject(int x, int y, float *out);
+	bool reverseProject(int x, int y, float *out);
 	int buildShadowBitmap(float *out, float *pointA, float *pointB, float a, float b, float c, float d);
 	void restoreDirtyRects(StdVBuffer *dst, StdVBuffer *zBuffer);
 	void drawPrimitives(int layerMask);
@@ -193,7 +193,6 @@ public:
 	void drawBoundingBox();
 	void drawWalkPlanes();
 
-	// Remastered only
 	bool disable3DRendering();
 
 	StdVBuffer *getCleanBuffer() const { return _cleanBuffer; }
@@ -202,12 +201,10 @@ public:
 	void setSkipPrimitives(int skip) { _skipPrimitives = skip; }
 	int getCamActorIndex() const { return _camActorIndex; }
 	RoomCamera *getCamera() const { return _camera; }
-	// For the moment after the rooms are freed and before the next one is set
 	void forgetRoom() { _lastRoom = nullptr; _camera = nullptr; }
 	const uint16 *getColorLookup() const { return _colorLookup; }
 
 private:
-	// Layers of the primitives drawn on the canvas of the remastered
 	enum {
 		kPrimitiveLayerUnderlay = 1,
 		kPrimitiveLayerOverlay = 2,
@@ -217,7 +214,6 @@ private:
 
 	void markDirtyRectInternal(StdRect *rect, int page, uint pageIndex);
 
-	// Remastered only (sputrender_remastered.cpp)
 	void clearSceneBuffer();
 	void updateTextPage(int force, int page);
 	bool updateMovieRemastered();
@@ -225,6 +221,7 @@ private:
 	void drawLastLayers();
 	void drawNoRoomRemastered();
 	void drawPrimitivesCanvas(int layerMask);
+	bool reverseProjectRemastered(int x, int y, float *out);
 
 	RenderDroid *_rd;
 	StdDisplay *_stdDisplay;

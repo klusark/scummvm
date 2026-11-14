@@ -241,7 +241,6 @@ void Lua_V1::StopMovie() {
 }
 
 void Lua_V1::PauseMovie() {
-	// The remastered pauses with any argument but nil
 	if (g_grim->useRemasterFixes() && !(g_grim->getGameFlags() & ADGF_DEMO))
 		g_grim->_sputSmush->pause(!lua_isnil(lua_getparam(1)));
 	else

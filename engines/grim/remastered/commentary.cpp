@@ -40,7 +40,6 @@
 
 namespace Grim {
 
-// Every speaker has the same orange (the low byte is red)
 const int Commentary::kSpeakerColors[kNumSpeakerColors] = {
 	0x00288EE6, 0x00288EE6, 0x00288EE6, 0x00288EE6, 0x00288EE6,
 	0x00288EE6, 0x00288EE6, 0x00288EE6, 0x00288EE6, 0x00288EE6,
@@ -75,7 +74,6 @@ void Commentary::startup() {
 	memset(_heard, 0, sizeof(_heard));
 }
 
-// The subtitle events are freed by the text module, the entries only forget them
 void Commentary::shutdown() {
 	for (int i = 0; i < kMaxEntries; i++) {
 		for (int k = 0; k < kMaxSubtitles; k++)
@@ -85,7 +83,6 @@ void Commentary::shutdown() {
 	_currentIndex = -1;
 }
 
-// Entries: a name line, a file line, a count line and one line per subtitle.
 void Commentary::loadDefinitions() {
 	StdConffile conffile(g_grim);
 	Entry *entry = nullptr;
@@ -202,7 +199,6 @@ void Commentary::loadDefinitions() {
 		_entries[i].index = i;
 }
 
-// The name is lower-cased and compared on its first 32 characters, an unknown one is not an error
 Commentary::Entry *Commentary::findEntry(const char *name) const {
 	char key[kNameSize + 1];
 
@@ -217,7 +213,6 @@ Commentary::Entry *Commentary::findEntry(const char *name) const {
 	return static_cast<Entry *>(Grim::binarySearch(key, _entries, _numEntries, sizeof(Entry), compareKey));
 }
 
-// The table has room for all the entries: an index past the loaded ones is an empty entry
 bool Commentary::isValidIndex(int index) const {
 	return index >= 0 && index < kMaxEntries;
 }
@@ -245,7 +240,6 @@ bool Commentary::hasHeardCommentary(const char *name) {
 	return ((_heard[entry->index / 32] >> (entry->index & 31)) & 1) != 0;
 }
 
-// The scripts keep a number in game_pauser.is_paused, nil when the game is not paused
 bool Commentary::isGamePaused() const {
 	lua_Object pauser = lua_getglobal("game_pauser");
 
@@ -268,7 +262,6 @@ BlastTextFont *Commentary::getTalkFont() const {
 	return static_cast<BlastTextFont *>(_res->handleFromSerialNumber(lua_getuserdata(fontObj)));
 }
 
-// Calls system.NotifyCommentary(playing), which updates the buttons of the interface
 void Commentary::notifyLua(int playing) const {
 	LuaObjects objects;
 
@@ -276,7 +269,6 @@ void Commentary::notifyLua(int playing) const {
 	LuaBase::instance()->callback("NotifyCommentary", objects);
 }
 
-// The sound effects, the voices and the music go down while the commentary plays
 void Commentary::cacheGroupVolumes() {
 	_groupVolumesCached = true;
 
@@ -296,8 +288,6 @@ void Commentary::cacheGroupVolumes() {
 		_sputSmush->setCommentaryDucking(true);
 }
 
-// A group is given back its volume only if it is still the one set here: a volume that the
-// scripts changed in the meantime is kept
 void Commentary::restoreGroupVolumes() {
 	if (!_groupVolumesCached)
 		return;
@@ -316,7 +306,6 @@ void Commentary::restoreGroupVolumes() {
 void Commentary::playCurrentCommentary() {
 	loadDefinitions();
 
-	// The same key starts and stops it
 	if (_isPlaying) {
 		stopImmediately();
 		return;
@@ -350,7 +339,6 @@ void Commentary::playCurrentCommentary() {
 
 	_isPlaying = true;
 
-	// The dark strip at the top of the screen, it is not drawn on the layer of the pause
 	OverlayProps props;
 
 	props.layer = isGamePaused() ? 20 : 1;
@@ -363,14 +351,12 @@ void Commentary::playCurrentCommentary() {
 
 	notifyLua(1);
 
-	// The bit is the one of the entry found by name
 	Entry *heard = findEntry(entry->name);
 
 	if (heard && heard->index != -1)
 		_heard[heard->index / 32] |= 1u << (heard->index & 31);
 }
 
-// Always safe to call, the script of a scene or of a movie calls it without checking
 void Commentary::stopImmediately() {
 	if (_currentIndex != -1) {
 		Entry *entry = &_entries[_currentIndex];
@@ -412,7 +398,6 @@ int Commentary::getWrappedLineCharacters(int line) const {
 	return _wrappedLineCharacters[line];
 }
 
-// The event is found again through its serial number, the scripts can purge the texts
 void Commentary::killSubtitleEvent(Subtitle *subtitle) {
 	if (subtitle->eventSerial == 0)
 		return;
@@ -425,7 +410,6 @@ void Commentary::killSubtitleEvent(Subtitle *subtitle) {
 	subtitle->eventSerial = 0;
 }
 
-// The subtitle shows two lines at a time
 SputTextEvent *Commentary::createSubtitleEvent(const char *text, int color, int x, int y, int time, int flags) {
 	StdRect clip;
 
@@ -451,7 +435,6 @@ SputTextEvent *Commentary::createSubtitleEvent(const char *text, int color, int 
 	params.highlight = -1;
 	params.alpha = 1.0f;
 
-	// The text page of the menus while the game is paused
 	if (isGamePaused())
 		params.flags |= 0x10;
 
@@ -476,8 +459,7 @@ SputTextEvent *Commentary::createSubtitleEvent(const char *text, int color, int 
 	return event;
 }
 
-// The time share of a page is the share of its characters in the text. The ratio is stored as a
-// float and the product is made in double precision.
+// The ratio is stored as a float and the product is made in double precision
 int Commentary::getPageTime(int subtitleIndex, const SputTextEvent *event) const {
 	if (_currentIndex == -1)
 		return 0;
@@ -508,7 +490,6 @@ void Commentary::update() {
 	Entry *entry = &_entries[_currentIndex];
 	int position = _imuse->soundsGetParam(entry->audioFile, IMUSE_P_SND_POS_IN_MS);
 
-	// The sound is over
 	if (position < 0) {
 		stopImmediately();
 		return;

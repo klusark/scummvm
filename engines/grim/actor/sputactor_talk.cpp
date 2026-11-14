@@ -293,8 +293,6 @@ void SputActorModule::sayLine(SputActor *actor, const char *msgId, int voiceStre
 
 	voiceFile[0] = 0;
 
-	// The remastered has a voice per language: the prefixed name is looked up first, then the plain
-	// one, and the prefixed name is the one the actor remembers
 	Common::String sayName(translation);
 
 	if (g_grim->isRemastered())
@@ -333,7 +331,6 @@ void SputActorModule::sayLine(SputActor *actor, const char *msgId, int voiceStre
 
 	if (actor->extra->talking) {
 		if (g_grim->isRemastered()) {
-			// The name is compared as a C string that goes on into the voice name
 			char currentName[29];
 
 			memcpy(currentName, actor->extra->sayLineId, 12);

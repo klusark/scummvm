@@ -67,7 +67,6 @@ extern lua_SaveRestoreUserHFunction lua_restorehook;
 int lua_Save(SaveRestoreAccess *saveFunc);
 int lua_Restore(SaveRestoreAccess *restoreFunc);
 
-// The remastered saves every serial and object value in a slot of 8 bytes
 int lua_SaveRemastered(SaveRestoreAccess *saveFunc);
 int lua_RestoreRemastered(SaveRestoreAccess *restoreFunc);
 
@@ -80,7 +79,7 @@ void lua_FuncIDsSetRemastered(bool isRemastered);
 
 void lua_removelibslists();
 
-void lua_open(bool isEmi);
+void lua_open(bool isEmi, bool isRemastered = false);
 void lua_close();
 bool lua_isopen();
 

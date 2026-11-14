@@ -15,14 +15,6 @@
 
 namespace Grim {
 
-// The Lua state in the format of the remastered: the layout of the original, with every serial
-// and every value of an object in a slot of 8 bytes
-
-// Userdata is inline in the ScummVM objects: the first pass collects it
-static bool collectUserdata;
-static Common::HashMap<uint64, uint32> userdataIndices;
-static Common::Array<UserData> userdataEntries;
-
 static int nullWriter(void *buffer, int size) {
 	return 0;
 }
@@ -37,29 +29,49 @@ static void saveInt32(SaveRestoreAccess *saveFunc, int32 value) {
 	saveFunc(&data, 4);
 }
 
-// A serial or a pointer value: the high half is zero
 static void saveSerial(SaveRestoreAccess *saveFunc, uint32 value) {
 	saveInt32(saveFunc, (int32)value);
 	saveInt32(saveFunc, 0);
 }
 
-static uint32 getUserdataSerial(const UserData *userdata) {
+class RemasteredSaver {
+public:
+	RemasteredSaver() : _collectUserdata(false) {}
+
+	void save(SaveRestoreAccess *saveFunc);
+
+private:
+	bool _collectUserdata;
+	Common::HashMap<uint64, uint32> _userdataIndices;
+	Common::Array<UserData> _userdataEntries;
+
+	uint32 getUserdataSerial(const UserData *userdata);
+	void saveObject(const TObject *object, SaveRestoreAccess *saveFunc);
+	void writeStrings(SaveRestoreAccess *saveFunc);
+	void writeUserdata(SaveRestoreAccess *saveFunc);
+	void saveHash(SaveRestoreAccess *saveFunc, Hash *hash);
+	void saveGlobals(SaveRestoreAccess *saveFunc);
+	void saveState(LState *state, SaveRestoreAccess *saveFunc);
+	void saveLuaState(SaveRestoreAccess *saveFunc);
+};
+
+uint32 RemasteredSaver::getUserdataSerial(const UserData *userdata) {
 	uint64 key = ((uint64)(uint32)userdata->tag << 32) | (uint32)userdata->id;
 	uint32 index;
 
-	if (!userdataIndices.tryGetVal(key, index)) {
-		index = userdataEntries.size();
-		userdataIndices.setVal(key, index);
-		userdataEntries.push_back(*userdata);
+	if (!_userdataIndices.tryGetVal(key, index)) {
+		index = _userdataEntries.size();
+		_userdataIndices.setVal(key, index);
+		_userdataEntries.push_back(*userdata);
 	}
 
-	if (collectUserdata)
+	if (_collectUserdata)
 		return 0;
 
-	return getSerial(&userdataEntries[index]);
+	return getSerial(&_userdataEntries[index]);
 }
 
-static void SaveObject(const TObject *object, SaveRestoreAccess *saveFunc) {
+void RemasteredSaver::saveObject(const TObject *object, SaveRestoreAccess *saveFunc) {
 	int32 ttype = object->ttype;
 	uint32 serialNum = 0;
 
@@ -84,7 +96,7 @@ static void SaveObject(const TObject *object, SaveRestoreAccess *saveFunc) {
 	saveSerial(saveFunc, serialNum);
 }
 
-static void luaS_writestrings(SaveRestoreAccess *saveFunc) {
+void RemasteredSaver::writeStrings(SaveRestoreAccess *saveFunc) {
 	for (int32 i = 0; i < NUM_HASHS; i++) {
 		stringtable *tb = &string_root[i];
 
@@ -94,7 +106,7 @@ static void luaS_writestrings(SaveRestoreAccess *saveFunc) {
 
 				saveSerial(saveFunc, getSerial(tString));
 				saveInt32(saveFunc, tString->constindex);
-				SaveObject(&tString->globalval, saveFunc);
+				saveObject(&tString->globalval, saveFunc);
 
 				int32 length = strlen(tString->str);
 
@@ -105,9 +117,9 @@ static void luaS_writestrings(SaveRestoreAccess *saveFunc) {
 	}
 }
 
-static void luaS_writeuserdata(SaveRestoreAccess *saveFunc) {
-	for (uint i = 0; i < userdataEntries.size(); i++) {
-		UserData *userdata = &userdataEntries[i];
+void RemasteredSaver::writeUserdata(SaveRestoreAccess *saveFunc) {
+	for (uint i = 0; i < _userdataEntries.size(); i++) {
+		UserData *userdata = &_userdataEntries[i];
 		int32 value = userdata->id;
 
 		saveSerial(saveFunc, getSerial(userdata));
@@ -117,7 +129,7 @@ static void luaS_writeuserdata(SaveRestoreAccess *saveFunc) {
 			value = lua_savehook(userdata->tag, value, saveFunc);
 
 		saveInt32(saveFunc, userdata->tag);
-		// The original keeps a value of -1 as 0xFFFFFFFF with a zero high half
+		// A value of -1 is saved as 0xFFFFFFFF with a zero high half
 		saveSerial(saveFunc, (uint32)value);
 	}
 }
@@ -145,7 +157,7 @@ static uint32 luaS_count(uint32 *maxstrlen) {
 	return count;
 }
 
-static void luaH_save(SaveRestoreAccess *saveFunc, Hash *hash) {
+void RemasteredSaver::saveHash(SaveRestoreAccess *saveFunc, Hash *hash) {
 	int32 numItems = 0;
 
 	saveInt32(saveFunc, hash->nhash);
@@ -164,16 +176,16 @@ static void luaH_save(SaveRestoreAccess *saveFunc, Hash *hash) {
 		Node *n = &hash->node[i];
 
 		if (n->ref.ttype != LUA_T_NIL && n->val.ttype != LUA_T_NIL) {
-			SaveObject(&n->ref, saveFunc);
-			SaveObject(&n->val, saveFunc);
+			saveObject(&n->ref, saveFunc);
+			saveObject(&n->val, saveFunc);
 		}
 	}
 }
 
-static void SaveGlobals(SaveRestoreAccess *saveFunc) {
+void RemasteredSaver::saveGlobals(SaveRestoreAccess *saveFunc) {
 	uint32 maxstrlen, globalCount = 0, protoCount = 0, clCount = 0, tableCount = 0, stringCount = 0;
 
-	stringCount = luaS_count(&maxstrlen) + userdataEntries.size();
+	stringCount = luaS_count(&maxstrlen) + _userdataEntries.size();
 
 	for (GCnode *node = rootcl.next; node; node = node->next)
 		clCount++;
@@ -194,20 +206,20 @@ static void SaveGlobals(SaveRestoreAccess *saveFunc) {
 	saveInt32(saveFunc, globalCount);
 	saveInt32(saveFunc, maxstrlen);
 
-	luaS_writestrings(saveFunc);
-	luaS_writeuserdata(saveFunc);
+	writeStrings(saveFunc);
+	writeUserdata(saveFunc);
 
 	for (Closure *closure = (Closure *)rootcl.next; closure; closure = (Closure *)closure->head.next) {
 		saveSerial(saveFunc, getSerial(closure));
 		saveInt32(saveFunc, closure->nelems);
 
 		for (int32 i = 0; i <= closure->nelems; i++)
-			SaveObject(&closure->consts[i], saveFunc);
+			saveObject(&closure->consts[i], saveFunc);
 	}
 
 	for (Hash *hash = (Hash *)roottable.next; hash; hash = (Hash *)hash->head.next) {
 		saveSerial(saveFunc, getSerial(hash));
-		luaH_save(saveFunc, hash);
+		saveHash(saveFunc, hash);
 	}
 
 	for (TProtoFunc *proto = (TProtoFunc *)rootproto.next; proto; proto = (TProtoFunc *)proto->head.next) {
@@ -219,7 +231,7 @@ static void SaveGlobals(SaveRestoreAccess *saveFunc) {
 		saveInt32(saveFunc, proto->nconsts);
 
 		for (int32 i = 0; i < proto->nconsts; i++)
-			SaveObject(&proto->consts[i], saveFunc);
+			saveObject(&proto->consts[i], saveFunc);
 
 		if (proto->locvars) {
 			while (proto->locvars[numVars++].line != -1) {
@@ -244,20 +256,20 @@ static void SaveGlobals(SaveRestoreAccess *saveFunc) {
 
 	saveInt32(saveFunc, 1);
 
-	SaveObject(&errorim, saveFunc);
+	saveObject(&errorim, saveFunc);
 
 	saveInt32(saveFunc, IMtable_size);
 
 	for (int32 i = 0; i < IMtable_size; i++) {
 		for (int32 j = 0; j < IM_N; j++)
-			SaveObject(&IMtable[i].int_method[j], saveFunc);
+			saveObject(&IMtable[i].int_method[j], saveFunc);
 	}
 
 	saveInt32(saveFunc, last_tag);
 	saveInt32(saveFunc, refSize);
 
 	for (int32 i = 0; i < refSize; i++) {
-		SaveObject(&refArray[i].o, saveFunc);
+		saveObject(&refArray[i].o, saveFunc);
 		saveInt32(saveFunc, (int32)refArray[i].status);
 	}
 
@@ -289,7 +301,7 @@ static void SaveExecutionState(lua_Task *execState, SaveRestoreAccess *saveFunc)
 	saveInt32(saveFunc, execState->aux);
 }
 
-static void SaveState(LState *state, SaveRestoreAccess *saveFunc) {
+void RemasteredSaver::saveState(LState *state, SaveRestoreAccess *saveFunc) {
 	uint32 numExecStates = 0;
 	int32 previousExecState = -1;
 
@@ -321,7 +333,7 @@ static void SaveState(LState *state, SaveRestoreAccess *saveFunc) {
 	saveInt32(saveFunc, stackSize);
 
 	for (int32 i = 0; i < stackSize; i++)
-		SaveObject(&state->stack.stack[i], saveFunc);
+		saveObject(&state->stack.stack[i], saveFunc);
 
 	saveInt32(saveFunc, state->Cstack.base);
 	saveInt32(saveFunc, state->Cstack.lua2C);
@@ -336,13 +348,13 @@ static void SaveState(LState *state, SaveRestoreAccess *saveFunc) {
 	}
 
 	saveInt32(saveFunc, state->id);
-	SaveObject(&state->taskFunc, saveFunc);
+	saveObject(&state->taskFunc, saveFunc);
 }
 
-static void saveLuaState(SaveRestoreAccess *saveFunc) {
+void RemasteredSaver::saveLuaState(SaveRestoreAccess *saveFunc) {
 	uint32 numTasks = 0, currentTaskNumber = 0;
 
-	SaveGlobals(saveFunc);
+	saveGlobals(saveFunc);
 
 	for (LState *state = lua_rootState; state; state = state->next) {
 		if (state == lua_state)
@@ -355,22 +367,25 @@ static void saveLuaState(SaveRestoreAccess *saveFunc) {
 	saveInt32(saveFunc, currentTaskNumber);
 
 	for (LState *state = lua_rootState; state; state = state->next)
-		SaveState(state, saveFunc);
+		saveState(state, saveFunc);
+}
+
+void RemasteredSaver::save(SaveRestoreAccess *saveFunc) {
+	_collectUserdata = true;
+	_userdataIndices.clear();
+	_userdataEntries.clear();
+	saveLuaState(nullWriter);
+
+	_collectUserdata = false;
+	saveLuaState(saveFunc);
 }
 
 int lua_SaveRemastered(SaveRestoreAccess *saveFunc) {
 	lua_collectgarbage(0);
 
-	collectUserdata = true;
-	userdataIndices.clear();
-	userdataEntries.clear();
-	saveLuaState(nullWriter);
+	RemasteredSaver saver;
 
-	collectUserdata = false;
-	saveLuaState(saveFunc);
-
-	userdataIndices.clear();
-	userdataEntries.clear();
+	saver.save(saveFunc);
 
 	return 0;
 }

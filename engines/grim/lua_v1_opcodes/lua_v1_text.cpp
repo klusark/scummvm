@@ -25,6 +25,7 @@
 #include "engines/grim/grim.h"
 #include "engines/grim/lua_v1_opcodes/lua_v1.h"
 #include "engines/grim/inputdialog.h"
+#include "engines/grim/remastered/hotspot.h"
 #include "engines/grim/text/blasttext.h"
 #include "engines/grim/text/hdtext.h"
 #include "engines/grim/actor/sputactor.h"
@@ -115,7 +116,6 @@ void Lua_V1::ChangeTextObject() {
 			}
 		}
 
-		// The HD layout has to be done again
 		if (g_grim->isRemastered())
 			sputText->invalidateHdText(event);
 
@@ -189,7 +189,6 @@ void Lua_V1::GetTextObjectDimensions() {
 	lua_Object textObj = lua_getparam(1);
 
 	if (g_grim->isRemastered()) {
-		// The size and the position come from the HD layout, in the units of the coordinates asked
 		lua_Object modeObj = lua_getparam(2);
 		int mode = luaFtol(lua_getnumber(modeObj));
 		int x = 0;
@@ -197,15 +196,14 @@ void Lua_V1::GetTextObjectDimensions() {
 		int width = 0;
 		int height = 0;
 
-		// Anything else than a text object leaves the stack as it is
 		if (!lua_isuserdata(textObj) || lua_tag(textObj) != MKTAG('T', 'X', 'E', 'T'))
 			return;
 
 		SputTextEvent *event = getTextEvent(textObj);
 
 		if (event && event->text[0] && g_grim->_sputText->queryTextObject(event, &x, &y, &width, &height)) {
-			HdText::convertCoordsNative(&x, &y, mode, false);
-			HdText::convertCoordsNative(&width, &height, mode, true);
+			HotspotManager::convertCoordsNative(&x, &y, mode, false);
+			HotspotManager::convertCoordsNative(&width, &height, mode, true);
 		}
 
 		lua_pushnumber((float)width);
@@ -311,11 +309,9 @@ void Lua_V1::BlastText() {
 	const char *msgId = lua_getstring(textObj);
 	bool remastered = g_grim->isRemastered();
 
-	// The remastered reports the call as unsupported and still draws the text once
 	if (remastered)
 		warning("BlastText is not supported.");
 
-	// The remastered draws the text on the canvas, not on the buffer of the scene
 	if (!remastered)
 		g_grim->_stdDisplay->vBufferLock(g_grim->_sputRender->drawBuffer());
 
@@ -354,7 +350,6 @@ void Lua_V1::BlastText() {
 }
 
 void Lua_V1::SetOffscreenTextPos() {
-	// The remastered stores the position but nothing reads it
 	if (g_grim->isRemastered())
 		return;
 

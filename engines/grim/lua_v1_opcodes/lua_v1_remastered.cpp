@@ -42,15 +42,11 @@ enum {
 	kTextCanvasWidthMenu = 1920
 };
 
-// The kinds of input device the scripts are told about
 enum {
 	kInputModePad = 1,
 	kInputModeKeys = 2,
 	kInputModeMouse = 3
 };
-
-// Opcodes of the main table that the remastered has and the original does not.
-// The ones that belong to another module are in remastered/lua_remastered.cpp.
 
 void Lua_V1::GetPlatform() {
 	int platform = 1;
@@ -69,7 +65,6 @@ void Lua_V1::GetPlatform() {
 	lua_pushnumber((float)platform);
 }
 
-// The desktop builds of the original do nothing for the achievements
 void Lua_V1::UnlockAchievement() {
 }
 
@@ -84,7 +79,6 @@ void Lua_V1::GlobalSaveResolved() {
 	lua_pushnumber(1.0f);
 }
 
-// The cross-save check exists on the consoles only
 void Lua_V1::StartCheckOfCrossSaveStatus() {
 }
 
@@ -213,7 +207,6 @@ void Lua_V1::ImSetCommentaryVol() {
 	g_grim->getImuse()->imSetGroupVol(kImuseGroupCommentary, luaFtol(lua_getnumber(volObj)));
 }
 
-// Only the high resolution renderer uses these two values
 void Lua_V1::SetResolutionScaling() {
 	lua_Object valueObj = lua_getparam(1);
 
@@ -232,8 +225,6 @@ void Lua_V1::SetAdvancedLighting() {
 	_advancedLighting = (uint32)luaFtol(lua_getnumber(valueObj));
 }
 
-// The menu and the user modes pause the movie, and leaving them draws the scene again unless
-// the second argument is set. A mode that is not a number is mode 0, as in the original.
 void Lua_V1::SetGameRenderMode() {
 	lua_Object modeObj = lua_getparam(1);
 	lua_Object keepObj = lua_getparam(2);
@@ -304,8 +295,6 @@ bool Lua_V1::getSaveSlotTime(int slot, Common::String *time) {
 	return g_grim->_wuRegistry->getSlotTime(slot, time);
 }
 
-// Tells the scripts that the player changed the kind of device, and gives the new one and the
-// old one. The handler is called whatever it is, a missing one is an error of the scripts.
 void Lua_V1::changeInputMode(int mode, lua_Object func) {
 	if (mode == _lastInputMode)
 		return;
@@ -317,9 +306,6 @@ void Lua_V1::changeInputMode(int mode, lua_Object func) {
 	_lastInputMode = mode;
 }
 
-// The control update of the remastered. Besides the buttons and the axes it tells the scripts
-// which kind of device is used, pings them every fifth call and reports a long press of the
-// mouse button.
 int Lua_V1::controlCallbackRemastered(float frameTime) {
 	StdControl *stdControl = g_grim->_stdControl;
 	ControlSymbol *symbols = g_grim->_sputControl->getSymbols();
@@ -428,8 +414,7 @@ int Lua_V1::controlCallbackRemastered(float frameTime) {
 	return 0;
 }
 
-// The key mapping asks the scripts to take the result: 0 the key was taken, 1 it cannot be used,
-// 2 the slot does not exist, 3 the key is in use, 4 the player cancelled
+// 0 key taken, 1 cannot be used, 2 no such slot, 3 already in use, 4 cancelled
 void Lua_V1::notifyKeyMapped(int result) {
 	lua_beginblock();
 

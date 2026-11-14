@@ -39,8 +39,12 @@ RdCamera *RenderDroid::CameraModule::create(float fov, int clipFar, float zNear,
 int RenderDroid::CameraModule::newEntry(RdCamera *camera, float fov, int clipFar, float zNear, float zFar, float aspectRatio) {
 	camera->clipFrustum = new RdClipFrustum;
 
+	bool belowMinimum = fov < 5.0;
+	if (_rd->_remastered)
+		belowMinimum = !(fov >= 5.0);
+
 	double clampedFov;
-	if (fov < 5.0)
+	if (belowMinimum)
 		clampedFov = 5.0;
 	else if (fov > 179.0)
 		clampedFov = 179.0;
@@ -65,6 +69,9 @@ int RenderDroid::CameraModule::newEntry(RdCamera *camera, float fov, int clipFar
 
 void RenderDroid::CameraModule::destroy(RdCamera *&camera) {
 	if (camera) {
+		if (_rd->_remastered && _curCamera == camera)
+			_curCamera = nullptr;
+
 		freeEntry(camera);
 		delete camera;
 		camera = nullptr;
@@ -76,6 +83,9 @@ void RenderDroid::CameraModule::freeEntry(RdCamera *camera) {
 		delete camera->clipFrustum;
 		camera->clipFrustum = nullptr;
 	}
+
+	if (_rd->_remastered)
+		camera->canvas = nullptr;
 }
 
 int RenderDroid::CameraModule::setCanvas(RdCamera *camera, RdCanvas *canvas) {
@@ -93,9 +103,13 @@ int RenderDroid::CameraModule::setCurrent(RdCamera *camera) {
 }
 
 int RenderDroid::CameraModule::setFOV(RdCamera *camera, float fov) {
+	bool belowMinimum = fov < 5.0;
+	if (_rd->_remastered)
+		belowMinimum = !(fov >= 5.0);
+
 	double clampedFov;
 
-	if (fov < 5.0)
+	if (belowMinimum)
 		clampedFov = 5.0;
 	else if (fov > 179.0)
 		clampedFov = 179.0;
@@ -254,8 +268,19 @@ void RenderDroid::CameraModule::orthoProjectSquareLst(RdVector3 *out, RdVector3 
 }
 
 void RenderDroid::CameraModule::perspProject(RdVector3 out, RdVector3 in) {
-	double scale = (double)_curCamera->focalLen / in[1];
 	RdCanvas *canvas = _curCamera->canvas;
+
+	if (_rd->_remastered) {
+		float scale = (float)((double)_curCamera->focalLen / in[1]);
+		float scaledY = (float)((double)_curCamera->aspectRatio * scale);
+
+		out[0] = (float)((double)scale * in[0] + canvas->xCenter);
+		out[1] = (float)((double)canvas->yCenter - (double)in[2] * scaledY);
+		out[2] = in[1];
+		return;
+	}
+
+	double scale = (double)_curCamera->focalLen / in[1];
 	double scaledX = scale * in[0];
 	double scaledY = scale * _curCamera->aspectRatio;
 
@@ -269,6 +294,19 @@ void RenderDroid::CameraModule::perspProjectLst(RdVector3 *out, RdVector3 *in, i
 	float xCenter = canvas->xCenter;
 	float yCenter = canvas->yCenter;
 
+	if (_rd->_remastered) {
+		for (int i = 0; i < num; i++) {
+			float scale = (float)((double)_curCamera->focalLen / in[i][1]);
+			float scaledY = (float)((double)_curCamera->aspectRatio * scale);
+
+			out[i][0] = (float)((double)scale * in[i][0] + xCenter);
+			out[i][1] = (float)((double)yCenter - (double)in[i][2] * scaledY);
+			out[i][2] = in[i][1];
+		}
+
+		return;
+	}
+
 	for (int i = 0; i < num; i++) {
 		double scale = (double)_curCamera->focalLen / in[i][1];
 		double scaledX = scale * in[i][0];
@@ -281,8 +319,18 @@ void RenderDroid::CameraModule::perspProjectLst(RdVector3 *out, RdVector3 *in, i
 }
 
 void RenderDroid::CameraModule::perspProjectSquare(RdVector3 out, RdVector3 in) {
-	double scale = (double)_curCamera->focalLen / in[1];
 	RdCanvas *canvas = _curCamera->canvas;
+
+	if (_rd->_remastered) {
+		float scale = (float)((double)_curCamera->focalLen / in[1]);
+
+		out[0] = (float)((double)in[0] * scale + canvas->xCenter);
+		out[1] = (float)((double)canvas->yCenter - (double)in[2] * scale);
+		out[2] = in[1];
+		return;
+	}
+
+	double scale = (double)_curCamera->focalLen / in[1];
 
 	out[0] = (float)(scale * in[0] + canvas->xCenter);
 	out[1] = (float)((double)canvas->yCenter - (double)in[2] * scale);
@@ -293,6 +341,18 @@ void RenderDroid::CameraModule::perspProjectSquareLst(RdVector3 *out, RdVector3 
 	RdCanvas *canvas = _curCamera->canvas;
 	float xCenter = canvas->xCenter;
 	float yCenter = canvas->yCenter;
+
+	if (_rd->_remastered) {
+		for (int i = 0; i < num; i++) {
+			float scale = (float)((double)_curCamera->focalLen / in[i][1]);
+
+			out[i][0] = (float)((double)in[i][0] * scale + xCenter);
+			out[i][1] = (float)((double)yCenter - (double)in[i][2] * scale);
+			out[i][2] = in[i][1];
+		}
+
+		return;
+	}
 
 	for (int i = 0; i < num; i++) {
 		double scale = (double)_curCamera->focalLen / in[i][1];

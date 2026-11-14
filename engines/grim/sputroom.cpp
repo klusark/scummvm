@@ -849,7 +849,6 @@ int SputRoom::shutdown() {
 		_soundList = nextSound;
 	}
 
-	// The room can be gone already: the resources that were freed have invalidated the reference
 	if (_grim->isRemastered() && _currentRoomRef.valid)
 		_res->removeReference(&_currentRoomRef);
 

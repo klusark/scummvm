@@ -112,7 +112,6 @@ int SputActorModule::startup() {
 	if (_started)
 		return 1;
 
-	// A new game starts with the size of the table that the first game started with
 	if (_grim->isRemastered())
 		_maxActors = 1024;
 
@@ -145,7 +144,6 @@ void SputActorModule::shutdown() {
 		for (int i = 0; i < 4; i++)
 			_talkingActors[i] = nullptr;
 
-		// The table is made again, the actor that was selected is not there any more
 		_selectedActor = nullptr;
 	}
 }
@@ -362,13 +360,14 @@ void SputActorModule::enablePuck(SputActor *actor, int enable) {
 	}
 }
 
-void SputActorModule::setActorPosition(SputActor *actor, float *pos) {
+void SputActorModule::setActorPosition(SputActor *actor, float *pos, bool clearWalk) {
 	Puck *puck = nullptr;
 
 	if (actor->extra)
 		puck = actor->extra->puck;
 
-	actor->mode &= ~1;
+	if (clearWalk)
+		actor->mode &= ~1;
 
 	if (puck) {
 		puck->setPos(pos);
@@ -757,7 +756,6 @@ void SputActorModule::freeActor(SputActor *actor) {
 		actor->colorMap = nullptr;
 	}
 
-	// The count goes down only for an actor that was in use
 	if (_grim->isRemastered()) {
 		if (actor->inUse) {
 			actor->inUse = 0;

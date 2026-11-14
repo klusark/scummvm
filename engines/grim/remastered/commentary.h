@@ -40,12 +40,6 @@ class WuRegistry;
 struct BlastTextFont;
 struct SputTextEvent;
 
-/**
- * The director's commentary: the definitions of commentary_def.txt, the sound of a commentary
- * (an iMUSE sound in its own volume group), the timed subtitles, the dark strip at the top of the
- * screen and the 7 Lua functions that drive them. The scripts choose the commentary of a room
- * with SetCommentary and the player starts or stops it from the on-screen button.
- */
 class Commentary {
 public:
 	enum {
@@ -57,7 +51,6 @@ public:
 		kNumHeardWords = 8
 	};
 
-	// A subtitle line of an entry, shown between its start and its end (milliseconds of the sound)
 	struct Subtitle {
 		char stringId[kNameSize];
 		int speaker;
@@ -77,32 +70,24 @@ public:
 	Commentary(Res *res, IMuse *imuse, SputText *sputText, SputSmush *sputSmush, WuRegistry *wuRegistry, OverlayManager *overlays);
 	~Commentary();
 
-	// Reads commentary_def.txt, once
 	void loadDefinitions();
 
-	// The module hooks of a new game: the heard commentaries are forgotten, the subtitles of the
-	// entries are not shown anymore
 	void startup();
 	void shutdown();
 
-	// The Lua functions
 	void setCommentary(const char *name);
 	void clearCommentary();
 	void playCurrentCommentary();
 	void stopImmediately();
 	bool hasHeardCommentary(const char *name);
 
-	// True from the start of a commentary until it ends or is stopped
 	bool isPlaying() const { return _isPlaying; }
 
-	// Volume of the commentary group of iMUSE, 0 to 127
 	int getVolume() const;
 	void setVolume(int volume);
 
-	// Once per frame, after the actors
 	void update();
 
-	// The part of a savegame: the commentary that is set and the bits of the ones already heard
 	void saveRemastered(Common::WriteStream *stream) const;
 	bool restoreRemastered(Common::ReadStream *stream);
 

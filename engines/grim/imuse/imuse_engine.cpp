@@ -193,7 +193,6 @@ IMuse::~IMuse() {
 	_waveOutLowLatencyOutputBuffer = nullptr;
 }
 
-// What a new game needs from the sounds: everything stops and all the memory of the engine is given back
 void IMuse::soundsShutdown() {
 	g_system->getTimerManager()->removeTimerProc(timer_handler);
 
@@ -229,7 +228,6 @@ void IMuse::soundsStartup() {
 
 	imInitialize();
 
-	// The output stream is a new one: the underrun check starts again as after the first startup
 	_checkForUnderrun = false;
 	_underrunCooldown = _maxQueuedStreams;
 
