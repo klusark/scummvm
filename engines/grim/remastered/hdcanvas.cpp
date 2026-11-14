@@ -60,12 +60,14 @@ HdCanvas::SceneCache::~SceneCache() {
 	delete[] frame;
 }
 
-HdCanvas::HdCanvas() : _active(false), _stretched(false), _gpu(false), _remasteredLookRenderer(nullptr), _overlayFrame(nullptr), _frame(nullptr), _redShift(16), _greenShift(8), _blueShift(0), _opaqueMask(0xFF000000),
+HdCanvas::HdCanvas() : _active(false), _stretched(false), _gpu(false), _width(kReferenceWidth), _height(kReferenceHeight),
+		_remasteredLookRenderer(nullptr), _overlayFrame(nullptr), _frame(nullptr), _redShift(16), _greenShift(8), _blueShift(0), _opaqueMask(0xFF000000),
 		_gamma(1.0f), _frontScene(nullptr), _sceneWidth(0), _sceneHeight(0), _scenePitch(0), _softwareAlpha(0.0f),
 		_softwareAlphaEnd(0.0f), _softwareAlphaStart(0.0f), _softwareAlphaBlendTime(0.75f), _previousFrameTime(0.0),
 		_hasPreviousFrame(false), _redMax(0), _greenMax(0), _blueMax(0), _sceneUseCounter(0), _sceneSerial(0),
 		_composedSceneToken(0), _composedValid(false), _overlays(nullptr) {
 	memset(&_sceneFormat, 0, sizeof(_sceneFormat));
+	memset(&_overlayDirty, 0, sizeof(_overlayDirty));
 	memset(_redLevels, 0, sizeof(_redLevels));
 	memset(_greenLevels, 0, sizeof(_greenLevels));
 	memset(_blueLevels, 0, sizeof(_blueLevels));
@@ -91,9 +93,17 @@ bool HdCanvas::openGpu(RemasteredLookRenderer *remasteredLookRenderer) {
 	if (!remasteredLookRenderer ||!(Graphics::Renderer::getAvailableTypes() & Graphics::kRendererTypeOpenGLShaders))
 		return false;
 
-	initGraphics3d(kWidth, kHeight);
+	initGraphics3d(kReferenceWidth, kReferenceHeight);
 
-	if (!g_system->hasFeature(OSystem::kFeatureOpenGLForGame) || !remasteredLookRenderer->open(kWidth, kHeight)) {
+	int width = g_system->getWidth();
+	int height = g_system->getHeight();
+
+	if (width <= 0 || height <= 0) {
+		width = kReferenceWidth;
+		height = kReferenceHeight;
+	}
+
+	if (!g_system->hasFeature(OSystem::kFeatureOpenGLForGame) || !remasteredLookRenderer->open(width, height)) {
 		warning("HdCanvas::openGpu(): the Remastered look is not available, using the software scene");
 		return false;
 	}
@@ -103,11 +113,13 @@ bool HdCanvas::openGpu(RemasteredLookRenderer *remasteredLookRenderer) {
 	_blueShift = 16;
 	_opaqueMask = 0xFF000000;
 
-	if (!_frame)
-		_frame = new uint32[kWidth * kHeight]();
-
-	if (!_overlayFrame)
-		_overlayFrame = new uint32[kWidth * kHeight]();
+	delete[] _frame;
+	delete[] _overlayFrame;
+	_width = width;
+	_height = height;
+	_frame = new uint32[(size_t)_width * (size_t)_height]();
+	_overlayFrame = new uint32[(size_t)_width * (size_t)_height]();
+	memset(&_overlayDirty, 0, sizeof(_overlayDirty));
 
 	releaseSceneCaches();
 	_composedItems.clear();
@@ -115,6 +127,7 @@ bool HdCanvas::openGpu(RemasteredLookRenderer *remasteredLookRenderer) {
 	_remasteredLookRenderer = remasteredLookRenderer;
 	_gpu = true;
 	_active = true;
+	g_grim->regenerateTextAtlases();
 
 	return true;
 }
@@ -133,7 +146,9 @@ void HdCanvas::open(RemasteredLookRenderer *remasteredLookRenderer) {
 		}
 	}
 
-	initGraphics(kWidth, kHeight, &wanted);
+	_width = kReferenceWidth;
+	_height = kReferenceHeight;
+	initGraphics(_width, _height, &wanted);
 
 	Graphics::PixelFormat format = g_system->getScreenFormat();
 
@@ -148,14 +163,15 @@ void HdCanvas::open(RemasteredLookRenderer *remasteredLookRenderer) {
 	if (format.aLoss < 8)
 		_opaqueMask = (uint32)(((1u << (8 - format.aLoss)) - 1) << format.aShift);
 
-	if (!_frame)
-		_frame = new uint32[kWidth * kHeight]();
+	delete[] _frame;
+	_frame = new uint32[(size_t)_width * (size_t)_height]();
 
 	releaseSceneCaches();
 	_composedItems.clear();
 	_composedValid = false;
 
 	_active = true;
+	g_grim->regenerateTextAtlases();
 }
 
 void HdCanvas::close() {
@@ -183,8 +199,49 @@ void HdCanvas::close() {
 void HdCanvas::beginFrame() {
 	_items.resize(0);
 
-	if (_gpu && _remasteredLookRenderer)
+	if (_gpu && _remasteredLookRenderer) {
+		pollSize();
 		_remasteredLookRenderer->beginFrame();
+	}
+}
+
+void HdCanvas::pollSize() {
+	int width = g_system->getWidth();
+	int height = g_system->getHeight();
+
+	if (width <= 0 || height <= 0 || (width == _width && height == _height))
+		return;
+
+	resize(width, height);
+}
+
+void HdCanvas::resize(int width, int height) {
+	delete[] _frame;
+	delete[] _overlayFrame;
+	_width = width;
+	_height = height;
+	_frame = new uint32[(size_t)_width * (size_t)_height]();
+	_overlayFrame = new uint32[(size_t)_width * (size_t)_height]();
+	memset(&_overlayDirty, 0, sizeof(_overlayDirty));
+	releaseSceneCaches();
+	_items.clear();
+	_composedItems.clear();
+	_composedValid = false;
+	_remasteredLookRenderer->setHostSize(width, height);
+	g_grim->regenerateTextAtlases();
+}
+
+float HdCanvas::getTextScale() const {
+	float scale;
+
+	computeScaling(_width, _height, false, g_grim->getTextCanvasWidth(), kReferenceHeight, &scale, nullptr, nullptr, nullptr);
+
+	return scale;
+}
+
+void HdCanvas::textCanvasChanged() {
+	if (_active)
+		g_grim->regenerateTextAtlases();
 }
 
 void HdCanvas::releaseSceneCaches() {
@@ -271,9 +328,9 @@ void HdCanvas::queueFilledRectangle(int left, int top, int right, int bottom, ui
 	float offsetX;
 	float offsetY;
 
-	computeScaling(false, canvasWidth, 1080, &scaleX, &scaleY, &offsetX, &offsetY);
+	computeScaling(_width, _height, false, canvasWidth, kReferenceHeight, &scaleX, &scaleY, &offsetX, &offsetY);
 
-	double shiftWidth = (double)(uint32)(kWidth - canvasWidth);
+	double shiftWidth = (double)(uint32)(kReferenceWidth - canvasWidth);
 
 	offsetX = (float)((double)offsetX - (shiftWidth * (double)scaleX) * 0.5);
 
@@ -297,8 +354,8 @@ void HdCanvas::clearBuffer() {
 	item.kind = kItemFill;
 	item.x = 0.0f;
 	item.y = 0.0f;
-	item.width = (float)kWidth;
-	item.height = (float)kHeight;
+	item.width = (float)_width;
+	item.height = (float)_height;
 	item.alpha = 1.0f;
 	_items.push_back(item);
 }
@@ -319,8 +376,8 @@ void HdCanvas::queueMovie(const byte *rgba, int width, int height, int contentSe
 	if (!rgba || width <= 0 || height <= 0)
 		return;
 
-	float backWidth = (float)kWidth;
-	float backHeight = (float)kHeight;
+	float backWidth = (float)_width;
+	float backHeight = (float)_height;
 	float limitX = 640.0f / backWidth;
 	float limitY = 480.0f / backHeight;
 	float halfWidth;
@@ -364,14 +421,16 @@ void HdCanvas::dropPixels(const byte *pixels) {
 	_composedValid = false;
 }
 
-float HdCanvas::getAreaScaleX() const {
-	return _stretched ? (float)kWidth / (float)kAreaWidth : 1.0f;
-}
-
 float HdCanvas::getWidescreenCorrection() const {
-	float scaleX = getAreaScaleX();
+	if (!_stretched)
+		return 1.0f;
 
-	return MIN(scaleX, 1.0f) / scaleX;
+	float scaleX;
+	float scaleY;
+
+	computeScaling(_width, _height, true, kAreaWidth, kReferenceHeight, &scaleX, &scaleY, nullptr, nullptr);
+
+	return (scaleX < scaleY ? scaleX : scaleY) / scaleX;
 }
 
 uint32 HdCanvas::packPixel(int red, int green, int blue) const {
@@ -382,6 +441,8 @@ HdTextCanvas HdCanvas::getTextCanvas() const {
 	HdTextCanvas canvas;
 
 	canvas.width = g_grim->getTextCanvasWidth();
+	canvas.backWidth = _width;
+	canvas.backHeight = _height;
 
 	canvas.boxingHD = (double)canvas.width / 1080.0 > 1.7;
 	canvas.stretched = _stretched;
@@ -390,10 +451,10 @@ HdTextCanvas HdCanvas::getTextCanvas() const {
 }
 
 // The offsets are computed in double and rounded to float once
-void HdCanvas::computeScaling(bool stretch, int referenceWidth, int referenceHeight, float *scaleX, float *scaleY,
-		float *offsetX, float *offsetY) {
-	float backWidth = (float)(uint32)kWidth;
-	float backHeight = (float)(uint32)kHeight;
+void HdCanvas::computeScaling(int backWidthPixels, int backHeightPixels, bool stretch, int referenceWidth, int referenceHeight,
+		float *scaleX, float *scaleY, float *offsetX, float *offsetY) {
+	float backWidth = (float)(uint32)backWidthPixels;
+	float backHeight = (float)(uint32)backHeightPixels;
 	float width = (float)(uint32)referenceWidth;
 	float height = (float)(uint32)referenceHeight;
 	float xScale = (float)((double)backWidth / (double)width);
@@ -401,15 +462,29 @@ void HdCanvas::computeScaling(bool stretch, int referenceWidth, int referenceHei
 	float scale = xScale > yScale ? yScale : xScale;
 
 	if (stretch) {
-		*scaleX = xScale;
-		*scaleY = yScale;
-		*offsetX = 0.0f;
-		*offsetY = 0.0f;
+		if (scaleX)
+			*scaleX = xScale;
+
+		if (scaleY)
+			*scaleY = yScale;
+
+		if (offsetX)
+			*offsetX = 0.0f;
+
+		if (offsetY)
+			*offsetY = 0.0f;
 	} else {
-		*scaleX = scale;
-		*scaleY = scale;
-		*offsetX = (float)(((double)backWidth - (double)width * (double)scale) * 0.5);
-		*offsetY = (float)(0.5 * ((double)backHeight - (double)height * (double)scale));
+		if (scaleX)
+			*scaleX = scale;
+
+		if (scaleY)
+			*scaleY = scale;
+
+		if (offsetX)
+			*offsetX = (float)(((double)backWidth - (double)width * (double)scale) * 0.5);
+
+		if (offsetY)
+			*offsetY = (float)(0.5 * ((double)backHeight - (double)height * (double)scale));
 	}
 }
 
@@ -610,7 +685,7 @@ void HdCanvas::present(const StdVBuffer *scene, float gamma) {
 			_composedValid = true;
 		}
 
-		g_system->copyRectToScreen(_frame, kWidth * 4, 0, 0, kWidth, kHeight);
+		g_system->copyRectToScreen(_frame, _width * 4, 0, 0, _width, _height);
 		g_system->updateScreen();
 	}
 
@@ -619,38 +694,131 @@ void HdCanvas::present(const StdVBuffer *scene, float gamma) {
 	_stretched = g_grim->isWidescreenStretched();
 }
 
+void HdCanvas::unionBounds(Bounds *bounds, int left, int top, int right, int bottom) const {
+	if (left >= right || top >= bottom)
+		return;
+
+	if (bounds->left >= bounds->right || bounds->top >= bounds->bottom) {
+		bounds->left = left;
+		bounds->top = top;
+		bounds->right = right;
+		bounds->bottom = bottom;
+
+		return;
+	}
+
+	bounds->left = MIN(bounds->left, left);
+	bounds->top = MIN(bounds->top, top);
+	bounds->right = MAX(bounds->right, right);
+	bounds->bottom = MAX(bounds->bottom, bottom);
+}
+
+void HdCanvas::getItemBounds(const Item &item, Bounds *bounds) const {
+	switch (item.kind) {
+	case kItemBitmap:
+		if (item.pixels && item.bitmapAlpha > 0)
+			unionBounds(bounds, MAX(item.bitmapX, 0), MAX(item.bitmapY, 0), MIN(item.bitmapX + item.srcWidth, _width),
+					MIN(item.bitmapY + item.srcHeight, _height));
+
+		break;
+	case kItemOverlay:
+	case kItemMovie:
+		if (!item.pixels || !(item.width > 0.0f) || !(item.height > 0.0f))
+			break;
+
+		unionBounds(bounds, clampPixel(item.x, _width), clampPixel(item.y, _height), clampPixel(item.x + item.width, _width),
+				clampPixel(item.y + item.height, _height));
+		break;
+	case kItemFill:
+		unionBounds(bounds, clampPixel(item.x, _width), clampPixel(item.y, _height), clampPixel(item.x + item.width, _width),
+				clampPixel(item.y + item.height, _height));
+		break;
+	case kItemText: {
+		const HdTextDraw &draw = item.text;
+
+		for (uint q = 0; q < draw.quads.size(); q++) {
+			const HdTextQuad &quad = draw.quads[q];
+
+			if (!quad.glyph || !quad.glyph->alpha)
+				continue;
+
+			float quadLeft = quad.x + draw.originX;
+			float quadTop = quad.y + draw.originY;
+
+			unionBounds(bounds, clampPixel(quadLeft, _width), clampPixel(quadTop, _height),
+					clampPixel(quadLeft + (float)quad.width, _width), clampPixel(quadTop + (float)quad.height, _height));
+		}
+
+		break;
+	}
+	default:
+		break;
+	}
+}
+
 void HdCanvas::buildOverlayFrame() {
-	for (int i = 0; i < kWidth * kHeight; i++)
-		_frame[i] = _opaqueMask;
+	Bounds area;
+
+	memset(&area, 0, sizeof(area));
+
+	for (uint i = 0; i < _items.size(); i++)
+		getItemBounds(_items[i], &area);
+
+	Bounds region = area;
+
+	unionBounds(&region, _overlayDirty.left, _overlayDirty.top, _overlayDirty.right, _overlayDirty.bottom);
+	_overlayDirty = area;
+
+	if (region.left >= region.right || region.top >= region.bottom)
+		return;
+
+	size_t rowBytes = (size_t)(region.right - region.left) * sizeof(uint32);
+
+	for (int y = region.top; y < region.bottom; y++) {
+		uint32 *row = _frame + (size_t)y * (size_t)_width + region.left;
+
+		for (int x = 0; x < region.right - region.left; x++)
+			row[x] = _opaqueMask;
+	}
 
 	for (uint i = 0; i < _items.size(); i++)
 		drawItem(_items[i]);
 
-	memcpy(_overlayFrame, _frame, (size_t)kWidth * (size_t)kHeight * sizeof(uint32));
+	for (int y = region.top; y < region.bottom; y++)
+		memcpy(_overlayFrame + (size_t)y * (size_t)_width + region.left, _frame + (size_t)y * (size_t)_width + region.left, rowBytes);
 
-	for (int i = 0; i < kWidth * kHeight; i++)
-		_frame[i] = 0xFFFFFFFF;
+	for (int y = region.top; y < region.bottom; y++) {
+		uint32 *row = _frame + (size_t)y * (size_t)_width + region.left;
+
+		for (int x = 0; x < region.right - region.left; x++)
+			row[x] = 0xFFFFFFFF;
+	}
 
 	for (uint i = 0; i < _items.size(); i++)
 		drawItem(_items[i]);
 
-	for (int i = 0; i < kWidth * kHeight; i++) {
-		uint32 dark = _overlayFrame[i];
-		uint32 light = _frame[i];
-		int darkGreen = (int)((dark >> 8) & 0xFF);
-		int lightGreen = (int)((light >> 8) & 0xFF);
-		int alpha = 255 - (lightGreen - darkGreen);
+	for (int y = region.top; y < region.bottom; y++) {
+		uint32 *overlayRow = _overlayFrame + (size_t)y * (size_t)_width;
+		const uint32 *lightRow = _frame + (size_t)y * (size_t)_width;
 
-		if (alpha < 0)
-			alpha = 0;
-		else if (alpha > 255)
-			alpha = 255;
+		for (int x = region.left; x < region.right; x++) {
+			uint32 dark = overlayRow[x];
+			uint32 light = lightRow[x];
+			int darkGreen = (int)((dark >> 8) & 0xFF);
+			int lightGreen = (int)((light >> 8) & 0xFF);
+			int alpha = 255 - (lightGreen - darkGreen);
 
-		int red = MIN((int)(dark & 0xFF), alpha);
-		int green = MIN(darkGreen, alpha);
-		int blue = MIN((int)((dark >> 16) & 0xFF), alpha);
+			if (alpha < 0)
+				alpha = 0;
+			else if (alpha > 255)
+				alpha = 255;
 
-		_overlayFrame[i] = (uint32)red | ((uint32)green << 8) | ((uint32)blue << 16) | ((uint32)alpha << 24);
+			int red = MIN((int)(dark & 0xFF), alpha);
+			int green = MIN(darkGreen, alpha);
+			int blue = MIN((int)((dark >> 16) & 0xFF), alpha);
+
+			overlayRow[x] = (uint32)red | ((uint32)green << 8) | ((uint32)blue << 16) | ((uint32)alpha << 24);
+		}
 	}
 }
 
@@ -682,7 +850,7 @@ void HdCanvas::presentGpu(const StdVBuffer *scene) {
 }
 
 void HdCanvas::fillFrame() {
-	for (int i = 0; i < kWidth * kHeight; i++)
+	for (int i = 0; i < _width * _height; i++)
 		_frame[i] = _opaqueMask;
 }
 
@@ -692,7 +860,7 @@ void HdCanvas::composeFrame(int firstItem, SceneCache *entry, bool matched) {
 	if (firstItem >= 0) {
 		start = (uint)firstItem;
 	} else if (entry && entry->hasFrame) {
-		memcpy(_frame, entry->frame, (size_t)kWidth * (size_t)kHeight * sizeof(uint32));
+		memcpy(_frame, entry->frame, (size_t)_width * (size_t)_height * sizeof(uint32));
 	} else {
 		fillFrame();
 		drawScene();
@@ -778,9 +946,9 @@ HdCanvas::SceneCache *HdCanvas::findSceneCache(bool *matched) {
 
 void HdCanvas::storeSceneFrame(SceneCache *entry) {
 	if (!entry->frame)
-		entry->frame = new uint32[kWidth * kHeight];
+		entry->frame = new uint32[(size_t)_width * (size_t)_height];
 
-	memcpy(entry->frame, _frame, (size_t)kWidth * (size_t)kHeight * sizeof(uint32));
+	memcpy(entry->frame, _frame, (size_t)_width * (size_t)_height * sizeof(uint32));
 	entry->hasFrame = true;
 }
 
@@ -861,8 +1029,8 @@ bool HdCanvas::coversFrame(const Item &item) const {
 		return false;
 	}
 
-	return clampPixel(item.x, kWidth) == 0 && clampPixel(item.x + item.width, kWidth) == kWidth &&
-			clampPixel(item.y, kHeight) == 0 && clampPixel(item.y + item.height, kHeight) == kHeight;
+	return clampPixel(item.x, _width) == 0 && clampPixel(item.x + item.width, _width) == _width &&
+			clampPixel(item.y, _height) == 0 && clampPixel(item.y + item.height, _height) == _height;
 }
 
 int HdCanvas::findCoveringItem() const {
@@ -942,14 +1110,14 @@ void HdCanvas::drawScene() {
 	float offsetX;
 	float offsetY;
 
-	computeScaling(_stretched, srcWidth, srcHeight, &scaleX, &scaleY, &offsetX, &offsetY);
+	computeScaling(_width, _height, _stretched, srcWidth, srcHeight, &scaleX, &scaleY, &offsetX, &offsetY);
 
 	float quadWidth = scaleX * (float)srcWidth;
 	float quadHeight = scaleY * (float)srcHeight;
-	int left = clampPixel(offsetX, kWidth);
-	int right = clampPixel(offsetX + quadWidth, kWidth);
-	int top = clampPixel(offsetY, kHeight);
-	int bottom = clampPixel(offsetY + quadHeight, kHeight);
+	int left = clampPixel(offsetX, _width);
+	int right = clampPixel(offsetX + quadWidth, _width);
+	int top = clampPixel(offsetY, _height);
+	int bottom = clampPixel(offsetY + quadHeight, _height);
 
 	if (left >= right || top >= bottom)
 		return;
@@ -983,7 +1151,7 @@ void HdCanvas::drawScene() {
 		const float *upper = getHorizontalRow(first, -1);
 		const float *lower = getHorizontalRow(second, first);
 		float inverse = 1.0f - fraction;
-		uint32 *destination = _frame + y * kWidth + left;
+		uint32 *destination = _frame + y * _width + left;
 
 		for (int i = 0; i < columns; i++) {
 			float red = upper[i * 3] * inverse + lower[i * 3] * fraction;
@@ -1018,11 +1186,11 @@ void HdCanvas::drawItem(const Item &item) {
 }
 
 void HdCanvas::writePixel(int x, int y, int red, int green, int blue) {
-	_frame[y * kWidth + x] = packPixel(red, green, blue);
+	_frame[y * _width + x] = packPixel(red, green, blue);
 }
 
 void HdCanvas::blendPixel(int x, int y, float red, float green, float blue, float alpha) {
-	uint32 *destination = &_frame[y * kWidth + x];
+	uint32 *destination = &_frame[y * _width + x];
 	uint32 value = *destination;
 	float inverse = 1.0f - alpha;
 	float destRed = _byteToFloat[(value >> _redShift) & 0xFF];
@@ -1038,12 +1206,12 @@ void HdCanvas::drawBitmap(const Item &item) {
 
 	int left = MAX(item.bitmapX, 0);
 	int top = MAX(item.bitmapY, 0);
-	int right = MIN(item.bitmapX + item.srcWidth, (int)kWidth);
-	int bottom = MIN(item.bitmapY + item.srcHeight, (int)kHeight);
+	int right = MIN(item.bitmapX + item.srcWidth, _width);
+	int bottom = MIN(item.bitmapY + item.srcHeight, _height);
 
 	for (int y = top; y < bottom; y++) {
 		const byte *sourceRow = item.pixels + (int64)(y - item.bitmapY) * item.srcWidth * 4;
-		uint32 *destination = _frame + y * kWidth;
+		uint32 *destination = _frame + y * _width;
 
 		for (int x = left; x < right; x++) {
 			const byte *pixel = sourceRow + (x - item.bitmapX) * 4;
@@ -1080,10 +1248,10 @@ void HdCanvas::drawBitmap(const Item &item) {
 }
 
 void HdCanvas::drawFill(const Item &item) {
-	int left = clampPixel(item.x, kWidth);
-	int right = clampPixel(item.x + item.width, kWidth);
-	int top = clampPixel(item.y, kHeight);
-	int bottom = clampPixel(item.y + item.height, kHeight);
+	int left = clampPixel(item.x, _width);
+	int right = clampPixel(item.x + item.width, _width);
+	int top = clampPixel(item.y, _height);
+	int bottom = clampPixel(item.y + item.height, _height);
 
 	if (left >= right || top >= bottom)
 		return;
@@ -1092,7 +1260,7 @@ void HdCanvas::drawFill(const Item &item) {
 		uint32 value = packPixel(toByte(item.fillRed), toByte(item.fillGreen), toByte(item.fillBlue));
 
 		for (int y = top; y < bottom; y++) {
-			uint32 *destination = _frame + y * kWidth;
+			uint32 *destination = _frame + y * _width;
 
 			for (int x = left; x < right; x++)
 				destination[x] = value;
@@ -1122,7 +1290,7 @@ void HdCanvas::drawFill(const Item &item) {
 	}
 
 	for (int y = top; y < bottom; y++) {
-		uint32 *destination = _frame + y * kWidth;
+		uint32 *destination = _frame + y * _width;
 
 		for (int x = left; x < right; x++) {
 			uint32 value = destination[x];
@@ -1137,10 +1305,10 @@ void HdCanvas::drawOverlay(const Item &item) {
 	if (!item.pixels || !(item.width > 0.0f) || !(item.height > 0.0f))
 		return;
 
-	int left = clampPixel(item.x, kWidth);
-	int right = clampPixel(item.x + item.width, kWidth);
-	int top = clampPixel(item.y, kHeight);
-	int bottom = clampPixel(item.y + item.height, kHeight);
+	int left = clampPixel(item.x, _width);
+	int right = clampPixel(item.x + item.width, _width);
+	int top = clampPixel(item.y, _height);
+	int bottom = clampPixel(item.y + item.height, _height);
 
 	if (left >= right || top >= bottom)
 		return;
@@ -1255,7 +1423,7 @@ void HdCanvas::drawOverlay(const Item &item) {
 
 		if (exact && plain) {
 			const byte *row = item.pixels + (size_t)firstRow * (size_t)srcWidth * 4;
-			uint32 *destination = _frame + y * kWidth + left;
+			uint32 *destination = _frame + y * _width + left;
 
 			for (int i = 0; i < columns; i++) {
 				const byte *a = row + _itemColumnFirst[i] * 4;
@@ -1359,10 +1527,10 @@ void HdCanvas::drawText(const Item &item) {
 		float quadTop = quad.y + draw.originY;
 		int quadWidth = quad.width;
 		int quadHeight = quad.height;
-		int left = clampPixel(quadLeft, kWidth);
-		int right = clampPixel(quadLeft + (float)quadWidth, kWidth);
-		int top = clampPixel(quadTop, kHeight);
-		int bottom = clampPixel(quadTop + (float)quadHeight, kHeight);
+		int left = clampPixel(quadLeft, _width);
+		int right = clampPixel(quadLeft + (float)quadWidth, _width);
+		int top = clampPixel(quadTop, _height);
+		int bottom = clampPixel(quadTop + (float)quadHeight, _height);
 
 		if (left >= right || top >= bottom)
 			continue;
@@ -1462,10 +1630,10 @@ void HdCanvas::drawMovie(const Item &item) {
 	if (!item.pixels || !(item.width > 0.0f) || !(item.height > 0.0f))
 		return;
 
-	int left = clampPixel(item.x, kWidth);
-	int right = clampPixel(item.x + item.width, kWidth);
-	int top = clampPixel(item.y, kHeight);
-	int bottom = clampPixel(item.y + item.height, kHeight);
+	int left = clampPixel(item.x, _width);
+	int right = clampPixel(item.x + item.width, _width);
+	int top = clampPixel(item.y, _height);
+	int bottom = clampPixel(item.y + item.height, _height);
 
 	if (left >= right || top >= bottom)
 		return;
@@ -1520,7 +1688,7 @@ void HdCanvas::drawMovie(const Item &item) {
 		float inverseY = 1.0f - fractionY;
 		int firstRow = CLIP(base, 0, srcHeight - 1);
 		int secondRow = CLIP(base + 1, 0, srcHeight - 1);
-		uint32 *destination = _frame + y * kWidth + left;
+		uint32 *destination = _frame + y * _width + left;
 
 		if (aligned && fractionY == 0.0f) {
 			const byte *row = item.pixels + (size_t)firstRow * (size_t)srcWidth * 4;

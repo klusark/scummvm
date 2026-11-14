@@ -768,11 +768,12 @@ void OverlayManager::drawOverlay(const Overlay &overlay, int boxing) {
 	float heightScale;
 
 	if (boxing == 1) {
-		_canvas->computeScaling(false, 1920, 1080, &scaleX, &scaleY, &offsetX, &offsetY);
+		_canvas->computeScaling(_canvas->getWidth(), _canvas->getHeight(), false, 1920, 1080, &scaleX, &scaleY, &offsetX, &offsetY);
 		widthScale = scaleX;
 		heightScale = scaleY;
 	} else {
-		_canvas->computeScaling(_canvas->isStretched(), 1440, 1080, &scaleX, &scaleY, &offsetX, &offsetY);
+		_canvas->computeScaling(_canvas->getWidth(), _canvas->getHeight(), _canvas->isStretched(), 1440, 1080, &scaleX, &scaleY,
+				&offsetX, &offsetY);
 		offsetX = (float)((double)offsetX - 240.0 * (double)scaleX);
 		widthScale = scaleX < scaleY ? scaleX : scaleY;
 		heightScale = widthScale;

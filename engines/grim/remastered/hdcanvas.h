@@ -37,8 +37,8 @@ struct StdVBuffer;
 class HdCanvas {
 public:
 	enum {
-		kWidth = 1920,
-		kHeight = 1080,
+		kReferenceWidth = 1920,
+		kReferenceHeight = 1080,
 		kAreaWidth = 1440
 	};
 
@@ -48,6 +48,8 @@ public:
 	void open(RemasteredLookRenderer *remasteredLookRenderer = nullptr);
 	void close();
 	bool isActive() const { return _active; }
+	int getWidth() const { return _width; }
+	int getHeight() const { return _height; }
 	void present(const StdVBuffer *scene, float gamma);
 
 	void queueBitmap(int layer, const byte *rgba, int width, int height, int x, int y, byte alpha);
@@ -72,13 +74,14 @@ public:
 
 	// The option is sampled at the end of every present, so a frame uses the value of the one before
 	bool isStretched() const { return _stretched; }
-	float getAreaScaleX() const;
 	float getWidescreenCorrection() const;
+	float getTextScale() const;
+	void textCanvasChanged();
 
 	HdTextCanvas getTextCanvas() const;
 
-	static void computeScaling(bool stretch, int referenceWidth, int referenceHeight, float *scaleX, float *scaleY,
-			float *offsetX, float *offsetY);
+	static void computeScaling(int backWidth, int backHeight, bool stretch, int referenceWidth, int referenceHeight,
+			float *scaleX, float *scaleY, float *offsetX, float *offsetY);
 
 	byte *getFrontScene(const StdVBuffer *engineScene, int *pitchInBytes, int *width, int *height);
 
@@ -166,8 +169,19 @@ private:
 		byte cell[kPowCells + 1];
 	};
 
+	struct Bounds {
+		int left;
+		int top;
+		int right;
+		int bottom;
+	};
+
 	bool openGpu(RemasteredLookRenderer *remasteredLookRenderer);
 	void presentGpu(const StdVBuffer *scene);
+	void pollSize();
+	void resize(int width, int height);
+	void unionBounds(Bounds *bounds, int left, int top, int right, int bottom) const;
+	void getItemBounds(const Item &item, Bounds *bounds) const;
 	void buildOverlayFrame();
 	void updateSoftwareAlpha();
 	void prepareFrontScene(const StdVBuffer *scene);
@@ -210,6 +224,9 @@ private:
 	bool _active;
 	bool _stretched;
 	bool _gpu;
+	int _width;
+	int _height;
+	Bounds _overlayDirty;
 	RemasteredLookRenderer *_remasteredLookRenderer;
 	uint32 *_overlayFrame;
 	uint32 *_frame;

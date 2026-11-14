@@ -47,9 +47,10 @@ public:
 		float advance;
 	};
 
-	HdFont(const Common::String &path, float size, int minPixels);
+	HdFont(const Common::String &path, float size, int minPixels, float scale);
 	~HdFont();
 
+	void regenerate(float scale);
 	bool isLoaded() const { return _loaded; }
 	const Common::String &getPath() const { return _path; }
 	float getRequestedSize() const { return _requestedSize; }
@@ -60,12 +61,17 @@ private:
 	HdFont(const HdFont &);
 	HdFont &operator=(const HdFont &);
 
-	void loadGlyphs(const byte *data, long dataSize, int minPixels);
+	float computePixelSize(float scale) const;
+	void freeGlyphs();
+	void loadGlyphs(float scale);
 
 	Common::String _path;
 	float _requestedSize;
+	int _minPixels;
 	float _pixelSize;
 	bool _loaded;
+	byte *_data;
+	long _dataSize;
 	Glyph _glyphs[kNumGlyphs];
 	Glyph _emptyGlyph;
 };
@@ -100,6 +106,7 @@ struct HdTextInfo {
 	float alpha;
 	int firstLine;
 	int lineCount;
+	float widthScale;
 };
 
 class HdTextCache {
@@ -117,6 +124,8 @@ public:
 
 struct HdTextCanvas {
 	int width;
+	int backWidth;
+	int backHeight;
 	bool boxingHD;
 	bool stretched;
 };
@@ -145,13 +154,14 @@ public:
 
 	void attachFont(BlastTextFont *font, const char *name);
 	const HdFont *getCustomFont();
+	void regenerate(float scale);
 
 	void layout(const HdTextInfo &info, HdTextCache *cache);
 	void buildDraw(const HdTextInfo &info, const HdTextCache *cache, const HdTextCanvas &canvas, HdTextDraw *draw) const;
 
 	static void queryText(const HdTextInfo &info, const HdTextCache *cache, const HdTextCanvas &canvas, int *x, int *y,
 			int *width, int *height);
-	static int getFontHeight(const HdFont *font);
+	static int getFontHeight(const HdFont *font, const HdTextCanvas &canvas);
 	static int getTextPage(int flags);
 
 private:
@@ -165,6 +175,7 @@ private:
 	static bool isWordCharacter(int c);
 
 	Common::Array<HdFont *> _fonts;
+	float _scale;
 	const HdFont *_customFont;
 	bool _customFontTried;
 };

@@ -43,6 +43,7 @@ public:
 
 	bool open(int hostWidth, int hostHeight) override;
 	void close() override;
+	void setHostSize(int hostWidth, int hostHeight) override;
 	const LookCaps &getCaps() const override { return _caps; }
 
 	void beginFrame() override;

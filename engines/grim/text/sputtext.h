@@ -108,6 +108,7 @@ public:
 	int getHdLineCount(SputTextEvent *event);
 	int getHdLineCharacterCount(SputTextEvent *event, int line);
 	void invalidateHdText(SputTextEvent *event);
+	void regenerateHdAtlases();
 	void luaGetFontDimensions();
 	void parseSayLineTable(lua_Object tableObj, int *background, int *volume, int *pan, int *x, int *y);
 	TextParams *getDefaultTextParams() { return &_defaultTextParams; }

@@ -387,6 +387,12 @@ void RemasteredLookDeviceGl2::close() {
 	_open = false;
 }
 
+void RemasteredLookDeviceGl2::setHostSize(int hostWidth, int hostHeight) {
+	_hostWidth = hostWidth;
+	_hostHeight = hostHeight;
+	_targetsDirty = true;
+}
+
 bool RemasteredLookDeviceGl2::isContextLost() {
 	if (!_open || !_sentinel)
 		return false;
@@ -1111,6 +1117,9 @@ bool RemasteredLookDeviceGl2::open(int hostWidth, int hostHeight) {
 }
 
 void RemasteredLookDeviceGl2::close() {
+}
+
+void RemasteredLookDeviceGl2::setHostSize(int hostWidth, int hostHeight) {
 }
 
 void RemasteredLookDeviceGl2::beginFrame() {

@@ -405,7 +405,23 @@ bool GrimEngine::hasFeature(EngineFeature f) const {
 	return
 		(f == kSupportsReturnToLauncher) ||
 		(f == kSupportsLoadingDuringRuntime) ||
-		(f == kSupportsQuitDialogOverride && !isRemastered());
+		(f == kSupportsQuitDialogOverride && !isRemastered()) ||
+		(f == kSupportsArbitraryResolutions && isRemastered() &&
+				(Graphics::Renderer::getAvailableTypes() & Graphics::kRendererTypeOpenGLShaders) != 0);
+}
+
+void GrimEngine::setTextCanvasWidth(int width) {
+	bool changed = width != _textCanvasWidth;
+
+	_textCanvasWidth = width;
+
+	if (changed && _hdCanvas)
+		_hdCanvas->textCanvasChanged();
+}
+
+void GrimEngine::regenerateTextAtlases() {
+	if (_sputText)
+		_sputText->regenerateHdAtlases();
 }
 
 void GrimEngine::pauseEngineIntern(bool pause) {

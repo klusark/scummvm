@@ -253,7 +253,8 @@ public:
 	int getLibMode() const { return _libMode; }
 	void setLibMode(int mode) { _libMode = mode; }
 	int getTextCanvasWidth() const { return _textCanvasWidth; }
-	void setTextCanvasWidth(int width) { _textCanvasWidth = width; }
+	void setTextCanvasWidth(int width);
+	void regenerateTextAtlases();
 	int getDebugKeys() const { return _debugKeys; }
 	void setDebugKeys(int debugKeys) { _debugKeys = debugKeys; }
 	const StdColorFormat *getColorInfo() const { return &_colorInfoCopy; }

@@ -84,6 +84,7 @@ public:
 
 	virtual bool open(int hostWidth, int hostHeight) = 0;
 	virtual void close() = 0;
+	virtual void setHostSize(int hostWidth, int hostHeight) = 0;
 	virtual const LookCaps &getCaps() const = 0;
 
 	virtual void beginFrame() = 0;

@@ -59,6 +59,7 @@ public:
 	bool open(int hostWidth, int hostHeight);
 	void close();
 	bool isOpen() const { return _open; }
+	void setHostSize(int hostWidth, int hostHeight);
 
 	void setBuffers(const StdVBuffer *drawBuffer, const StdVBuffer *zBuffer, const StdVBuffer *frontBuffer);
 
@@ -144,6 +145,7 @@ private:
 
 	void updateAlpha();
 	void recoverContext();
+	RemasteredLookTexture *createOverlayTexture(int width, int height);
 	bool getLightStatus(const char *name, int &value) const;
 	void updateRoom();
 	void updateExtraLights(float step);

@@ -1150,6 +1150,19 @@ void SputText::invalidateHdText(SputTextEvent *event) {
 	event->hdCache = nullptr;
 }
 
+void SputText::regenerateHdAtlases() {
+	HdText *hdText = _blastText->getHdText();
+	HdCanvas *canvas = _grim->getHdCanvas();
+
+	if (!hdText || !canvas)
+		return;
+
+	hdText->regenerate(canvas->getTextScale());
+
+	for (SputTextEvent *event = _textQueue; event; event = event->next)
+		invalidateHdText(event);
+}
+
 bool SputText::makeHdInfo(SputTextEvent *event, HdTextInfo *info) {
 	HdText *hdText = _blastText->getHdText();
 
@@ -1219,6 +1232,12 @@ bool SputText::makeHdInfo(SputTextEvent *event, HdTextInfo *info) {
 	info->alpha = event->params.alpha;
 	info->firstLine = event->firstLine;
 	info->lineCount = event->lineCount;
+	info->widthScale = 1.0f;
+
+	HdCanvas *canvas = _grim->getHdCanvas();
+
+	if (canvas)
+		info->widthScale = canvas->getTextScale();
 
 	return true;
 }
@@ -1292,7 +1311,15 @@ void SputText::luaGetFontDimensions() {
 		return;
 	}
 
-	lua_pushnumber((float)HdText::getFontHeight(hdFont));
+	HdCanvas *canvas = _grim->getHdCanvas();
+
+	if (!canvas) {
+		lua_pushnumber(0.0f);
+
+		return;
+	}
+
+	lua_pushnumber((float)HdText::getFontHeight(hdFont, canvas->getTextCanvas()));
 }
 
 void SputText::drawHdEvent(SputTextEvent *event, int page) {

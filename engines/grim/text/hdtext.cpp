@@ -39,8 +39,8 @@
 
 namespace Grim {
 
-HdFont::HdFont(const Common::String &path, float size, int minPixels) :
-		_path(path), _requestedSize(size), _pixelSize(0.0f), _loaded(false) {
+HdFont::HdFont(const Common::String &path, float size, int minPixels, float scale) :
+		_path(path), _requestedSize(size), _minPixels(minPixels), _pixelSize(0.0f), _loaded(false), _data(nullptr), _dataSize(0) {
 	memset(_glyphs, 0, sizeof(_glyphs));
 	memset(&_emptyGlyph, 0, sizeof(_emptyGlyph));
 
@@ -64,23 +64,54 @@ HdFont::HdFont(const Common::String &path, float size, int minPixels) :
 
 	delete stream;
 
-	if (readSize == dataSize)
-		loadGlyphs(data, dataSize, minPixels);
-	else
+	if (readSize == dataSize) {
+		_data = data;
+		_dataSize = dataSize;
+		loadGlyphs(scale);
+	} else {
 		warning("HdFont: cannot read the font file '%s'", path.c_str());
-
-	delete[] data;
+		delete[] data;
+	}
 }
 
 HdFont::~HdFont() {
-	for (int i = 0; i < kNumGlyphs; i++)
-		delete[] _glyphs[i].alpha;
+	freeGlyphs();
+	delete[] _data;
 }
 
-void HdFont::loadGlyphs(const byte *data, long dataSize, int minPixels) {
+void HdFont::freeGlyphs() {
+	for (int i = 0; i < kNumGlyphs; i++)
+		delete[] _glyphs[i].alpha;
+
+	memset(_glyphs, 0, sizeof(_glyphs));
+}
+
+float HdFont::computePixelSize(float scale) const {
+	float scaled = _requestedSize * scale;
+	float pixels = ceilf(scaled * 8.0f) * 0.125f;
+
+	if ((float)_minPixels > pixels)
+		pixels = (float)_minPixels;
+
+	return pixels;
+}
+
+void HdFont::regenerate(float scale) {
+	if (!_data)
+		return;
+
+	if (_loaded && computePixelSize(scale) == _pixelSize)
+		return;
+
+	freeGlyphs();
+	_loaded = false;
+	loadGlyphs(scale);
+}
+
+void HdFont::loadGlyphs(float scale) {
 	Graphics::TTFGlyphs face;
 
-	if (!face.load(data, (uint32)dataSize)) {
+	if (!face.load(_data, (uint32)_dataSize)) {
 		warning("HdFont: '%s' is not a valid font file", _path.c_str());
 		return;
 	}
@@ -92,14 +123,11 @@ void HdFont::loadGlyphs(const byte *data, long dataSize, int minPixels) {
 		return;
 	}
 
-	float pixels = ceilf(_requestedSize * 8.0f) / 8.0f;
-
-	if (pixels < (float)minPixels)
-		pixels = (float)minPixels;
+	float pixels = computePixelSize(scale);
 
 	_pixelSize = pixels;
 
-	float scale = pixels / (float)cell;
+	float glyphScale = pixels / (float)cell;
 
 	for (int c = 0; c < kNumGlyphs; c++) {
 		Glyph *glyph = &_glyphs[c];
@@ -108,7 +136,7 @@ void HdFont::loadGlyphs(const byte *data, long dataSize, int minPixels) {
 		if (!face.loadGlyph((uint32)c, &info))
 			continue;
 
-		glyph->advance = (float)info.advance * scale;
+		glyph->advance = (float)info.advance * glyphScale;
 
 		if (pixels <= 18.0f)
 			glyph->advance += 1.0f;
@@ -116,10 +144,10 @@ void HdFont::loadGlyphs(const byte *data, long dataSize, int minPixels) {
 		if (!info.hasOutline)
 			continue;
 
-		float scaledXMin = (float)((double)info.xMin * (double)scale);
-		float scaledYMin = (float)((double)info.yMin * (double)scale);
-		float scaledXMax = (float)((double)info.xMax * (double)scale);
-		float scaledYMax = (float)((double)info.yMax * (double)scale);
+		float scaledXMin = (float)((double)info.xMin * (double)glyphScale);
+		float scaledYMin = (float)((double)info.yMin * (double)glyphScale);
+		float scaledXMax = (float)((double)info.xMax * (double)glyphScale);
+		float scaledYMax = (float)((double)info.yMax * (double)glyphScale);
 		int left = (int)floor((double)scaledXMin);
 		int bottom = (int)floor((double)scaledYMin);
 		int right = (int)ceil((double)scaledXMax);
@@ -142,7 +170,7 @@ void HdFont::loadGlyphs(const byte *data, long dataSize, int minPixels) {
 		glyph->width = width;
 		glyph->height = height;
 
-		face.renderGlyph(scale, left, bottom, width, height, glyph->alpha);
+		face.renderGlyph(glyphScale, left, bottom, width, height, glyph->alpha);
 	}
 
 	_loaded = true;
@@ -165,7 +193,14 @@ HdTextCache::HdTextCache() : pixelSize(0.0f), minX(0.0f), minY(0.0f), maxRight(0
 HdTextDraw::HdTextDraw() : originX(0.0f), originY(0.0f), textRed(0.0f), textGreen(0.0f), textBlue(0.0f), alpha(0.0f) {
 }
 
-HdText::HdText() : _customFont(nullptr), _customFontTried(false) {
+HdText::HdText() : _scale(1.0f), _customFont(nullptr), _customFontTried(false) {
+}
+
+void HdText::regenerate(float scale) {
+	_scale = scale;
+
+	for (uint i = 0; i < _fonts.size(); i++)
+		_fonts[i]->regenerate(scale);
 }
 
 HdText::~HdText() {
@@ -181,7 +216,7 @@ const HdFont *HdText::loadFont(const Common::String &path, float size, int minPi
 			return _fonts[i];
 	}
 
-	HdFont *font = new HdFont(path, size, minPixels);
+	HdFont *font = new HdFont(path, size, minPixels, _scale);
 
 	if (!font->isLoaded()) {
 		delete font;
@@ -241,8 +276,15 @@ const HdFont *HdText::getCustomFont() {
 	return _customFont;
 }
 
-int HdText::getFontHeight(const HdFont *font) {
-	return (int)ceilf(font->getPixelSize());
+int HdText::getFontHeight(const HdFont *font, const HdTextCanvas &canvas) {
+	bool stretch = canvas.stretched && !canvas.boxingHD;
+	float scaleX = (float)((double)(uint32)canvas.backWidth / (double)(uint32)canvas.width);
+	float scaleY = (float)((double)(uint32)canvas.backHeight / 1080.0);
+
+	if (!stretch)
+		scaleY = scaleX > scaleY ? scaleY : scaleX;
+
+	return (int)ceilf(font->getPixelSize() / scaleY);
 }
 
 int HdText::getTextPage(int flags) {
@@ -302,7 +344,7 @@ void HdText::layout(const HdTextInfo &info, HdTextCache *cache) {
 		penX += glyph->advance;
 	}
 
-	splitLines(cache, info.text, (float)info.maxWidth);
+	splitLines(cache, info.text, (float)info.maxWidth * info.widthScale);
 	measure(cache);
 	align(cache, info.alignX, info.alignY);
 }
@@ -472,7 +514,7 @@ void HdText::buildDraw(const HdTextInfo &info, const HdTextCache *cache, const H
 	float offsetX;
 	float offsetY;
 
-	HdCanvas::computeScaling(stretch, canvas.width, 1080, &scaleX, &scaleY, &offsetX, &offsetY);
+	HdCanvas::computeScaling(canvas.backWidth, canvas.backHeight, stretch, canvas.width, 1080, &scaleX, &scaleY, &offsetX, &offsetY);
 
 	double shiftWidth = (double)(uint32)(kCanvasWidth - canvas.width);
 
@@ -523,8 +565,8 @@ void HdText::buildDraw(const HdTextInfo &info, const HdTextCache *cache, const H
 void HdText::queryText(const HdTextInfo &info, const HdTextCache *cache, const HdTextCanvas &canvas, int *x, int *y,
 		int *width, int *height) {
 	bool stretch = canvas.stretched && !canvas.boxingHD;
-	float scaleX = (float)((double)(uint32)kCanvasWidth / (double)(uint32)canvas.width);
-	float scaleY = (float)((double)(uint32)kCanvasHeight / 1080.0);
+	float scaleX = (float)((double)(uint32)canvas.backWidth / (double)(uint32)canvas.width);
+	float scaleY = (float)((double)(uint32)canvas.backHeight / 1080.0);
 	float uniform = scaleX > scaleY ? scaleY : scaleX;
 
 	if (!stretch) {

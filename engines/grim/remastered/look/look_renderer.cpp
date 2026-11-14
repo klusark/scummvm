@@ -116,18 +116,7 @@ bool RemasteredLookRenderer::open(int hostWidth, int hostHeight) {
 	image.levels[0].height = 480;
 	_softwareTexture = _remasteredLookDevice->createTexture(image);
 
-	Common::Array<byte> overlay;
-
-	overlay.resize((uint)hostWidth * hostHeight * 4);
-	memset(&overlay[0], 0, overlay.size());
-	image.format = kLookFormatRgba8;
-	image.width = hostWidth;
-	image.height = hostHeight;
-	image.levels[0].data = &overlay[0];
-	image.levels[0].size = overlay.size();
-	image.levels[0].width = hostWidth;
-	image.levels[0].height = hostHeight;
-	_overlayTexture = _remasteredLookDevice->createTexture(image);
+	_overlayTexture = createOverlayTexture(hostWidth, hostHeight);
 
 	if (!_softwareTexture || !_overlayTexture) {
 		warning("RemasteredLookRenderer::open(): the composition textures could not be created");
@@ -140,6 +129,44 @@ bool RemasteredLookRenderer::open(int hostWidth, int hostHeight) {
 	_extraCount = 0;
 
 	return true;
+}
+
+RemasteredLookTexture *RemasteredLookRenderer::createOverlayTexture(int width, int height) {
+	Common::Array<byte> overlay;
+	LookImage image;
+
+	overlay.resize((uint)width * height * 4);
+	memset(&overlay[0], 0, overlay.size());
+	image.format = kLookFormatRgba8;
+	image.width = width;
+	image.height = height;
+	image.numLevels = 1;
+	image.levels[0].data = &overlay[0];
+	image.levels[0].size = overlay.size();
+	image.levels[0].width = width;
+	image.levels[0].height = height;
+
+	return _remasteredLookDevice->createTexture(image);
+}
+
+void RemasteredLookRenderer::setHostSize(int hostWidth, int hostHeight) {
+	if (!_open || hostWidth <= 0 || hostHeight <= 0 || (hostWidth == _hostWidth && hostHeight == _hostHeight))
+		return;
+
+	_hostWidth = hostWidth;
+	_hostHeight = hostHeight;
+	_remasteredLookDevice->setHostSize(hostWidth, hostHeight);
+	_remasteredLookPipeline->setHostSize(hostWidth, hostHeight);
+
+	if (_overlayTexture)
+		_remasteredLookDevice->destroyTexture(_overlayTexture);
+
+	_overlayTexture = createOverlayTexture(hostWidth, hostHeight);
+
+	if (!_overlayTexture)
+		warning("RemasteredLookRenderer::setHostSize(): the overlay texture could not be recreated");
+
+	_graphicsChanged = true;
 }
 
 void RemasteredLookRenderer::close() {

@@ -768,8 +768,10 @@ void Lua_Remastered::OverlayFade() {
 }
 
 void Lua_Remastered::OverlayGetScreenSize() {
-	lua_pushnumber((float)kCanvasWidth);
-	lua_pushnumber((float)kCanvasHeight);
+	HdCanvas *canvas = g_grim->getHdCanvas();
+
+	lua_pushnumber((float)canvas->getWidth());
+	lua_pushnumber((float)canvas->getHeight());
 }
 
 void Lua_Remastered::OverlayScreenBoxingMode() {

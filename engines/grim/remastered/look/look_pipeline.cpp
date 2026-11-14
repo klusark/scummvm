@@ -129,6 +129,11 @@ void RemasteredLookPipeline::close() {
 	_open = false;
 }
 
+void RemasteredLookPipeline::setHostSize(int hostWidth, int hostHeight) {
+	_hostWidth = hostWidth;
+	_hostHeight = hostHeight;
+}
+
 bool RemasteredLookPipeline::reallocate(float resolutionScaling) {
 	if (!_open)
 		return false;

@@ -79,6 +79,7 @@ public:
 	void close();
 	bool isOpen() const { return _open; }
 	bool reallocate(float resolutionScaling);
+	void setHostSize(int hostWidth, int hostHeight);
 
 	void setScene(RemasteredLookScene *scene);
 	RemasteredLookDevice *getDevice() const { return _remasteredLookDevice; }

@@ -648,9 +648,11 @@ void StdControl::getMouseCanvasPosition(bool menuMode, int *x, int *y) const {
 	float offsetY;
 
 	if (menuMode) {
-		HdCanvas::computeScaling(false, kCanvasWidth, kCanvasHeight, &scaleX, &scaleY, &offsetX, &offsetY);
+		HdCanvas::computeScaling(canvas->getWidth(), canvas->getHeight(), false, kCanvasWidth, kCanvasHeight, &scaleX, &scaleY,
+				&offsetX, &offsetY);
 	} else {
-		HdCanvas::computeScaling(canvas->isStretched(), kCanvasPlayWidth, kCanvasHeight, &scaleX, &scaleY, &offsetX, &offsetY);
+		HdCanvas::computeScaling(canvas->getWidth(), canvas->getHeight(), canvas->isStretched(), kCanvasPlayWidth, kCanvasHeight,
+				&scaleX, &scaleY, &offsetX, &offsetY);
 
 		offsetX = (float)((double)offsetX - (double)scaleX * (double)kCanvasPlayOffset);
 	}
