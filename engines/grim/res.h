@@ -168,6 +168,7 @@ private:
 	Common::Array<ResLabFile> _labFiles;
 	int _nextLabPriority;
 	int _nextDirectoryPriority;
+	int _nextRemasteredPriority;
 	ResTag *_tagHead;
 	ResNode *_nodeHead;
 	ResNode *_nodeTail;

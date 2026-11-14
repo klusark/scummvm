@@ -31,6 +31,7 @@
 #include "engines/grim/chore/cos.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/imuse/imuse_engine.h"
+#include "engines/grim/remastered/look/materialpath.h"
 #include "engines/grim/render/sputrender.h"
 #include "engines/grim/sputresource.h"
 #include "engines/grim/sputroom.h"
@@ -134,6 +135,18 @@ int SputResource::findResources() {
 	Common::String dataDirectory(dataDirectoryArray);
 	Common::String currentDirectory(dataDirectory);
 
+	if (g_grim->isRemastered()) {
+		if (dataDirectory.empty())
+			warning("SputResource::findResources(): no data directory");
+		else
+			addResourcePathInternal(dataDirectory.c_str());
+
+		if (!_extraDataPath.empty() && !_extraDataPath.equalsIgnoreCase(dataDirectory))
+			addResourcePathInternal(_extraDataPath.c_str());
+
+		return 1;
+	}
+
 	if (!_extraDataPath.empty() && !_extraDataPath.equalsIgnoreCase(dataDirectory))
 		addResourcePathInternal(_extraDataPath.c_str());
 
@@ -149,7 +162,104 @@ int SputResource::addResourcePath(const char *path) {
 	return 1;
 }
 
+bool SputResource::findResourceDirectory(const Common::FSNode &base, const Common::String &basePath, const char *relativePath, Common::String &fullPath) {
+	const char separator = Common::Path::kNativeSeparator;
+	Common::FSNode current(base);
+	Common::String relative(relativePath);
+	uint start = 0;
+
+	fullPath = basePath;
+
+	while (start < relative.size()) {
+		uint end = start;
+
+		while (end < relative.size() && relative[end] != '/')
+			end++;
+
+		Common::String component(relative.substr(start, end - start));
+		Common::FSList subDirectories;
+		bool found = false;
+
+		current.getChildren(subDirectories, Common::FSNode::kListDirectoriesOnly);
+
+		for (uint i = 0; i < subDirectories.size() && !found; i++) {
+			if (subDirectories[i].getName().equalsIgnoreCase(component)) {
+				current = subDirectories[i];
+				fullPath += subDirectories[i].getName();
+				fullPath += separator;
+				found = true;
+			}
+		}
+
+		if (!found)
+			return false;
+
+		start = end + 1;
+	}
+
+	return true;
+}
+
+int SputResource::addRemasteredResourcePath(const char *path) {
+	const char separator = Common::Path::kNativeSeparator;
+	Common::String directory(path);
+
+	if (!directory.empty() && (directory.lastChar() == '\\' || directory.lastChar() == '/'))
+		directory.deleteLastChar();
+
+	if (directory.empty())
+		return 0;
+
+	Common::FSNode node((Common::Path(directory, separator)));
+	Common::FSList files;
+	Common::StringArray labNames;
+
+	node.getChildren(files, Common::FSNode::kListFilesOnly);
+
+	for (uint i = 0; i < files.size(); i++) {
+		Common::String name(files[i].getName());
+
+		name.toUppercase();
+
+		if (name.hasSuffix(".LAB"))
+			labNames.push_back(name);
+	}
+
+	Common::sort(labNames.begin(), labNames.end());
+
+	directory += separator;
+
+	for (uint i = 0; i < labNames.size(); i++) {
+		Common::String labPath(directory);
+
+		labPath += labNames[i];
+
+		if (_res->fileOpen(labPath.c_str()))
+			_res->fileMoveToFront(labPath.c_str());
+	}
+
+	if (!_res->fileOpen(directory.c_str()))
+		return 0;
+
+	_res->fileMoveToFront(directory.c_str());
+
+	for (uint i = 0; i < MaterialPath::kResourceDirectoryCount; i++) {
+		Common::String subPath;
+
+		if (!findResourceDirectory(node, directory, MaterialPath::getResourceDirectory(i), subPath))
+			continue;
+
+		if (_res->fileOpen(subPath.c_str()))
+			_res->fileMoveToFront(subPath.c_str());
+	}
+
+	return 1;
+}
+
 int SputResource::addResourcePathInternal(const char *path) {
+	if (g_grim->isRemastered())
+		return addRemasteredResourcePath(path);
+
 	const char separator = Common::Path::kNativeSeparator;
 	Common::String directory(path);
 

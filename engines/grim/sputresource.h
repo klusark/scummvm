@@ -30,6 +30,10 @@
 #include "engines/grim/res.h"
 #include "engines/grim/std/std_bitmap.h"
 
+namespace Common {
+class FSNode;
+}
+
 namespace Grim {
 
 // The tag values are the reversed characters
@@ -106,6 +110,8 @@ public:
 
 private:
 	int addResourcePathInternal(const char *path);
+	int addRemasteredResourcePath(const char *path);
+	bool findResourceDirectory(const Common::FSNode &base, const Common::String &basePath, const char *relativePath, Common::String &fullPath);
 
 	Res *_res;
 	RenderDroid *_rd;

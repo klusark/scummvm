@@ -37,7 +37,7 @@ static const int kLabPriorityBase = -1000;
 static const int kDirectoryPriorityBase = 2;
 
 Res::Res(bool isDemo) : _resHS(nullptr), _resSysInitialized(0), _started(0), _nextLabPriority(kLabPriorityBase),
-		_nextDirectoryPriority(kDirectoryPriorityBase),
+		_nextDirectoryPriority(kDirectoryPriorityBase), _nextRemasteredPriority(kDirectoryPriorityBase),
 		_tagHead(nullptr), _nodeHead(nullptr), _nodeTail(nullptr), _defaultHandler(nullptr),
 		_logFile(nullptr), _memoryLimit(0x1800000), _sputRender(nullptr), _demo(isDemo) {
 }
@@ -153,6 +153,7 @@ void Res::fileCloseAll() {
 
 	_nextLabPriority = kLabPriorityBase;
 	_nextDirectoryPriority = kDirectoryPriorityBase;
+	_nextRemasteredPriority = kDirectoryPriorityBase;
 }
 
 int Res::fileMoveToFront(const char *path) {
@@ -161,7 +162,10 @@ int Res::fileMoveToFront(const char *path) {
 	if (index < 0)
 		return 0;
 
-	if (_labFiles[index].flags == kResLabFileLab) {
+	if (g_grim->isRemastered()) {
+		SearchMan.setPriority(_labFiles[index].archiveName, _nextRemasteredPriority);
+		_nextRemasteredPriority++;
+	} else if (_labFiles[index].flags == kResLabFileLab) {
 		SearchMan.setPriority(_labFiles[index].archiveName, _nextLabPriority);
 		_nextLabPriority++;
 	} else {
@@ -195,7 +199,14 @@ int Res::openLabFile(const char *path) {
 		return 0;
 	}
 
-	SearchMan.add(name, lab, _nextLabPriority, true);
+	int labPriority = _nextLabPriority;
+
+	if (g_grim->isRemastered()) {
+		labPriority = _nextRemasteredPriority;
+		_nextRemasteredPriority++;
+	}
+
+	SearchMan.add(name, lab, labPriority, true);
 
 	ResLabFile labFile;
 
@@ -227,7 +238,14 @@ int Res::fileOpenSearch(const char *dirPath) {
 	if (SearchMan.hasArchive(name))
 		return 1;
 
-	SearchMan.add(name, new Common::FSDirectory(directory, 1), _nextDirectoryPriority, true);
+	int directoryPriority = _nextDirectoryPriority;
+
+	if (g_grim->isRemastered()) {
+		directoryPriority = _nextRemasteredPriority;
+		_nextRemasteredPriority++;
+	}
+
+	SearchMan.add(name, new Common::FSDirectory(directory, 1), directoryPriority, true);
 
 	ResLabFile labFile;
 
