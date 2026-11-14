@@ -50,6 +50,10 @@ static const char *const compatVertex =
 
 static const char *const compatFragment =
 	"#if defined(GL_ES)\n"
+		"#ifdef GL_EXT_frag_depth\n"
+			"#extension GL_EXT_frag_depth : enable\n"
+			"#define FRAG_DEPTH gl_FragDepthEXT\n"
+		"#endif\n"
 		"#define in varying\n"
 		"#ifdef GL_FRAGMENT_PRECISION_HIGH\n"
 			"precision highp float;\n"
@@ -67,8 +71,10 @@ static const char *const compatFragment =
 		"#define OUTPUT\n"
 		"#define outColor gl_FragColor\n"
 		"#define texture texture2D\n"
+		"#define FRAG_DEPTH gl_FragDepth\n"
 	"#else\n"
 		"#define OUTPUT out vec4 outColor;\n"
+		"#define FRAG_DEPTH gl_FragDepth\n"
 	"#endif\n";
 
 // OGLES2 on AmigaOS doesn't support uniform booleans, let's introduce some shim
@@ -253,6 +259,18 @@ struct SharedPtrProgramDeleter {
 
 Shader *Shader::_previousShader = nullptr;
 uint32 Shader::previousNumAttributes = 0;
+GLuint Shader::_boundVertexArray = 0;
+
+Shader::VertexArrayObject::~VertexArrayObject() {
+#ifdef USE_GLAD
+	if (_id) {
+		// Deleting the bound vertex array object reverts the binding to zero
+		if (_boundVertexArray == _id)
+			_boundVertexArray = 0;
+		GL_CALL(glDeleteVertexArrays(1, &_id));
+	}
+#endif
+}
 
 Shader::Shader() {
 }
@@ -384,6 +402,29 @@ void Shader::use(bool forceReload) {
 	if (this == _previousShader && !forceReload)
 		return;
 
+#ifdef USE_GLAD
+	if (_vao._enabled) {
+		_previousShader = this;
+
+		GL_CALL(glUseProgram(*_shaderNo));
+		if (!_vao._id) {
+			GL_CALL(glGenVertexArrays(1, &_vao._id));
+		}
+		GL_CALL(glBindVertexArray(_vao._id));
+		_boundVertexArray = _vao._id;
+
+		// Constant attribute values are not part of the vertex array object
+		applyAttributes(_vao._dirty || forceReload);
+		_vao._dirty = false;
+		return;
+	}
+
+	if (_boundVertexArray) {
+		GL_CALL(glBindVertexArray(0));
+		_boundVertexArray = 0;
+	}
+#endif
+
 	// The previous shader might have had more attributes. Disable any extra ones.
 	if (_attributes.size() < previousNumAttributes) {
 		for (uint32 i = _attributes.size(); i < previousNumAttributes; ++i) {
@@ -395,14 +436,22 @@ void Shader::use(bool forceReload) {
 	previousNumAttributes = _attributes.size();
 
 	GL_CALL(glUseProgram(*_shaderNo));
+	applyAttributes(true);
+}
+
+void Shader::applyAttributes(bool setPointers) {
 	for (uint32 i = 0; i < _attributes.size(); ++i) {
 		VertexAttrib &attrib = _attributes[i];
 		if (attrib._enabled) {
-			GL_CALL(glEnableVertexAttribArray(i));
-			GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, attrib._vbo));
-			GL_CALL(glVertexAttribPointer(i, attrib._size, attrib._type, attrib._normalized, attrib._stride, (const void *)attrib._pointer));
+			if (setPointers) {
+				GL_CALL(glEnableVertexAttribArray(i));
+				GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, attrib._vbo));
+				GL_CALL(glVertexAttribPointer(i, attrib._size, attrib._type, attrib._normalized, attrib._stride, (const void *)attrib._pointer));
+			}
 		} else {
-			GL_CALL(glDisableVertexAttribArray(i));
+			if (setPointers) {
+				GL_CALL(glDisableVertexAttribArray(i));
+			}
 			switch (attrib._size) {
 			case 2:
 				GL_CALL(glVertexAttrib2fv(i, attrib._const));
@@ -417,6 +466,11 @@ void Shader::use(bool forceReload) {
 		}
 	}
 	GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, 0));
+}
+
+void Shader::enableVertexArrayObject() {
+	_vao._enabled = OpenGLContext.vertexArrayObjectSupported;
+	_vao._dirty = true;
 }
 
 GLuint Shader::createBuffer(GLenum target, GLsizeiptr size, const GLvoid *data, GLenum usage) {
@@ -455,6 +509,7 @@ bool Shader::addAttribute(const char *attrib) {
 	}
 
 	_attributes[result] = VertexAttrib(result, attrib);
+	_vao._dirty = true;
 	return true;
 }
 
@@ -475,6 +530,7 @@ VertexAttrib &Shader::getAttribute(const char *attrib) {
 
 void Shader::enableVertexAttribute(const char *attrib, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer) {
 	VertexAttrib &va = getAttribute(attrib);
+	_vao._dirty = true;
 	va._enabled = true;
 	va._vbo = 0;
 	va._size = size;
@@ -486,6 +542,7 @@ void Shader::enableVertexAttribute(const char *attrib, GLint size, GLenum type, 
 
 void Shader::enableVertexAttribute(const char *attrib, GLuint vbo, GLint size, GLenum type, GLboolean normalized, GLsizei stride, uint32 offset) {
 	VertexAttrib &va = getAttribute(attrib);
+	_vao._dirty = true;
 	va._enabled = true;
 	va._vbo = vbo;
 	va._size = size;
@@ -497,6 +554,7 @@ void Shader::enableVertexAttribute(const char *attrib, GLuint vbo, GLint size, G
 
 void Shader::disableVertexAttribute(const char *attrib, int size, const float *data) {
 	VertexAttrib &va = getAttribute(attrib);
+	_vao._dirty = true;
 	va._enabled = false;
 	va._size = size;
 	for (int i = 0; i < size; ++i)
@@ -506,6 +564,13 @@ void Shader::disableVertexAttribute(const char *attrib, int size, const float *d
 void Shader::unbind() {
 	GL_CALL(glUseProgram(0));
 	_previousShader = nullptr;
+
+#ifdef USE_GLAD
+	if (_boundVertexArray) {
+		GL_CALL(glBindVertexArray(0));
+		_boundVertexArray = 0;
+	}
+#endif
 
 	// Disable all vertex attributes as well
 	for (uint32 i = 0; i < previousNumAttributes; ++i) {

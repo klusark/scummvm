@@ -92,9 +92,10 @@ void main() {
 				if (lightsDirection[i].w > -1.0) { // Spotlight
 					// See DirectX spotlight documentation
 					// EMI stores the spot direction pointing back towards the light
-					float cosAngle = dot(normalize(vertexToLight), normalize(lightsDirection[i].xyz)); // rho
-					float cosPenumbra = clamp(lightsParams[i].w, 0.0, 1.0); // cos(theta / 2)
-					float cosUmbra = clamp(lightsParams[i].z, 0.0, cosPenumbra); // cos(phi / 2)
+					// The direction is normalized and the angles clamped when the lights are uploaded
+					float cosAngle = dot(normalize(vertexToLight), lightsDirection[i].xyz); // rho
+					float cosPenumbra = lightsParams[i].w; // cos(theta / 2)
+					float cosUmbra = lightsParams[i].z; // cos(phi / 2)
 					if (cosAngle <= cosPenumbra) {
 						if (cosAngle < cosUmbra || cosPenumbra == cosUmbra) {
 							intensity = 0.0;

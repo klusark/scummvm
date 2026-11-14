@@ -2,11 +2,11 @@ in vec3 position;
 in vec2 texcoord;
 in vec4 color;
 
+// the model of the actor and the node of the model that the sprite hangs on
 uniform highp mat4 modelMatrix;
 uniform highp mat4 viewMatrix;
 uniform highp mat4 projMatrix;
-// the node of the model that the sprite hangs on, and the place of the sprite in it
-uniform highp mat4 extraMatrix;
+// the place of the sprite in the node
 uniform highp vec3 spritePos;
 uniform highp vec2 spriteSize;
 
@@ -27,7 +27,7 @@ out float ClipDist;
 // A sprite of Grim is a quad that always faces the camera (smoke, sparks): its bottom edge stands on the position of the sprite and the corners
 // are put around that point in the plane of the view.
 void main() {
-	vec4 anchor = modelMatrix * extraMatrix * vec4(spritePos, 1.0);
+	vec4 anchor = modelMatrix * vec4(spritePos, 1.0);
 	vec4 viewPos = viewMatrix * anchor;
 	viewPos.xy += position.xy * spriteSize;
 	gl_Position = projMatrix * viewPos;

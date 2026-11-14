@@ -15,10 +15,14 @@ OUTPUT
 
 void checkZBuffer() {
 	vec2 zCoord = vec2(gl_FragCoord.x / screenSize.x, 1.0 - (gl_FragCoord.y - offsetY) / screenSize.y);
-	vec2 sampled = floor(texture(texZBuf, zCoord * texcropZBuf).ra * 255.0 + 0.5);
+	// Kept in variables of default precision: on GLES the result of texture() is only lowp
+	// and gl_FragCoord is only mediump
+	vec2 texel = texture(texZBuf, zCoord * texcropZBuf).ra;
+	vec2 sampled = floor(texel * 255.0 + 0.5);
 	float sceneZ = sampled.y * 256.0 + sampled.x;
+	float fragZ = gl_FragCoord.z;
 
-	if (gl_FragCoord.z * 65535.0 >= sceneZ)
+	if (fragZ * 65535.0 >= sceneZ)
 		discard;
 }
 

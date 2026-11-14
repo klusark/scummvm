@@ -237,15 +237,19 @@ private:
 	OpenGL::Shader* _primitiveProgram;
 	OpenGL::Shader* _irisProgram;
 	OpenGL::Shader* _shadowPlaneProgram;
+	OpenGL::Shader* _zBufferProgram;
 
 	int _smushWidth;
 	int _smushHeight;
+	GLenum _smushFormat;
+	GLenum _smushType;
 	GLuint _smushTexId;
 	void setupTexturedQuad();
 	void setupQuadEBO();
 
 	void setupZBuffer();
 	void drawDepthBitmap(int bitmapId, int x, int y, int w, int h, char *data);
+	void drawDepthPass();
 
 	float _fov;
 	float _nclip;
@@ -254,6 +258,8 @@ private:
 	Math::Matrix4 _viewMatrix;
 	Math::Matrix4 _mvpMatrix;
 	Math::Matrix4 _overworldProjMatrix;
+	Math::Matrix4 _actorModelMatrix;
+	bool _actorCameraDirty;
 
 	void setupTexturedCenteredQuad();
 
@@ -275,6 +281,10 @@ private:
 	GLSLight *_lights;
 	bool _hasAmbientLight;
 	bool _lightsEnabled;
+	float *_lightsData;
+	bool _lightsDirty;
+	Math::Matrix4 _lightsViewMatrix;
+	void uploadLights(const Math::Matrix4 &viewMatrix);
 
 	void setupPrimitives();
 	GLuint nextPrimitive();

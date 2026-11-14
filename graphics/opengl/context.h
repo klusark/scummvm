@@ -129,6 +129,12 @@ public:
 	/** Texture lookup result precision. */
 	unsigned int textureLookupPrecision;
 
+	/** Whether vertex array objects are available or not. */
+	bool vertexArrayObjectSupported;
+
+	/** Whether fragment shaders can write the depth value or not. */
+	bool fragDepthSupported;
+
 private:
 	/**
 	 * Returns the native GLSL version supported by the driver.

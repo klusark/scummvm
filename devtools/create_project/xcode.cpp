@@ -1074,6 +1074,8 @@ XcodeProvider::ValueList& XcodeProvider::getResourceFiles(const BuildSetup &setu
 			files.push_back("engines/grim/shaders/grim_sprite.vertex");
 			files.push_back("engines/grim/shaders/grim_text.fragment");
 			files.push_back("engines/grim/shaders/grim_text.vertex");
+			files.push_back("engines/grim/shaders/grim_zbuffer.fragment");
+			files.push_back("engines/grim/shaders/grim_zbuffer.vertex");
 		}
 		if (CONTAINS_DEFINE(setup.defines, "ENABLE_MYST3")) {
 			files.push_back("engines/myst3/shaders/myst3_box.fragment");

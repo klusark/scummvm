@@ -7,12 +7,11 @@ in vec2 texcoord;
 in vec4 color;
 in vec3 normal;
 
+// the model of the actor and the node of the mesh in it
 uniform highp mat4 modelMatrix;
 uniform highp mat4 viewMatrix;
 uniform highp mat4 projMatrix;
-uniform highp mat4 extraMatrix;
 uniform UBOOL textured;
-uniform UBOOL lightsEnabled;
 uniform highp vec2 texScale;
 
 struct shadow_info {
@@ -29,7 +28,7 @@ out vec2 Texcoord;
 out vec4 Color;
 
 void main() {
-	vec4 pos = modelMatrix * extraMatrix * vec4(position, 1.0);
+	vec4 pos = modelMatrix * vec4(position, 1.0);
 
 	// See http://en.wikipedia.org/wiki/Line-plane_intersection
 	if (UBOOL_TEST(shadow._active)) {

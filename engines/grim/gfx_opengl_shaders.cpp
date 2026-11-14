@@ -74,6 +74,14 @@ static T nextHigher2(T k) {
 	return k + 1;
 }
 
+// Size of a texture holding an image, padded when the context needs power of two textures
+static int textureSize(int size) {
+	return OpenGLContext.NPOTSupported ? size : nextHigher2(size);
+}
+
+// Unsigned short indices address up to 65536 vertices
+static const uint kMaxQuads = 16384;
+
 static float textured_quad[] = {
 //	X   , Y   , S   , T
 	0.0f, 0.0f, 0.0f, 0.0f,
@@ -209,6 +217,13 @@ GfxOpenGLS::GfxOpenGLS() {
 	_lights = new GLSLight[_maxLights];
 	_lightsEnabled = false;
 	_hasAmbientLight = false;
+	_lightsData = new float[4 * 4 * _maxLights];
+	_lightsDirty = true;
+	_actorCameraDirty = true;
+	_smushWidth = 0;
+	_smushHeight = 0;
+	_smushFormat = 0;
+	_smushType = 0;
 	_backgroundProgram = nullptr;
 	_smushProgram = nullptr;
 	_textProgram = nullptr;
@@ -224,6 +239,7 @@ GfxOpenGLS::GfxOpenGLS() {
 	_dimProgram = nullptr;
 	_dimPlaneProgram = nullptr;
 	_dimRegionProgram = nullptr;
+	_zBufferProgram = nullptr;
 
 	float div = 6.0f;
 	_overworldProjMatrix = makeFrustumMatrix(-1.f / div, 1.f / div, -0.75f / div, 0.75f / div, 1.0f / div, 3276.8f);
@@ -235,6 +251,7 @@ GfxOpenGLS::~GfxOpenGLS() {
 		destroyTexture(&_specialtyTextures[i]);
 	}
 	delete[] _lights;
+	delete[] _lightsData;
 
 	delete _backgroundProgram;
 	delete _smushProgram;
@@ -249,6 +266,7 @@ GfxOpenGLS::~GfxOpenGLS() {
 	delete _dimProgram;
 	delete _dimPlaneProgram;
 	delete _dimRegionProgram;
+	delete _zBufferProgram;
 	glDeleteTextures(1, &_storedDisplay);
 	glDeleteTextures(1, &_emergTexture);
 }
@@ -266,25 +284,25 @@ void GfxOpenGLS::setupZBuffer() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexImage2D(GL_TEXTURE_2D, 0, format, nextHigher2((int)width), nextHigher2((int)height), 0, format, ztype, nullptr);
+	glTexImage2D(GL_TEXTURE_2D, 0, format, textureSize((int)width), textureSize((int)height), 0, format, ztype, nullptr);
 	glActiveTexture(GL_TEXTURE0);
 
-	_zBufTexCrop = Math::Vector2d(width / nextHigher2((int)width), height / nextHigher2((int)height));
+	_zBufTexCrop = Math::Vector2d(width / textureSize((int)width), height / textureSize((int)height));
 }
 
 void GfxOpenGLS::setupQuadEBO() {
-	// FIXME: Probably way too big...
-	unsigned short quad_indices[6 * 1000];
+	unsigned short *quad_indices = new unsigned short[6 * kMaxQuads];
 
 	unsigned short start = 0;
-	for (unsigned short *p = quad_indices; p < &quad_indices[6 * 1000]; p += 6) {
+	for (unsigned short *p = quad_indices; p < &quad_indices[6 * kMaxQuads]; p += 6) {
 		p[0] = p[3] = start++;
 		p[1] = start++;
 		p[2] = p[4] = start++;
 		p[5] = start++;
 	}
 
-	_quadEBO = OpenGL::Shader::createBuffer(GL_ELEMENT_ARRAY_BUFFER, sizeof(quad_indices), quad_indices, GL_STATIC_DRAW);
+	_quadEBO = OpenGL::Shader::createBuffer(GL_ELEMENT_ARRAY_BUFFER, 6 * kMaxQuads * sizeof(unsigned short), quad_indices, GL_STATIC_DRAW);
+	delete[] quad_indices;
 }
 
 void GfxOpenGLS::setupTexturedQuad() {
@@ -298,13 +316,29 @@ void GfxOpenGLS::setupTexturedQuad() {
 	if (g_grim->getGameType() == GType_GRIM) {
 		_backgroundProgram->enableVertexAttribute("position", _smushVBO, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
 		_backgroundProgram->enableVertexAttribute("texcoord", _smushVBO, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 2 * sizeof(float));
+		if (_zBufferProgram) {
+			_zBufferProgram->enableVertexAttribute("position", _smushVBO, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
+			_zBufferProgram->enableVertexAttribute("texcoord", _smushVBO, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 2 * sizeof(float));
+		}
 	} else {
 		_dimPlaneProgram->enableVertexAttribute("position", _smushVBO, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
 	}
 }
 
 void GfxOpenGLS::setupTexturedCenteredQuad() {
-	_spriteVBO = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, 0, nullptr, GL_STATIC_DRAW);
+	if (g_grim->getGameType() == GType_GRIM) {
+		// The texture runs flipped along x, as in the fixed pipeline
+		static const float sprite_quad[] = {
+		//	 X   ,  Y  , Z   , S   , T
+			+0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
+			+0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
+			-0.5f, 1.0f, 0.0f, 1.0f, 0.0f,
+			-0.5f, 0.0f, 0.0f, 1.0f, 1.0f,
+		};
+		_spriteVBO = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, sizeof(sprite_quad), sprite_quad, GL_STATIC_DRAW);
+	} else {
+		_spriteVBO = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, 4 * 5 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+	}
 	_spriteProgram->enableVertexAttribute("position", _spriteVBO, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), 0);
 	_spriteProgram->enableVertexAttribute("texcoord", _spriteVBO, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), 3 * sizeof(float));
 	_spriteProgram->disableVertexAttribute("color", Math::Vector4d(1.0f, 1.0f, 1.0f, 1.0f));
@@ -384,12 +418,32 @@ void GfxOpenGLS::setupShaders() {
 	_primitiveProgram = OpenGL::Shader::fromFiles("grim_primitive", primAttributes);
 
 	if (!isEMI) {
-		_irisProgram = _primitiveProgram->clone();
-
 		_dimProgram = OpenGL::Shader::fromFiles("grim_dim", commonAttributes);
-		_dimRegionProgram = _dimProgram->clone();
 	} else {
 		_dimPlaneProgram = OpenGL::Shader::fromFiles("emi_dimplane", primAttributes);
+	}
+
+	if (!isEMI && OpenGLContext.fragDepthSupported) {
+		// Write the depth of the scene into the depth buffer instead of testing it in every fragment of the actors
+		_zBufferProgram = new OpenGL::Shader();
+		if (!_zBufferProgram->loadFromFiles("grim_zbuffer", "grim_zbuffer", commonAttributes)) {
+			warning("Could not load the depth shader, the depth of the scene is tested in the actor shaders");
+			delete _zBufferProgram;
+			_zBufferProgram = nullptr;
+		}
+	}
+
+	// The clones made from these keep the setting
+	OpenGL::Shader *programs[] = { _backgroundProgram, _smushProgram, _textProgram, _emergProgram, _actorProgram, _actorLightsProgram,
+	                               _spriteProgram, _shadowPlaneProgram, _primitiveProgram, _dimProgram, _dimPlaneProgram, _zBufferProgram };
+	for (uint i = 0; i < ARRAYSIZE(programs); i++) {
+		if (programs[i])
+			programs[i]->enableVertexArrayObject();
+	}
+
+	if (!isEMI) {
+		_irisProgram = _primitiveProgram->clone();
+		_dimRegionProgram = _dimProgram->clone();
 	}
 
 	setupQuadEBO();
@@ -400,6 +454,20 @@ void GfxOpenGLS::setupShaders() {
 	if (!isEMI) {
 		_blastVBOCapacity = 128;
 		_blastVBO = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, _blastVBOCapacity * 16 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+
+		// The clones of these programs share their uniforms
+		OpenGL::Shader *shaders[] = { _spriteProgram, _actorProgram, _actorLightsProgram };
+		for (int i = 0; i < 3; i++) {
+			shaders[i]->setUniform("tex", 0);
+			shaders[i]->setUniform("texZBuf", 1);
+			shaders[i]->setUniform("texcropZBuf", _zBufTexCrop);
+			shaders[i]->setUniform("screenSize", Math::Vector2d(_screenWidth, _screenHeight));
+		}
+
+		if (_zBufferProgram) {
+			_zBufferProgram->setUniform("tex", 1);
+			_zBufferProgram->setUniform("texcrop", _zBufTexCrop);
+		}
 	}
 }
 
@@ -417,6 +485,12 @@ void GfxOpenGLS::setupScreen(int screenW, int screenH) {
 	glViewport(0, 0, _screenWidth, _screenHeight);
 
 	glGenTextures(1, &_storedDisplay);
+	glBindTexture(GL_TEXTURE_2D, _storedDisplay);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	// The texture has the size of the screen, which GLES2 only allows with clamping
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	if (g_grim->getGameType() == GType_MONKEY4) {
@@ -439,6 +513,7 @@ void GfxOpenGLS::setupCameraFrustum(float fov, float nclip, float fclip) {
 	float top = right * 0.75;
 
 	_projMatrix = makeFrustumMatrix(-right, right, -top, top, nclip, fclip);
+	_actorCameraDirty = true;
 }
 
 void GfxOpenGLS::positionCamera(const Math::Vector3d &pos, const Math::Vector3d &interest, float roll) {
@@ -452,6 +527,7 @@ void GfxOpenGLS::positionCamera(const Math::Vector3d &pos, const Math::Vector3d 
 
 	_viewMatrix = viewMatrix * lookMatrix;
 	_viewMatrix.transpose();
+	_actorCameraDirty = true;
 }
 
 void GfxOpenGLS::positionCamera(const Math::Vector3d &pos, const Math::Matrix4 &rot) {
@@ -475,6 +551,7 @@ void GfxOpenGLS::positionCamera(const Math::Vector3d &pos, const Math::Matrix4 &
 	_viewMatrix = invertZ * viewMatrix * camPos;
 	_mvpMatrix = projMatrix * _viewMatrix;
 	_viewMatrix.transpose();
+	_actorCameraDirty = true;
 }
 
 
@@ -781,27 +858,26 @@ void GfxOpenGLS::startActorDraw(const Actor *actor) {
 		modelMatrix *= scale;
 		modelMatrix.setValue(3, 3, 1.0f);
 
-		bool hasZBuffer = g_grim->getCurrSet()->getCurrSetup()->_bkgndZBm;
-		Math::Matrix4 extraMatrix;
-		_matrixStack.top() = extraMatrix;
+		// With the depth pass the scene is already in the depth buffer
+		bool hasZBuffer = !_zBufferProgram && g_grim->getCurrSet()->getCurrSetup()->_bkgndZBm;
+		_matrixStack.top() = Math::Matrix4();
 
 		modelMatrix.transpose();
 		modelMatrix.setPosition(pos);
 		modelMatrix.transpose();
+		_actorModelMatrix = modelMatrix;
 
 		for (int i = 0; i < 3; i++) {
 			shaders[i]->use();
 			shaders[i]->setUniform("modelMatrix", modelMatrix);
-			shaders[i]->setUniform("viewMatrix", _viewMatrix);
-			shaders[i]->setUniform("projMatrix", _projMatrix);
-			shaders[i]->setUniform("extraMatrix", extraMatrix);
-			shaders[i]->setUniform("tex", 0);
-			shaders[i]->setUniform("texZBuf", 1);
+			if (_actorCameraDirty) {
+				shaders[i]->setUniform("viewMatrix", _viewMatrix);
+				shaders[i]->setUniform("projMatrix", _projMatrix);
+			}
 			shaders[i]->setUniform("hasZBuffer", hasZBuffer);
-			shaders[i]->setUniform("texcropZBuf", _zBufTexCrop);
-			shaders[i]->setUniform("screenSize", Math::Vector2d(_screenWidth, _screenHeight));
 			shaders[i]->setUniform1f("alphaRef", 0.5f);
 		}
+		_actorCameraDirty = false;
 	}
 
 	if (_currentShadowArray) {
@@ -837,78 +913,57 @@ void GfxOpenGLS::startActorDraw(const Actor *actor) {
 	}
 
 	_actorLightsProgram->setUniform("hasAmbient", _hasAmbientLight);
-	if (_lightsEnabled) {
-		// Allocate all variables in one chunk
-		static const unsigned int numUniforms = 4;
-		static const unsigned int uniformSize = _maxLights * 4;
-		float *lightsData = new float[numUniforms * uniformSize];
-		for (int i = 0; i < _maxLights; ++i) {
-			const GLSLight &l = _lights[i];
+	if (_lightsEnabled)
+		uploadLights(viewMatrix);
+}
 
-			// lightsPosition
-			Math::Vector4d tmp = viewMatrix * l._position;
+void GfxOpenGLS::uploadLights(const Math::Matrix4 &viewMatrix) {
+	// The lights are kept in the program until they or the camera change
+	if (!_lightsDirty && memcmp(viewMatrix.getData(), _lightsViewMatrix.getData(), 16 * sizeof(float)) == 0)
+		return;
+	_lightsDirty = false;
+	_lightsViewMatrix = viewMatrix;
 
-			lightsData[0 * uniformSize + 4 * i + 0] = tmp.x();
-			lightsData[0 * uniformSize + 4 * i + 1] = tmp.y();
-			lightsData[0 * uniformSize + 4 * i + 2] = tmp.z();
-			lightsData[0 * uniformSize + 4 * i + 3] = tmp.w();
+	const uint uniformSize = _maxLights * 4;
+	float *positions = &_lightsData[0 * uniformSize];
+	float *directions = &_lightsData[1 * uniformSize];
+	float *colors = &_lightsData[2 * uniformSize];
+	float *params = &_lightsData[3 * uniformSize];
 
-			// lightsDirection
-			Math::Vector4d direction = l._direction;
-			direction.w() = 0.0;
-			viewMatrix.transformVector(&direction);
-			direction.w() = l._direction.w();
+	for (int i = 0; i < _maxLights; ++i) {
+		const GLSLight &l = _lights[i];
 
-			lightsData[1 * uniformSize + 4 * i + 0] = direction.x();
-			lightsData[1 * uniformSize + 4 * i + 1] = direction.y();
-			lightsData[1 * uniformSize + 4 * i + 2] = direction.z();
-			lightsData[1 * uniformSize + 4 * i + 3] = direction.w();
+		Math::Vector4d position = viewMatrix * l._position;
+		memcpy(&positions[4 * i], position.getData(), 4 * sizeof(float));
 
-			// lightsColor
-			lightsData[2 * uniformSize + 4 * i + 0] = l._color.x();
-			lightsData[2 * uniformSize + 4 * i + 1] = l._color.y();
-			lightsData[2 * uniformSize + 4 * i + 2] = l._color.z();
-			lightsData[2 * uniformSize + 4 * i + 3] = l._color.w();
+		Math::Vector4d direction = l._direction;
+		direction.w() = 0.0;
+		viewMatrix.transformVector(&direction);
+		direction.w() = l._direction.w();
 
-			// lightsParams
-			lightsData[3 * uniformSize + 4 * i + 0] = l._params.x();
-			lightsData[3 * uniformSize + 4 * i + 1] = l._params.y();
-			lightsData[3 * uniformSize + 4 * i + 2] = l._params.z();
-			lightsData[3 * uniformSize + 4 * i + 3] = l._params.w();
+		Math::Vector4d param = l._params;
+		if (direction.w() > -1.0f) {
+			// Spotlight: done here once instead of in every vertex
+			Math::Vector3d dir(direction.x(), direction.y(), direction.z());
+			dir.normalize();
+			direction = Math::Vector4d(dir.x(), dir.y(), dir.z(), direction.w());
+
+			param.w() = CLIP(param.w(), 0.0f, 1.0f); // cos(theta / 2)
+			param.z() = CLIP(param.z(), 0.0f, param.w()); // cos(phi / 2)
 		}
+		memcpy(&directions[4 * i], direction.getData(), 4 * sizeof(float));
+		memcpy(&colors[4 * i], l._color.getData(), 4 * sizeof(float));
+		memcpy(&params[4 * i], param.getData(), 4 * sizeof(float));
+	}
 
-		Common::String uniform;
-		GLint uniformPos;
-
-		uniform = Common::String::format("lightsPosition");
-		uniformPos = _actorLightsProgram->getUniformLocation(uniform.c_str());
+	static const char *const names[] = { "lightsPosition", "lightsDirection", "lightsColor", "lightsParams" };
+	_actorLightsProgram->use();
+	for (uint i = 0; i < ARRAYSIZE(names); i++) {
+		GLint uniformPos = _actorLightsProgram->getUniformLocation(names[i]);
 		if (uniformPos == -1) {
-			error("No uniform named '%s'", uniform.c_str());
+			error("No uniform named '%s'", names[i]);
 		}
-		glUniform4fv(uniformPos, _maxLights, &lightsData[0 * uniformSize]);
-
-		uniform = Common::String::format("lightsDirection");
-		uniformPos = _actorLightsProgram->getUniformLocation(uniform.c_str());
-		if (uniformPos == -1) {
-			error("No uniform named '%s'", uniform.c_str());
-		}
-		glUniform4fv(uniformPos, _maxLights, &lightsData[1 * uniformSize]);
-
-		uniform = Common::String::format("lightsColor");
-		uniformPos = _actorLightsProgram->getUniformLocation(uniform.c_str());
-		if (uniformPos == -1) {
-			error("No uniform named '%s'", uniform.c_str());
-		}
-		glUniform4fv(uniformPos, _maxLights, &lightsData[2 * uniformSize]);
-
-		uniform = Common::String::format("lightsParams");
-		uniformPos = _actorLightsProgram->getUniformLocation(uniform.c_str());
-		if (uniformPos == -1) {
-			error("No uniform named '%s'", uniform.c_str());
-		}
-		glUniform4fv(uniformPos, _maxLights, &lightsData[3 * uniformSize]);
-
-		delete[] lightsData;
+		glUniform4fv(uniformPos, _maxLights, &_lightsData[i * uniformSize]);
 	}
 }
 
@@ -971,16 +1026,14 @@ void GfxOpenGLS::drawShadowPlanes() {
 	}
 
 	const ShadowUserData *sud = (ShadowUserData *)_currentShadowArray->userData;
-	_shadowPlaneProgram->use();
+	_shadowPlaneProgram->enableVertexAttribute("position", sud->_verticesVBO, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), 0);
+	_shadowPlaneProgram->use(true);
 	_shadowPlaneProgram->setUniform("projMatrix", _projMatrix);
 	_shadowPlaneProgram->setUniform("viewMatrix", _viewMatrix);
 
-	glBindBuffer(GL_ARRAY_BUFFER, sud->_verticesVBO);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sud->_indicesVBO);
-	const uint32 attribPos = _shadowPlaneProgram->getAttribute("position")._idx;
-	glEnableVertexAttribArray(attribPos);
-	glVertexAttribPointer(attribPos, 3, GL_FLOAT, GL_TRUE, 3 * sizeof(float), nullptr);
 	glDrawElements(GL_TRIANGLES, 3 * sud->_numTriangles, GL_UNSIGNED_SHORT, nullptr);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
@@ -1052,10 +1105,12 @@ void GfxOpenGLS::translateViewpointFinish() {
 
 void GfxOpenGLS::updateEMIModel(const EMIModel* model) {
 	const EMIModelUserData *mud = (const EMIModelUserData *)model->_userData;
+	// Respecifying the whole buffer lets the driver avoid waiting for the previous draws
 	glBindBuffer(GL_ARRAY_BUFFER, mud->_verticesVBO);
-	glBufferSubData(GL_ARRAY_BUFFER, 0, model->_numVertices * 3 * sizeof(float), model->_drawVertices);
+	glBufferData(GL_ARRAY_BUFFER, model->_numVertices * 3 * sizeof(float), model->_drawVertices, GL_STREAM_DRAW);
 	glBindBuffer(GL_ARRAY_BUFFER, mud->_normalsVBO);
-	glBufferSubData(GL_ARRAY_BUFFER, 0, model->_numVertices * 3 * sizeof(float), model->_drawNormals);
+	glBufferData(GL_ARRAY_BUFFER, model->_numVertices * 3 * sizeof(float), model->_drawNormals, GL_STREAM_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 void GfxOpenGLS::drawEMIModelFace(const EMIModel* model, const EMIMeshFace* face) {
@@ -1090,7 +1145,7 @@ void GfxOpenGLS::drawMesh(const Mesh *mesh) {
 		actorShader = mud->_shader;
 
 	actorShader->use();
-	actorShader->setUniform("extraMatrix", _matrixStack.top());
+	actorShader->setUniform("modelMatrix", _matrixStack.top() * _actorModelMatrix);
 
 	const Material *curMaterial = nullptr;
 	for (int i = 0; i < mesh->_numFaces;) {
@@ -1157,22 +1212,12 @@ void GfxOpenGLS::drawSprite(const Sprite *sprite) {
 		}
 
 		_spriteProgram->use();
-		_spriteProgram->setUniform("extraMatrix", _matrixStack.top());
+		_spriteProgram->setUniform("modelMatrix", _matrixStack.top() * _actorModelMatrix);
 		_spriteProgram->setUniform("spritePos", sprite->_pos);
 		_spriteProgram->setUniform("spriteSize", Math::Vector2d(sprite->_width, sprite->_height));
 		_spriteProgram->setUniform("textured", GL_TRUE);
 		_spriteProgram->setUniform1f("alphaRef", 0.5f);
 
-		float sprite_quad[] = {
-		//	 X   ,  Y  , Z   , S   , T
-			+0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
-			+0.5f, 1.0f, 0.0f, 0.0f, 0.0f,
-			-0.5f, 1.0f, 0.0f, 1.0f, 0.0f,
-			-0.5f, 0.0f, 0.0f, 1.0f, 1.0f,
-		};
-
-		glBindBuffer(GL_ARRAY_BUFFER, _spriteVBO);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(sprite_quad), sprite_quad, GL_STATIC_DRAW);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadEBO);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
@@ -1242,7 +1287,7 @@ void GfxOpenGLS::drawSprite(const Sprite *sprite) {
 	};
 
 	glBindBuffer(GL_ARRAY_BUFFER, _spriteVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(sprite_textured_quad), sprite_textured_quad, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(sprite_textured_quad), sprite_textured_quad, GL_DYNAMIC_DRAW);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadEBO);
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
@@ -1265,6 +1310,7 @@ void GfxOpenGLS::setupLight(Grim::Light *light, int lightId) {
 	if (lightId >= _maxLights) {
 		return;
 	}
+	_lightsDirty = true;
 
 	// Disable previous lights.
 	if (lightId == 0) {
@@ -1305,6 +1351,7 @@ void GfxOpenGLS::turnOffLight(int lightId) {
 	if (lightId >= _maxLights) {
 		return;
 	}
+	_lightsDirty = true;
 
 	// Turning off light 0 means no light is enabled at all.
 	if (lightId == 0)
@@ -1455,8 +1502,8 @@ void GfxOpenGLS::createBitmap(BitmapData *bitmap) {
 				texOut = (const byte *)imageData.getPixels();
 			}
 
-			int actualWidth = nextHigher2(bitmap->_width);
-			int actualHeight = nextHigher2(bitmap->_height);
+			int actualWidth = textureSize(bitmap->_width);
+			int actualHeight = textureSize(bitmap->_height);
 
 			glBindTexture(GL_TEXTURE_2D, textures[bitmap->_numTex * pic]);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -1505,8 +1552,12 @@ void GfxOpenGLS::drawBitmap(const Bitmap *bitmap, int dx, int dy, uint32 layer) 
 		for (uint32 i = offset; i < offset + data->_layers[layer]._numImages; ++i) {
 			glBindTexture(GL_TEXTURE_2D, textures[data->_verts[i]._texid]);
 
-			unsigned short startVertex = data->_verts[i]._pos / 4 * 6;
-			unsigned short numVertices = data->_verts[i]._verts / 4 * 6;
+			uint32 startVertex = data->_verts[i]._pos / 4 * 6;
+			uint32 numVertices = data->_verts[i]._verts / 4 * 6;
+			if (startVertex + numVertices > 6 * kMaxQuads) {
+				warning("Bitmap has too many quads to draw");
+				continue;
+			}
 			glDrawElements(GL_TRIANGLES, numVertices, GL_UNSIGNED_SHORT, (void *)(startVertex * sizeof(unsigned short)));
 		}
 		return;
@@ -1538,7 +1589,7 @@ void GfxOpenGLS::drawBitmap(const Bitmap *bitmap, int dx, int dy, uint32 layer) 
 		float height = bitmap->getHeight();
 		shader->setUniform("offsetXY", Math::Vector2d(float(dx) / _gameWidth, float(dy) / _gameHeight));
 		shader->setUniform("sizeWH", Math::Vector2d(width / _gameWidth, height / _gameHeight));
-		shader->setUniform("texcrop", Math::Vector2d(width / nextHigher2((int)width), height / nextHigher2((int)height)));
+		shader->setUniform("texcrop", Math::Vector2d(width / textureSize((int)width), height / textureSize((int)height)));
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
 
 		glDisable(GL_BLEND);
@@ -1564,23 +1615,41 @@ void GfxOpenGLS::drawDepthBitmap(int bitmapId, int x, int y, int w, int h, char 
 
 	// Sometimes the data pointer is reused by the allocator between bitmaps
 	// Use the bitmap ID to ensure we don't prevent an expected update
-	if (bitmapId == prevId && prevX == x && prevY == y && prevW == w && prevH == h && data == prevData) {
-		return;
+	if (bitmapId != prevId || prevX != x || prevY != y || prevW != w || prevH != h || data != prevData) {
+		prevId = bitmapId;
+		prevX = x;
+		prevY = y;
+		prevW = w;
+		prevH = h;
+		prevData = data;
+
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, _zBufTex);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 2); // 16 bit Z depth bitmap
+		glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, data);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		glActiveTexture(GL_TEXTURE0);
 	}
 
-	prevId = bitmapId;
-	prevX = x;
-	prevY = y;
-	prevW = w;
-	prevH = h;
-	prevData = data;
+	// The depth buffer is cleared every frame
+	if (_zBufferProgram)
+		drawDepthPass();
+}
 
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, _zBufTex);
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 2); // 16 bit Z depth bitmap
-	glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, data);
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-	glActiveTexture(GL_TEXTURE0);
+void GfxOpenGLS::drawDepthPass() {
+	_zBufferProgram->use();
+
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_ALWAYS);
+	glDepthMask(GL_TRUE);
+	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadEBO);
+	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	glDepthFunc(GL_LESS);
 }
 
 void GfxOpenGLS::destroyBitmap(BitmapData *bitmap) {
@@ -1791,7 +1860,7 @@ void GfxOpenGLS::drawTextObject(const TextObject *text) {
 	td->shader->setUniform("color", colors);
 	glBindTexture(GL_TEXTURE_2D, td->texture);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadEBO);
-	glDrawElements(GL_TRIANGLES, td->characters * 6, GL_UNSIGNED_SHORT, nullptr);
+	glDrawElements(GL_TRIANGLES, MIN<uint32>(td->characters, kMaxQuads) * 6, GL_UNSIGNED_SHORT, nullptr);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 	glEnable(GL_DEPTH_TEST);
 }
@@ -1809,9 +1878,6 @@ void GfxOpenGLS::destroyTextObject(TextObject *text) {
 
 void GfxOpenGLS::storeDisplay() {
 	glBindTexture(GL_TEXTURE_2D, _storedDisplay);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, _screenWidth, _screenHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, _screenWidth, _screenHeight, 0);
 }
 
@@ -2088,23 +2154,32 @@ void GfxOpenGLS::prepareMovieFrame(Graphics::Surface* frame) {
 			frame->format.aShift);
 	}
 
-	// create texture
+	// The texture is only reallocated when the frames change size or format
+	bool allocate = false;
 	if (_smushTexId == 0) {
 		glGenTextures(1, &_smushTexId);
+		glBindTexture(GL_TEXTURE_2D, _smushTexId);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		allocate = true;
+	} else {
+		glBindTexture(GL_TEXTURE_2D, _smushTexId);
 	}
-	glBindTexture(GL_TEXTURE_2D, _smushTexId);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexImage2D(GL_TEXTURE_2D, 0, frameFormat, nextHigher2(width), nextHigher2(height), 0, frameFormat, frameType, nullptr);
+
+	if (allocate || width != _smushWidth || height != _smushHeight || frameFormat != _smushFormat || frameType != _smushType) {
+		glTexImage2D(GL_TEXTURE_2D, 0, frameFormat, textureSize(width), textureSize(height), 0, frameFormat, frameType, nullptr);
+	}
 
 	glPixelStorei(GL_UNPACK_ALIGNMENT, frame->format.bytesPerPixel);
 	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, frameFormat, frameType, bitmap);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
-	_smushWidth = (int)(width);
-	_smushHeight = (int)(height);
+	_smushWidth = width;
+	_smushHeight = height;
+	_smushFormat = frameFormat;
+	_smushType = frameType;
 }
 
 void GfxOpenGLS::drawMovieFrame(int offsetX, int offsetY) {
@@ -2112,7 +2187,7 @@ void GfxOpenGLS::drawMovieFrame(int offsetX, int offsetY) {
 	glDisable(GL_DEPTH_TEST);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadEBO);
-	_smushProgram->setUniform("texcrop", Math::Vector2d(float(_smushWidth) / nextHigher2(_smushWidth), float(_smushHeight) / nextHigher2(_smushHeight)));
+	_smushProgram->setUniform("texcrop", Math::Vector2d(float(_smushWidth) / textureSize(_smushWidth), float(_smushHeight) / textureSize(_smushHeight)));
 	_smushProgram->setUniform("scale", Math::Vector2d(float(_smushWidth)/ float(_gameWidth), float(_smushHeight) / float(_gameHeight)));
 	_smushProgram->setUniform("offset", Math::Vector2d(float(offsetX) / float(_gameWidth), float(offsetY) / float(_gameHeight)));
 	glBindTexture(GL_TEXTURE_2D, _smushTexId);
@@ -2190,6 +2265,7 @@ void GfxOpenGLS::destroyEMIModel(EMIModel *model) {
 		OpenGL::Shader::freeBuffer(mud->_colorMapVBO);
 
 		delete mud->_shader;
+		delete mud->_shaderLights;
 		delete mud;
 	}
 
@@ -2262,7 +2338,9 @@ void GfxOpenGLS::destroyMesh(const Mesh *mesh) {
 	if (!mud)
 		return;
 
+	OpenGL::Shader::freeBuffer(mud->_meshInfoVBO);
 	delete mud->_shader;
+	delete mud->_shaderLights;
 	delete mud;
 }
 

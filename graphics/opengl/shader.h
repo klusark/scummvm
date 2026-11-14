@@ -239,6 +239,14 @@ public:
 
 	void unbind();
 
+	/**
+	 * Keep the vertex attribute setup in a vertex array object when the context supports them.
+	 *
+	 * The attributes must then only be changed through this class. Clones get their own
+	 * vertex array object.
+	 */
+	void enableVertexArrayObject();
+
 	Common::String &getError() { return _error; }
 	bool hasError() { return !_error.empty(); }
 
@@ -258,6 +266,24 @@ private:
 
 	Common::Array<VertexAttrib> _attributes;
 	Common::SharedPtr<UniformsMap> _uniforms;
+
+	struct VertexArrayObject {
+		VertexArrayObject() : _enabled(false), _id(0), _dirty(true) {}
+		VertexArrayObject(const VertexArrayObject &other) : _enabled(other._enabled), _id(0), _dirty(true) {}
+		~VertexArrayObject();
+
+		bool _enabled;
+		GLuint _id;
+		bool _dirty;
+
+	private:
+		VertexArrayObject &operator=(const VertexArrayObject &);
+	};
+
+	VertexArrayObject _vao;
+
+	void applyAttributes(bool setPointers);
+	static GLuint _boundVertexArray;
 
 	static Shader *_previousShader;
 	static uint32 previousNumAttributes;

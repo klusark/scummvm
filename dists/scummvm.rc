@@ -74,6 +74,8 @@ shaders/grim_smush.vertex            FILE    "engines/grim/shaders/grim_smush.ve
 shaders/grim_sprite.vertex           FILE    "engines/grim/shaders/grim_sprite.vertex"
 shaders/grim_text.fragment           FILE    "engines/grim/shaders/grim_text.fragment"
 shaders/grim_text.vertex             FILE    "engines/grim/shaders/grim_text.vertex"
+shaders/grim_zbuffer.fragment        FILE    "engines/grim/shaders/grim_zbuffer.fragment"
+shaders/grim_zbuffer.vertex          FILE    "engines/grim/shaders/grim_zbuffer.vertex"
 #endif
 #if PLUGIN_ENABLED_STATIC(MYST3)
 shaders/myst3_box.fragment           FILE    "engines/myst3/shaders/myst3_box.fragment"

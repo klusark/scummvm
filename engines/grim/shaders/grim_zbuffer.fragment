@@ -1,0 +1,11 @@
+in vec2 Texcoord;
+
+uniform sampler2D tex;
+
+void main() {
+	// Kept in a variable of default precision: on GLES the result of texture() is only lowp
+	vec2 texel = texture(tex, Texcoord).ra;
+	vec2 sampled = floor(texel * 255.0 + 0.5);
+	// Divided before adding to keep the values small for mediump
+	FRAG_DEPTH = dot(sampled, vec2(1.0 / 65535.0, 256.0 / 65535.0));
+}

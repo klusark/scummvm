@@ -81,6 +81,8 @@ void Context::reset() {
 	textureMirrorRepeatSupported = false;
 	textureMaxLevelSupported = false;
 	textureLookupPrecision = 0;
+	vertexArrayObjectSupported = false;
+	fragDepthSupported = false;
 }
 
 void Context::initialize(ContextType contextType) {
@@ -210,6 +212,10 @@ void Context::initialize(ContextType contextType) {
 			textureMirrorRepeatSupported = true;
 		} else if (token == "GL_SGIS_texture_lod" || token == "GL_APPLE_texture_max_level") {
 			textureMaxLevelSupported = true;
+		} else if (token == "GL_ARB_vertex_array_object" || token == "GL_OES_vertex_array_object") {
+			vertexArrayObjectSupported = true;
+		} else if (token == "GL_EXT_frag_depth") {
+			fragDepthSupported = true;
 		}
 	}
 
@@ -263,6 +269,12 @@ void Context::initialize(ContextType contextType) {
 		GLint precision = 0;
 		glGetShaderPrecisionFormat(GL_FRAGMENT_SHADER, GL_LOW_FLOAT, range, &precision);
 		textureLookupPrecision = precision;
+
+		// glad resolves the OES entry points to the core names
+		if (isGLVersionOrHigher(3, 0)) {
+			vertexArrayObjectSupported = true;
+		}
+		// Engine shaders are GLSL ES 1.00 even on GLES3, so fragment depth always needs GL_EXT_frag_depth
 
 		debug(5, "OpenGL: GLES2 context initialized");
 #endif
@@ -323,11 +335,27 @@ void Context::initialize(ContextType contextType) {
 		// In OpenGL precision is always enough
 		textureLookupPrecision = UINT_MAX;
 
+		if (isGLVersionOrHigher(3, 0)) {
+			vertexArrayObjectSupported = true;
+		}
+		vertexArrayObjectSupported = vertexArrayObjectSupported && shadersSupported;
+		// gl_FragDepth is part of every GLSL version
+		fragDepthSupported = shadersSupported;
+
 		debug(5, "OpenGL: GL context initialized");
 #endif
 	} else {
 		warning("OpenGL: Unknown context initialized");
 	}
+
+	if (type == kContextGLES) {
+		vertexArrayObjectSupported = false;
+		fragDepthSupported = false;
+	}
+#ifndef USE_GLAD
+	// The entry points are only loaded by glad
+	vertexArrayObjectSupported = false;
+#endif
 
 	if (framebufferObjectMultisampleSupported) {
 		glGetIntegerv(GL_MAX_SAMPLES, (GLint *)&multisampleMaxSamples);
@@ -366,6 +394,8 @@ void Context::initialize(ContextType contextType) {
 	debug(5, "OpenGL: Texture mirror repeat support: %d", textureMirrorRepeatSupported);
 	debug(5, "OpenGL: Texture max level support: %d", textureMaxLevelSupported);
 	debug(5, "OpenGL: Texture lookup precision: %d", textureLookupPrecision);
+	debug(5, "OpenGL: Vertex array object support: %d", vertexArrayObjectSupported);
+	debug(5, "OpenGL: Fragment depth support: %d", fragDepthSupported);
 }
 
 int Context::getGLSLVersion() const {
