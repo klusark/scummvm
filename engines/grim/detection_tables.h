@@ -413,7 +413,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			AD_ENTRY1s("VOX0001.LAB", "0ff872fb353707fbdb9579038d4cf31c", 382736476),
 			Common::UNK_LANG,
 			Common::kPlatformWindows,
-			ADGF_REMASTERED,
+			ADGF_REMASTERED | ADGF_TESTING,
 			GUI_OPTIONS_GRIME_REMASTERED
 		},
 		GType_GRIM
@@ -427,7 +427,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			AD_ENTRY1s("artAll.m4b", "61959da91d864bf5f4588daa4a5a3019", 18515664),
 			Common::EN_ANY,
 			Common::kPlatformWindows,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUI_OPTIONS_EMI
 		},
 		GType_MONKEY4
@@ -441,7 +441,7 @@ static const GrimGameDescription gameDescriptions[] = {
 				   "Script.tab", "ee08a95b6820f7b876940f6cd41dbae7", 618346),
 			Common::ZH_TWN,
 			Common::kPlatformWindows,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUI_OPTIONS_EMI
 		},
 		GType_MONKEY4
@@ -455,7 +455,7 @@ static const GrimGameDescription gameDescriptions[] = {
 				   "Script.tab", "ba6dca6f6e9ce9fd31a4b529f992c99d", 595396),
 			Common::ZH_CHN,
 			Common::kPlatformWindows,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUI_OPTIONS_EMI
 		},
 		GType_MONKEY4
@@ -469,7 +469,7 @@ static const GrimGameDescription gameDescriptions[] = {
 				   "Script.tab", "84226b3bda203c64af2eabf71ee316bc", 707784),
 			Common::KO_KOR,
 			Common::kPlatformWindows,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUI_OPTIONS_EMI
 		},
 		GType_MONKEY4
@@ -482,7 +482,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			AD_ENTRY1s("artAll.m4b", "007a33881478be6b6e0228d8888536ae", 18512568),
 			Common::DE_DEU,
 			Common::kPlatformWindows,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUI_OPTIONS_EMI
 		},
 		GType_MONKEY4
@@ -495,7 +495,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			AD_ENTRY1s("artAll.m4b", "d2f010c1cd1fd002eea403282a6b9a1e", 18513451),
 			Common::IT_ITA,
 			Common::kPlatformWindows,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUI_OPTIONS_EMI
 		},
 		GType_MONKEY4
@@ -508,7 +508,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			AD_ENTRY1s("artAll.m4b", "0d459954031c086a0448d2eb3fa068a1", 18514404),
 			Common::ES_ESP,
 			Common::kPlatformWindows,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUI_OPTIONS_EMI
 		},
 		GType_MONKEY4
@@ -521,7 +521,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			AD_ENTRY1s("artAll.m4b", "151af0a694382af873f325fcea293bb1", 18514420),
 			Common::FR_FRA,
 			Common::kPlatformWindows,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUI_OPTIONS_EMI
 		},
 		GType_MONKEY4
@@ -534,7 +534,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			AD_ENTRY1s("artAll.m4b", "030e7637aee7886a3caad60cf102f797", 18515747),
 			Common::PT_BRA,
 			Common::kPlatformWindows,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUI_OPTIONS_EMI
 		},
 		GType_MONKEY4
@@ -547,7 +547,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			AD_ENTRY1s("artAll.m4b", "779561a70a11dd5686974f122fc1516c", 18500052),
 			Common::RU_RUS,
 			Common::kPlatformWindows,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUI_OPTIONS_EMI
 		},
 		GType_MONKEY4
@@ -560,7 +560,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			AD_ENTRY1s("artAll.m4b", "451332012f4d947ef12da4f7d7f0e560", 18751712),
 			Common::PL_POL,
 			Common::kPlatformWindows,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUI_OPTIONS_EMI
 		},
 		GType_MONKEY4
@@ -574,7 +574,7 @@ static const GrimGameDescription gameDescriptions[] = {
 					   "Monkey Island 4 Installer", "r:8230927789935674546c4b3f9b1368ea", 560139),
 			Common::EN_ANY,
 			Common::kPlatformMacintosh,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUI_OPTIONS_EMI
 		},
 		GType_MONKEY4
@@ -588,7 +588,7 @@ static const GrimGameDescription gameDescriptions[] = {
 					   "EFMI Installer", "54298c7440dafedf33d2b27c7bb24052", 9241784),
 			Common::DE_DEU,
 			Common::kPlatformMacintosh,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUI_OPTIONS_EMI
 		},
 		GType_MONKEY4
@@ -602,7 +602,7 @@ static const GrimGameDescription gameDescriptions[] = {
 					   "Installation de Monkey Island 4", "8b22e2fadb4e72e8041c7bd896f1759d", 9242911),
 			Common::FR_FRA,
 			Common::kPlatformMacintosh,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUI_OPTIONS_EMI
 		},
 		GType_MONKEY4
@@ -616,7 +616,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			AD_ENTRY1s("artAll.m4b", "0dc9a4df0d8553f277d8dc8e23b6249d", 34593974),
 			Common::EN_ANY,
 			Common::kPlatformPS2,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUIO0()
 		},
 		GType_MONKEY4
@@ -629,7 +629,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			AD_ENTRY1s("artAll.m4b", "5b5c7a3964c168eab44b82981db357d8", 34642186),
 			Common::DE_DEU,
 			Common::kPlatformPS2,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUIO0()
 		},
 		GType_MONKEY4
@@ -642,7 +642,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			AD_ENTRY1s("artAll.m4b", "2de68c8fd955c1a3c50202b072bde0cb", 34642651),
 			Common::IT_ITA,
 			Common::kPlatformPS2,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUIO0()
 		},
 		GType_MONKEY4
@@ -655,7 +655,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			AD_ENTRY1s("artAll.m4b", "ff6689dcca36c249ec834a3019aeb397", 34642656),
 			Common::ES_ESP,
 			Common::kPlatformPS2,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUIO0()
 		},
 		GType_MONKEY4
@@ -668,7 +668,7 @@ static const GrimGameDescription gameDescriptions[] = {
 			AD_ENTRY1s("artAll.m4b", "5ce964a19a8672944b9b62170e45ce28", 34593681),
 			Common::FR_FRA,
 			Common::kPlatformPS2,
-			ADGF_UNSTABLE,
+			ADGF_TESTING,
 			GUIO0()
 		},
 		GType_MONKEY4
@@ -683,7 +683,7 @@ static const GrimGameDescription gameDescriptions[] = {
 					   "monkey4.exe",	"119ee6b9380cc0e373287fabb25e0578", 884736),
 			Common::EN_ANY,
 			Common::kPlatformWindows,
-			ADGF_DEMO | ADGF_UNSTABLE,
+			ADGF_DEMO | ADGF_TESTING,
 			GUI_OPTIONS_EMI_DEMO
 		},
 		GType_MONKEY4
@@ -697,7 +697,7 @@ static const GrimGameDescription gameDescriptions[] = {
 					   "i9n.lab",		"274f8579b01e0872fe6f1ba267266149", 26951),
 			Common::EN_ANY,
 			Common::kPlatformWindows,
-			ADGF_DEMO | ADGF_UNSTABLE,
+			ADGF_DEMO | ADGF_TESTING,
 			GUI_OPTIONS_EMI_DEMO
 		},
 		GType_MONKEY4
@@ -711,7 +711,7 @@ static const GrimGameDescription gameDescriptions[] = {
 					   "i9n.lab",		"7f1744990472261bdcbc02036ba9f7ec", 1718385),
 			Common::FR_FRA,
 			Common::kPlatformWindows,
-			ADGF_DEMO | ADGF_UNSTABLE,
+			ADGF_DEMO | ADGF_TESTING,
 			GUI_OPTIONS_EMI_DEMO
 		},
 		GType_MONKEY4
@@ -726,7 +726,7 @@ static const GrimGameDescription gameDescriptions[] = {
 					   "i9n.lab",		"28f6bc270b5c31970cc110c7656ff598", 1749051),
 			Common::DE_DEU,
 			Common::kPlatformWindows,
-			ADGF_DEMO | ADGF_UNSTABLE,
+			ADGF_DEMO | ADGF_TESTING,
 			GUI_OPTIONS_EMI_DEMO
 		},
 		GType_MONKEY4
@@ -741,7 +741,7 @@ static const GrimGameDescription gameDescriptions[] = {
 					   "i9n.lab",		"53b20d930f6e8c2e0880ed7e336eeebc", 1740761),
 			Common::ES_ESP,
 			Common::kPlatformWindows,
-			ADGF_DEMO | ADGF_UNSTABLE,
+			ADGF_DEMO | ADGF_TESTING,
 			GUI_OPTIONS_EMI_DEMO
 		},
 		GType_MONKEY4
@@ -756,7 +756,7 @@ static const GrimGameDescription gameDescriptions[] = {
 					   "i9n.lab",		"e69c9b51ee909dccae3b1423d527a8c4", 1712044),
 			Common::IT_ITA,
 			Common::kPlatformWindows,
-			ADGF_DEMO | ADGF_UNSTABLE,
+			ADGF_DEMO | ADGF_TESTING,
 			GUI_OPTIONS_EMI_DEMO
 		},
 		GType_MONKEY4

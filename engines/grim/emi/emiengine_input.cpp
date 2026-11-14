@@ -55,7 +55,7 @@ void EmiEngine::pumpEvents() {
 		switch (event.type) {
 		case Common::EVENT_QUIT:
 		case Common::EVENT_RETURN_TO_LAUNCHER:
-			if (!callExitHook()) {
+			if (!(isDemo() && _mode == kModeMovie) && !callExitHook()) {
 				eventManager->resetQuit();
 				eventManager->resetReturnToLauncher();
 			}

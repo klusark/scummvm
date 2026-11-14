@@ -404,7 +404,7 @@ bool GrimEngine::hasFeature(EngineFeature f) const {
 	return
 		(f == kSupportsReturnToLauncher) ||
 		(f == kSupportsLoadingDuringRuntime) ||
-		(f == kSupportsQuitDialogOverride);
+		(f == kSupportsQuitDialogOverride && !isRemastered());
 }
 
 void GrimEngine::pauseEngineIntern(bool pause) {
@@ -2840,7 +2840,7 @@ void GrimEngine::pumpEvents() {
 		switch (event.type) {
 		case Common::EVENT_QUIT:
 		case Common::EVENT_RETURN_TO_LAUNCHER:
-			if (!confirmClose()) {
+			if (!isRemastered() && !confirmClose()) {
 				eventMan->resetQuit();
 				eventMan->resetReturnToLauncher();
 			}
