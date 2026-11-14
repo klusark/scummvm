@@ -309,9 +309,12 @@ void Lua_V1::GetCameraLookVector() {
 
 	Set::Setup *setup;
 	lua_Object setupObj = lua_getparam(1);
-	if (lua_isnumber(setupObj)) {
-		setup = scene->getSetup((int)lua_getnumber(setupObj));
+	int num = lua_isnumber(setupObj) ? (int)lua_getnumber(setupObj) : -1;
+	if (num >= 0 && num < scene->getNumSetups()) {
+		setup = scene->getSetup(num);
 	} else {
+		if (lua_isnumber(setupObj))
+			warning("GetCameraLookVector: setup %d out of range (%d setups)", num, scene->getNumSetups());
 		setup = scene->getCurrSetup();
 	}
 
