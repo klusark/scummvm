@@ -102,6 +102,11 @@ int RenderDroid::ThingModule::setModel3(RdThing *thing, RdModel3 *model3) {
 	thing->data.model3 = model3;
 	thing->curGeoSet = -1;
 	thing->jointMatrices = new RdMatrix34[model3->numHNodes];
+
+	// The demo allocator fills every new block with 0xCC
+	if (_rd->isDemo())
+		memset(thing->jointMatrices, 0xCC, 48 * model3->numHNodes);
+
 	thing->jointPyr = new RdVector3[model3->numHNodes];
 	memset(thing->jointPyr, 0, 12 * model3->numHNodes);
 

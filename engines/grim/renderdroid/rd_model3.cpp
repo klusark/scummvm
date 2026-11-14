@@ -948,6 +948,10 @@ int RenderDroid::Model3Module::loadEntryText(char *filename, RdModel3 *model3) {
 					mesh->staticVertexIntensities = new float[numVertices];
 					mesh->dynamicVertexIntensities = new float[numVertices];
 					memset(mesh->dynamicVertexIntensities, 0, numVertices);
+
+					// The demo allocator fills every new block with 0xCC
+					if (_rd->isDemo())
+						memset((byte *)mesh->dynamicVertexIntensities + numVertices, 0xCC, 3 * numVertices);
 				}
 
 				for (uint i = 0; i < numVertices; i++) {
