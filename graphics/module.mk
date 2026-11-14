@@ -22,6 +22,7 @@ MODULE_OBJS := \
 	fonts/newfont_big.o \
 	fonts/newfont.o \
 	fonts/ttf.o \
+	fonts/ttf_glyphs.o \
 	fonts/winfont.o \
 	framelimiter.o \
 	hotspot_renderer.o \
