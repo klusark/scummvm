@@ -166,6 +166,8 @@ void GLContext::init(int screenW, int screenH, Graphics::PixelFormat pixelFormat
 	// allocate GLVertex array
 	vertex_max = POLYGON_MAX_VERTEX;
 	vertex = (GLVertex *)gl_malloc(POLYGON_MAX_VERTEX * sizeof(GLVertex));
+	// (the eye coordinates and the normal are set only with lighting, but the dirty rectangles compare whole vertices)
+	memset(vertex, 0, POLYGON_MAX_VERTEX * sizeof(GLVertex));
 
 	// viewport
 	v = &viewport;
