@@ -457,6 +457,7 @@ protected:
 	int _libJustLoaded = 0;
 
 	int _remasteredSaveStatus = 0;
+	Common::Array<byte> _imuseSaveBuffer;
 	int _remasteredSaveSlot = 0;
 	int _remasteredSaveSetIndex = 0;
 	Common::String _remasteredSaveMural;

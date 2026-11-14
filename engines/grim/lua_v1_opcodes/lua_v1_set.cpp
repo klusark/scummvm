@@ -30,6 +30,7 @@
 #include "engines/grim/render/sputrender.h"
 #include "engines/grim/sputresource.h"
 #include "engines/grim/sputroom.h"
+#include "engines/grim/stdcontrol.h"
 #include "engines/grim/walkplane.h"
 #include "engines/grim/lua/lauxlib.h"
 
@@ -53,7 +54,7 @@ void Lua_V1::GetPointSector() {
 	int sectorType = 4096;
 
 	if (!lua_isnil(typeObj))
-		sectorType = luaFtol(lua_getnumber(typeObj));
+		sectorType = luaFtolSse(lua_getnumber(typeObj));
 
 	float point[3];
 	point[0] = lua_getnumber(xObj);
@@ -83,7 +84,7 @@ void Lua_V1::GetActorSector() {
 	if (!actor)
 		return;
 
-	WalkPlane *plane = g_grim->_walkSystem->planeAt(actor->actorPos, luaFtol(lua_getnumber(typeObj)));
+	WalkPlane *plane = g_grim->_walkSystem->planeAt(actor->actorPos, luaFtolSse(lua_getnumber(typeObj)));
 
 	if (plane) {
 		lua_pushnumber((float)plane->_number);
@@ -97,6 +98,7 @@ void Lua_V1::GetActorSector() {
 void Lua_V1::IsActorInSector() {
 	lua_Object actorObj = lua_getparam(1);
 	lua_Object nameObj = lua_getparam(2);
+	lua_Object exactObj = lua_getparam(3);
 
 	if (!isSputActor(actorObj))
 		return;
@@ -104,6 +106,7 @@ void Lua_V1::IsActorInSector() {
 	SputActor *actor = nullptr;
 	const char *name = nullptr;
 	WalkPlane *plane = nullptr;
+	bool exact = g_grim->isRemastered() && lua_isnumber(exactObj) && lua_getnumber(exactObj) > 0.0f;
 
 	if (lua_isstring(nameObj)) {
 		actor = getSputActor(actorObj);
@@ -112,7 +115,7 @@ void Lua_V1::IsActorInSector() {
 		if (actor) {
 			plane = g_grim->_walkSystem->getHead();
 
-			while (plane && (!strstr(plane->_name, name) || !plane->within(actor->actorPos, 1)))
+			while (plane && (!strstr(plane->_name, name) || (exact && strcmp(plane->_name, name) != 0) || !plane->within(actor->actorPos, 1)))
 				plane = plane->_next;
 		}
 	}
@@ -192,7 +195,7 @@ void Lua_V1::MakeSectorActive() {
 	if (lua_isstring(sectorObj))
 		plane = g_grim->_walkSystem->planeNamed(lua_getstring(sectorObj));
 	else
-		plane = g_grim->_walkSystem->planeNumbered(luaFtol(lua_getnumber(sectorObj)));
+		plane = g_grim->_walkSystem->planeNumbered(luaFtolSse(lua_getnumber(sectorObj)));
 
 	if (plane) {
 		plane->_active = lua_isnil(visibleObj) ? 0 : 1;
@@ -209,7 +212,7 @@ void Lua_V1::IsSectorActive() {
 		if (lua_isstring(sectorObj))
 			plane = g_grim->_walkSystem->planeNamed(lua_getstring(sectorObj));
 		else
-			plane = g_grim->_walkSystem->planeNumbered(luaFtol(lua_getnumber(sectorObj)));
+			plane = g_grim->_walkSystem->planeNumbered(luaFtolSse(lua_getnumber(sectorObj)));
 
 		if (plane && plane->_active)
 			lua_pushnumber(1.0f);
@@ -253,16 +256,23 @@ void Lua_V1::UnlockSetDemo() {
 void Lua_V1::MakeCurrentSet() {
 	lua_Object nameObj = lua_getparam(1);
 
-	if (lua_isstring(nameObj))
+	if (lua_isstring(nameObj)) {
+		if (g_grim->isRemastered())
+			g_grim->getStdControl()->resetDoubleClick();
+
 		g_grim->makeCurrentSet(lua_getstring(nameObj));
-	else
+	} else {
 		g_grim->makeCurrentSet(nullptr);
+	}
 }
 
 void Lua_V1::MakeCurrentSetup() {
 	lua_Object setupObj = lua_getparam(1);
 	if (!lua_isnumber(setupObj))
 		return;
+
+	if (g_grim->isRemastered())
+		g_grim->getStdControl()->resetDoubleClick();
 
 	g_grim->makeCurrentSetupLib((uint)luaFtol(lua_getnumber(setupObj)));
 }
@@ -321,12 +331,20 @@ void Lua_V1::GetCameraLookVector() {
 	RoomCamera *camera = &room->setups[setupIndex].camera;
 	RdVector3 lookVector;
 
-	lookVector[0] = camera->position[0];
-	lookVector[1] = camera->position[1];
-	lookVector[2] = camera->position[2];
-	lookVector[0] = (float)((double)lookVector[0] - camera->interest[0]);
-	lookVector[1] = (float)((double)lookVector[1] - camera->interest[1]);
-	lookVector[2] = (float)((double)lookVector[2] - camera->interest[2]);
+	const float *from = camera->position;
+	const float *to = camera->interest;
+
+	if (g_grim->isRemastered()) {
+		from = camera->interest;
+		to = camera->position;
+	}
+
+	lookVector[0] = from[0];
+	lookVector[1] = from[1];
+	lookVector[2] = from[2];
+	lookVector[0] = (float)((double)lookVector[0] - to[0]);
+	lookVector[1] = (float)((double)lookVector[1] - to[1]);
+	lookVector[2] = (float)((double)lookVector[2] - to[2]);
 	g_grim->_rd->normalize3Acc(lookVector);
 
 	lua_Object result = lua_createtable();
@@ -453,12 +471,12 @@ void Lua_V1::NewObjectState() {
 	int copyMode = -1;
 
 	if (!lua_isnil(copyModeObj))
-		copyMode = luaFtol(lua_getnumber(copyModeObj));
+		copyMode = luaFtolSse(lua_getnumber(copyModeObj));
 
 	const char *zBitmap = lua_getstring(zBitmapObj);
 	const char *bitmap = lua_getstring(bitmapObj);
-	int type = luaFtol(lua_getnumber(typeObj));
-	int setup = luaFtol(lua_getnumber(setupObj));
+	int type = luaFtolSse(lua_getnumber(typeObj));
+	int setup = luaFtolSse(lua_getnumber(setupObj));
 
 	SputObjectState *state = g_grim->_sputRoom->addObjectState(setup, type, bitmap, zBitmap, copyMode);
 
@@ -522,7 +540,7 @@ void Lua_V1::SetObjectType() {
 	SputObjectState *state = findObjectState(lua_getuserdata(stateObj), nullptr, nullptr);
 
 	if (state)
-		state->type = luaFtol(lua_getnumber(typeObj));
+		state->type = luaFtolSse(lua_getnumber(typeObj));
 }
 
 void Lua_V1::SetAmbientLight() {
@@ -544,7 +562,7 @@ void Lua_V1::SetLightIntensity() {
 	int lightIndex = -1;
 
 	if (lua_isnumber(lightObj)) {
-		lightIndex = luaFtol(lua_getnumber(lightObj));
+		lightIndex = luaFtolSse(lua_getnumber(lightObj));
 	} else if (lua_isstring(lightObj)) {
 		lightIndex = g_grim->_sputRoom->findLightByName(nullptr, lua_getstring(lightObj));
 	} else {
@@ -579,7 +597,7 @@ void Lua_V1::SetLightPosition() {
 	int lightIndex = -1;
 
 	if (lua_isnumber(lightObj)) {
-		lightIndex = luaFtol(lua_getnumber(lightObj));
+		lightIndex = luaFtolSse(lua_getnumber(lightObj));
 	} else if (lua_isstring(lightObj)) {
 		lightIndex = g_grim->_sputRoom->findLightByName(nullptr, lua_getstring(lightObj));
 	} else {
@@ -624,7 +642,7 @@ void Lua_V1::TurnLightOn() {
 	int lightIndex = -1;
 
 	if (lua_isnumber(lightObj)) {
-		lightIndex = luaFtol(lua_getnumber(lightObj));
+		lightIndex = luaFtolSse(lua_getnumber(lightObj));
 	} else if (lua_isstring(lightObj)) {
 		lightIndex = g_grim->_sputRoom->findLightByName(nullptr, lua_getstring(lightObj));
 	} else {
@@ -661,8 +679,8 @@ void Lua_V1::SetCameraPosition() {
 	}
 
 	lua_Object xObj = lua_getparam(1);
-	lua_Object yObj = lua_getparam(1);
-	lua_Object zObj = lua_getparam(1);
+	lua_Object yObj = lua_getparam(2);
+	lua_Object zObj = lua_getparam(3);
 
 	if (!lua_isnumber(xObj) || !lua_isnumber(yObj) || !lua_isnumber(zObj))
 		lua_pushnil();
@@ -684,8 +702,8 @@ void Lua_V1::SetCameraInterest() {
 	}
 
 	lua_Object xObj = lua_getparam(1);
-	lua_Object yObj = lua_getparam(1);
-	lua_Object zObj = lua_getparam(1);
+	lua_Object yObj = lua_getparam(2);
+	lua_Object zObj = lua_getparam(3);
 
 	if (!lua_isnumber(xObj) || !lua_isnumber(yObj) || !lua_isnumber(zObj))
 		lua_pushnil();

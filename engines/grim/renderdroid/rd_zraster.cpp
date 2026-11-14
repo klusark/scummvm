@@ -31,7 +31,7 @@ RenderDroid::ZRasterModule::ZRasterModule(RenderDroid *rd) : Module(rd), _numVer
 		_uWrap(0), _vWrap(0), _mipMapNum(0), _texPitch(0), _texRowShift(0), _zScaleShift(0), _dUdXModifier(0),
 		_dVdXModifier(0), _dOneOverZdXFixed(0), _oneOverZStep(0.0f), _uOverZStep(0.0f), _vOverZStep(0.0f),
 		_dOneOverZdX(0.0f), _dOneOverZdY(0.0f), _dUOverZdX(0.0f), _dUOverZdY(0.0f), _dVOverZdX(0.0f),
-		_dVOverZdY(0.0f), _RGBcolor(0), _color(0), _caseU(0), _caseV(0), _caseUStep(0), _caseVStep(0) {
+		_dVOverZdY(0.0f), _RGBcolor(0), _color(0), _caseU(0), _caseV(0), _caseUStep(0), _caseVStep(0), _warnedIdlePointer(false) {
 	memset(_oneOverZ, 0, sizeof(_oneOverZ));
 	memset(_uOverZ, 0, sizeof(_uOverZ));
 	memset(_vOverZ, 0, sizeof(_vOverZ));
@@ -61,6 +61,13 @@ int RenderDroid::ZRasterModule::toFixed(double value) {
 	return (int)floor((float)(value * 65536.0));
 }
 
+int RenderDroid::ZRasterModule::winTruncate(double value) {
+	if (!(value > -2147483649.0 && value < 2147483648.0))
+		return (int)0x80000000;
+
+	return (int)value;
+}
+
 int RenderDroid::ZRasterModule::wrapVertex(int index, int last) {
 	if (index < 0)
 		return last;
@@ -80,6 +87,53 @@ void RenderDroid::ZRasterModule::selectGradientVertices(int *vertA, int *vertB, 
 		return;
 
 	int last = (int)_numVertices - 1;
+
+	if (_rd->_remastered) {
+		int remasteredDirection;
+		int remasteredRef = _yMinVert;
+		int following = wrapVertex(_yMinVert + 1, last);
+
+		if (following == _yMaxVert) {
+			remasteredDirection = -1;
+		} else if (wrapVertex(_yMinVert - 1, last) == _yMaxVert) {
+			remasteredDirection = 1;
+		} else {
+			remasteredRef = following;
+
+			float slope = (float)(((double)_vertices[_yMaxVert][1] - _vertices[_yMinVert][1]) / ((double)_vertices[_yMaxVert][0] - _vertices[_yMinVert][0]));
+			float predicted = (float)((double)slope * ((double)_vertices[following][0] - _vertices[_yMinVert][0]) + _vertices[_yMinVert][1]);
+			double offset = (double)_vertices[following][1] - predicted;
+
+			if (offset < 0.0)
+				offset = -offset;
+
+			remasteredDirection = (offset < 1.0) ? -1 : 1;
+		}
+
+		float middle = (float)(((double)_vertices[_yMaxVert][0] + _vertices[_yMinVert][0]) * 0.5);
+		float largest = 0.0f;
+
+		for (int vert = wrapVertex(_yMinVert + remasteredDirection, last); vert != _yMaxVert; vert = wrapVertex(vert + remasteredDirection, last)) {
+			double spread = (double)_vertices[vert][0] - middle;
+
+			if (spread < 0.0)
+				spread = -spread;
+
+			float storedSpread = (float)spread;
+
+			if (largest < storedSpread) {
+				largest = storedSpread;
+				remasteredRef = vert;
+			}
+		}
+
+		*vertA = _yMinVert;
+		*vertB = _yMaxVert;
+		*refVertPointer = remasteredRef;
+
+		return;
+	}
+
 	int direction;
 	int refVert = -1;
 	int nextVert = wrapVertex(_yMinVert + 1, last);
@@ -178,6 +232,29 @@ void RenderDroid::ZRasterModule::calcAffineGradients(float z) {
 	for (int i = 0; i < numVertices; i++)
 		_oneOverZ[i] = (float)(1.0 / ((double)_vertices[i][2] + 1.0));
 
+	if (_rd->_remastered) {
+		float storedDxA = (float)((double)_vertices[vertA][0] - _vertices[refVert][0]);
+		float storedDxB = (float)((double)_vertices[vertB][0] - _vertices[refVert][0]);
+		float storedDyA = (float)((double)_vertices[vertA][1] - _vertices[refVert][1]);
+		float storedDyB = (float)((double)_vertices[vertB][1] - _vertices[refVert][1]);
+		float storedDuB = (float)((double)_texVertices[vertB][0] - _texVertices[refVert][0]);
+		float storedDuA = (float)((double)_texVertices[vertA][0] - _texVertices[refVert][0]);
+		float storedDvB = (float)((double)_texVertices[vertB][1] - _texVertices[refVert][1]);
+		float storedDvA = (float)((double)_texVertices[vertA][1] - _texVertices[refVert][1]);
+		float storedInvDet = (float)(1.0 / ((double)storedDyA * storedDxB - (double)storedDyB * storedDxA));
+		float storedNegInvDet = -storedInvDet;
+		float storedDUdX = (float)(((double)storedDuB * storedDyA - (double)storedDuA * storedDyB) * storedInvDet);
+		float storedDUdY = (float)(((double)storedDuB * storedDxA - (double)storedDuA * storedDxB) * storedNegInvDet);
+		float storedDVdX = (float)(((double)storedDvB * storedDyA - (double)storedDvA * storedDyB) * storedInvDet);
+		float storedDVdY = (float)(((double)storedDvB * storedDxA - (double)storedDvA * storedDxB) * storedNegInvDet);
+
+		selectMipLevel(z);
+		_dUdXModifier = gradientModifier(storedDUdX, storedDUdY);
+		_dVdXModifier = gradientModifier(storedDVdX, storedDVdY);
+
+		return;
+	}
+
 	double dxA = (double)_vertices[vertA][0] - _vertices[refVert][0];
 	double dxB = (double)_vertices[vertB][0] - _vertices[refVert][0];
 	double dyA = (double)_vertices[vertA][1] - _vertices[refVert][1];
@@ -215,6 +292,47 @@ void RenderDroid::ZRasterModule::calcPerspGradients(float z) {
 	if (numVertices > 32) {
 		warning("RenderDroid::ZRasterModule::calcPerspGradients(): too many vertices");
 		numVertices = 32;
+	}
+
+	if (_rd->_remastered) {
+		for (int i = 0; i < numVertices; i++) {
+			_oneOverZ[i] = (float)(1.0 / ((double)_vertices[i][2] + 1.0));
+			_uOverZ[i] = (float)((double)_oneOverZ[i] * _texVertices[i][0]);
+			_vOverZ[i] = (float)((double)_texVertices[i][1] * _oneOverZ[i]);
+		}
+
+		float storedDyA = (float)((double)_vertices[vertA][1] - _vertices[refVert][1]);
+		float storedDyB = (float)((double)_vertices[vertB][1] - _vertices[refVert][1]);
+		float storedDxA = (float)((double)_vertices[vertA][0] - _vertices[refVert][0]);
+		float storedDxB = (float)((double)_vertices[vertB][0] - _vertices[refVert][0]);
+		float storedDOneA = (float)((double)_oneOverZ[vertA] - _oneOverZ[refVert]);
+		float storedDOneB = (float)((double)_oneOverZ[vertB] - _oneOverZ[refVert]);
+		float storedDUA = (float)((double)_uOverZ[vertA] - _uOverZ[refVert]);
+		float storedDUB = (float)((double)_uOverZ[vertB] - _uOverZ[refVert]);
+		float storedDVA = (float)((double)_vOverZ[vertA] - _vOverZ[refVert]);
+		float storedDVB = (float)((double)_vOverZ[vertB] - _vOverZ[refVert]);
+		float storedInvDet = (float)(1.0 / ((double)storedDyA * storedDxB - (double)storedDyB * storedDxA));
+		float storedNegInvDet = -storedInvDet;
+
+		_dOneOverZdX = (float)(((double)storedDOneB * storedDyA - (double)storedDOneA * storedDyB) * storedInvDet);
+		_dOneOverZdY = (float)(((double)storedDOneB * storedDxA - (double)storedDOneA * storedDxB) * storedNegInvDet);
+		_dOneOverZdXFixed = winTruncate((double)_dOneOverZdX * 65536.0);
+		_dUOverZdX = (float)(((double)storedDUB * storedDyA - (double)storedDUA * storedDyB) * storedInvDet);
+		_dUOverZdY = (float)(((double)storedDUB * storedDxA - (double)storedDUA * storedDxB) * storedNegInvDet);
+		_dVOverZdX = (float)(((double)storedDVB * storedDyA - (double)storedDVA * storedDyB) * storedInvDet);
+		_dVOverZdY = (float)(((double)storedDVB * storedDxA - (double)storedDVA * storedDxB) * storedNegInvDet);
+
+		selectMipLevel(z);
+
+		float modifierUX = (float)((double)_oneOverZ[vertA] * _dUOverZdX - (double)_uOverZ[vertA] * _dOneOverZdX);
+		float modifierUY = (float)((double)_oneOverZ[vertA] * _dUOverZdY - (double)_uOverZ[vertA] * _dOneOverZdY);
+		float modifierVX = (float)((double)_oneOverZ[vertA] * _dVOverZdX - (double)_vOverZ[vertA] * _dOneOverZdX);
+		float modifierVY = (float)((double)_oneOverZ[vertA] * _dVOverZdY - (double)_vOverZ[vertA] * _dOneOverZdY);
+
+		_dUdXModifier = gradientModifier(modifierUX, modifierUY);
+		_dVdXModifier = gradientModifier(modifierVX, modifierVY);
+
+		return;
 	}
 
 	for (int i = 0; i < numVertices; i++) {
@@ -300,6 +418,55 @@ int RenderDroid::ZRasterModule::setupEdgeLinear(RdZRasterEdge *edge, int vertexS
 	if (!findEdgeSegment(edge, vertexStep, &vertIdx, &nextIdx, &yStart, &numLines))
 		return 1;
 
+	if (_rd->_remastered) {
+		if (numLines >= 2) {
+			float yOffset = (float)((double)yStart - _vertices[vertIdx][1]);
+			float deltaY = (float)((double)_vertices[nextIdx][1] - _vertices[vertIdx][1]);
+			float invDy = (float)(1.0 / (double)deltaY);
+			float deltaX = (float)((double)_vertices[nextIdx][0] - _vertices[vertIdx][0]);
+			float slope = (float)((double)deltaX * invDy);
+
+			edge->dx = winTruncate((double)slope * 65536.0);
+			edge->x = winTruncate(((double)slope * yOffset + _vertices[vertIdx][0]) * 65536.0);
+
+			if (textured) {
+				float deltaU = (float)(((double)_texVertices[nextIdx][0] - _texVertices[vertIdx][0]) * invDy);
+				float deltaV = (float)(((double)_texVertices[nextIdx][1] - _texVertices[vertIdx][1]) * invDy);
+
+				edge->du = winTruncate((double)deltaU * 65536.0);
+				edge->u = winTruncate(((double)deltaU * yOffset + _texVertices[vertIdx][0]) * 65536.0);
+				edge->dv = winTruncate((double)deltaV * 65536.0);
+				edge->v = winTruncate(((double)deltaV * yOffset + _texVertices[vertIdx][1]) * 65536.0);
+			}
+
+			if (gouraud) {
+				float deltaI = (float)(((double)_intensities[nextIdx] - _intensities[vertIdx]) * invDy);
+
+				edge->dIntensity = winTruncate((double)deltaI * 65536.0);
+				edge->intensity = winTruncate(((double)deltaI * yOffset + _intensities[vertIdx]) * 65536.0);
+			}
+
+			edge->dOneOverZ = (float)(((double)_oneOverZ[nextIdx] - _oneOverZ[vertIdx]) * invDy);
+			edge->oneOverZ = (float)((double)edge->dOneOverZ * yOffset + _oneOverZ[vertIdx]);
+		} else {
+			edge->x = winTruncate((double)_vertices[vertIdx][0] * 65536.0);
+
+			if (textured) {
+				edge->u = winTruncate((double)_texVertices[vertIdx][0] * 65536.0);
+				edge->v = winTruncate((double)_texVertices[vertIdx][1] * 65536.0);
+			}
+
+			if (gouraud)
+				edge->intensity = winTruncate((double)_intensities[vertIdx] * 65536.0);
+
+			edge->oneOverZ = _oneOverZ[vertIdx];
+		}
+
+		edge->vertIdx = nextIdx;
+
+		return 0;
+	}
+
 	if (numLines >= 2) {
 		float yOffset = (float)((double)yStart - _vertices[vertIdx][1]);
 		float invDy = (float)(1.0 / ((double)_vertices[nextIdx][1] - _vertices[vertIdx][1]));
@@ -345,6 +512,54 @@ int RenderDroid::ZRasterModule::setupLeftEdgePerspective(RdZRasterEdge *edge, in
 
 	if (!findEdgeSegment(edge, _leftVertexStep, &vertIdx, &nextIdx, &yStart, &numLines))
 		return 1;
+
+	if (_rd->_remastered) {
+		float storedYOffset = (float)((double)yStart - _vertices[vertIdx][1]);
+		float startX;
+
+		if (numLines >= 2) {
+			float deltaX = (float)((double)_vertices[nextIdx][0] - _vertices[vertIdx][0]);
+			float deltaY = (float)((double)_vertices[nextIdx][1] - _vertices[vertIdx][1]);
+			float invDy = 0.0f;
+			float slope;
+
+			if (gouraud) {
+				invDy = (float)(1.0 / (double)deltaY);
+				slope = (float)((double)deltaX * invDy);
+			} else {
+				slope = (float)((double)deltaX / deltaY);
+			}
+
+			edge->dx = winTruncate((double)slope * 65536.0);
+			startX = (float)((double)storedYOffset * slope + _vertices[vertIdx][0]);
+			edge->x = winTruncate(65536.0 * startX);
+			edge->dOneOverZ = (float)((double)_dOneOverZdX * slope + _dOneOverZdY);
+			edge->dUOverZ = (float)((double)_dUOverZdX * slope + _dUOverZdY);
+			edge->dVOverZ = (float)((double)slope * _dVOverZdX + _dVOverZdY);
+
+			if (gouraud) {
+				float deltaIntensity = (float)(((double)_intensities[nextIdx] - _intensities[vertIdx]) * invDy);
+
+				edge->dIntensity = winTruncate((double)deltaIntensity * 65536.0);
+				edge->intensity = winTruncate(((double)deltaIntensity * storedYOffset + _intensities[vertIdx]) * 65536.0);
+			}
+		} else {
+			startX = _vertices[vertIdx][0];
+			edge->x = winTruncate(65536.0 * startX);
+
+			if (gouraud)
+				edge->intensity = winTruncate(65536.0 * _intensities[vertIdx]);
+		}
+
+		float storedXDelta = (float)((double)startX - _vertices[vertIdx][0]);
+
+		edge->oneOverZ = (float)(((double)_dOneOverZdY * storedYOffset + _oneOverZ[vertIdx]) + (double)_dOneOverZdX * storedXDelta);
+		edge->uOverZ = (float)(((double)_dUOverZdY * storedYOffset + _uOverZ[vertIdx]) + (double)_dUOverZdX * storedXDelta);
+		edge->vOverZ = (float)(((double)storedYOffset * _dVOverZdY + _vOverZ[vertIdx]) + (double)storedXDelta * _dVOverZdX);
+		edge->vertIdx = nextIdx;
+
+		return 0;
+	}
 
 	float yOffset = (float)((double)yStart - _vertices[vertIdx][1]);
 	float xAtStart;
@@ -439,6 +654,42 @@ int RenderDroid::ZRasterModule::setupRightEdgePerspective(RdZRasterEdge *edge, b
 
 	if (!findEdgeSegment(edge, _rightVertexStep, &vertIdx, &nextIdx, &yStart, &numLines))
 		return 1;
+
+	if (_rd->_remastered) {
+		if (numLines >= 2) {
+			float storedYOffset = (float)((double)yStart - _vertices[vertIdx][1]);
+			float deltaX = (float)((double)_vertices[nextIdx][0] - _vertices[vertIdx][0]);
+			float deltaY = (float)((double)_vertices[nextIdx][1] - _vertices[vertIdx][1]);
+			float invDy = 0.0f;
+			float slope;
+
+			if (gouraud) {
+				invDy = (float)(1.0 / (double)deltaY);
+				slope = (float)((double)deltaX * invDy);
+			} else {
+				slope = (float)((double)deltaX / deltaY);
+			}
+
+			edge->dx = winTruncate((double)slope * 65536.0);
+			edge->x = winTruncate(((double)slope * storedYOffset + _vertices[vertIdx][0]) * 65536.0);
+
+			if (gouraud) {
+				float deltaIntensity = (float)(((double)_intensities[nextIdx] - _intensities[vertIdx]) * invDy);
+
+				edge->dIntensity = winTruncate((double)deltaIntensity * 65536.0);
+				edge->intensity = winTruncate(((double)deltaIntensity * storedYOffset + _intensities[vertIdx]) * 65536.0);
+			}
+		} else {
+			edge->x = winTruncate((double)_vertices[vertIdx][0] * 65536.0);
+
+			if (gouraud)
+				edge->intensity = winTruncate((double)_intensities[vertIdx] * 65536.0);
+		}
+
+		edge->vertIdx = nextIdx;
+
+		return 0;
+	}
 
 	float xFixed;
 	float intensityFixed = 0.0f;
@@ -564,6 +815,16 @@ bool RenderDroid::ZRasterModule::beginScanLine(RdZRasterEdge *left, RdZRasterEdg
 }
 
 void RenderDroid::ZRasterModule::setupLinearZ(RdZRasterEdge *left, RdZRasterEdge *right, ScanState *state) {
+	if (_rd->_remastered) {
+		float storedDelta = (float)(((double)right->oneOverZ - left->oneOverZ) * _rd->_raster.getOneOverNFlex(state->numPixels));
+		float storedFraction = (float)((double)(state->xStart - state->xLeft) * 0.0000152587890625);
+
+		state->zStep = winTruncate((double)storedDelta * 65536.0);
+		state->z = winTruncate(((double)storedDelta * storedFraction + left->oneOverZ) * 65536.0);
+
+		return;
+	}
+
 	double dOneOverZ = ((double)right->oneOverZ - left->oneOverZ) * _rd->_raster.getOneOverNFlex(state->numPixels);
 	float dOneOverZStored = (float)dOneOverZ;
 	double fraction = (double)(state->xStart - state->xLeft) * 0.0000152587890625;
@@ -756,6 +1017,17 @@ void RenderDroid::ZRasterModule::scanLineAffine(RdZRasterEdge *left, RdZRasterEd
 	if (params.mode.shading == kGouraud && params.mode.bpp == 16 && params.mode.flags == 0 && !params.caseMode) {
 		state.dither = true;
 		state.ditherX = state.x + state.numPixels - 1;
+
+		if (_rd->_remastered && (((uintptr)state.dest & 3) == 2) && (((uintptr)state.zPointer & 3) == 2)) {
+			int lastX = state.x + state.numPixels;
+
+			state.ditherX = lastX;
+			drawTextureRun(1, &state, params);
+			state.ditherX = lastX - 2;
+			drawTextureRun(state.numPixels - 1, &state, params);
+
+			return;
+		}
 	}
 
 	drawTextureRun(state.numPixels, &state, params);
@@ -769,6 +1041,15 @@ void RenderDroid::ZRasterModule::scanLineAffine(RdZRasterEdge *left, RdZRasterEd
 }
 
 void RenderDroid::ZRasterModule::setRunSteps(ScanState *state, float uEnd, float vEnd, float uStart, float vStart, double stepScale) {
+	if (_rd->_remastered) {
+		state->uStep = winTruncate(((double)uEnd - uStart) * stepScale * 65536.0) >> _mipMapNum;
+		state->vStep = winTruncate(((double)vEnd - vStart) * stepScale * 65536.0) >> _mipMapNum;
+		state->u = _dUdXModifier + (winTruncate((double)uStart * 65536.0) >> _mipMapNum);
+		state->v = _dVdXModifier + (winTruncate((double)vStart * 65536.0) >> _mipMapNum);
+
+		return;
+	}
+
 	state->uStep = (int)floor((float)(((double)uEnd - uStart) * stepScale * 65536.0)) >> _mipMapNum;
 	state->vStep = (int)floor((float)(((double)vEnd - vStart) * stepScale * 65536.0)) >> _mipMapNum;
 	state->u = _dUdXModifier + ((int)floor((float)(uStart * 65536.0)) >> _mipMapNum);
@@ -780,6 +1061,29 @@ void RenderDroid::ZRasterModule::setIdleRunCoords(ScanState *state, const ScanPa
 	bool transparent = (params.mode.flags & kTransparent) != 0;
 	bool masked = (params.mode.flags & kMasked) != 0;
 	bool is8bpp = (params.mode.bpp == 8);
+
+	if (_rd->_remastered) {
+		bool pointerValue = masked && is8bpp && (params.mode.shading == kUnlit || transparent);
+
+		if (pointerValue) {
+			if (!_warnedIdlePointer) {
+				warning("RenderDroid::ZRasterModule::setIdleRunCoords(): the exe leaves a buffer address as the texture coordinate of a single pixel scanline, using the real coordinates");
+				_warnedIdlePointer = true;
+			}
+
+			state->u = _dUdXModifier + (winTruncate((double)uStart * 65536.0) >> _mipMapNum);
+			state->v = _dVdXModifier + (winTruncate((double)vStart * 65536.0) >> _mipMapNum);
+			return;
+		}
+
+		if (gouraud && (transparent || masked))
+			state->u = state->intensity;
+		else
+			state->u = state->z;
+
+		state->v = state->u;
+		return;
+	}
 
 	if (!gouraud && !masked && (transparent || is8bpp)) {
 		state->u = state->z;
@@ -827,6 +1131,81 @@ void RenderDroid::ZRasterModule::scanLinePerspective(RdZRasterEdge *left, RdZRas
 
 	if (params.mode.shading == kGouraud)
 		setupLinearIntensity(left, right, &state);
+
+	if (_rd->_remastered) {
+		float storedFraction = (float)((double)(state.xStart - state.xLeft) * 0.0000152587890625);
+		float startOneOverZ = (float)((double)storedFraction * _dOneOverZdX + left->oneOverZ);
+		float startUOverZ = (float)((double)_dUOverZdX * storedFraction + left->uOverZ);
+		float startVOverZ = (float)((double)storedFraction * _dVOverZdX + left->vOverZ);
+		float startInverse = (float)(1.0 / (double)startOneOverZ);
+		float runStartU = (float)((double)startInverse * startUOverZ);
+		float runStartV = (float)((double)startInverse * startVOverZ);
+
+		state.z = winTruncate((double)startOneOverZ * 65536.0);
+		state.zStep = _dOneOverZdXFixed;
+
+		float nextOneOverZ;
+		float nextUOverZ;
+		float nextVOverZ;
+
+		if (headPixels != 0) {
+			float headCount = (float)headPixels;
+			float headOneOverZ = (float)((double)startOneOverZ + (double)headCount * _dOneOverZdX);
+			float headUOverZ = (float)((double)startUOverZ + _dUOverZdX * (double)headCount);
+			float headVOverZ = (float)((double)startVOverZ + (double)headCount * _dVOverZdX);
+			float headInverse = (float)(1.0 / (double)headOneOverZ);
+			float headU = (float)((double)headInverse * headUOverZ);
+			float headV = (float)((double)headInverse * headVOverZ);
+
+			setRunSteps(&state, headU, headV, runStartU, runStartV, _rd->_raster.getOneOverNFlex(headPixels));
+			drawTextureRun(headPixels, &state, params);
+
+			runStartU = headU;
+			runStartV = headV;
+			nextOneOverZ = (float)((double)headOneOverZ + _oneOverZStep);
+			nextUOverZ = (float)((double)_uOverZStep + headUOverZ);
+			nextVOverZ = (float)((double)_vOverZStep + headVOverZ);
+		} else {
+			setIdleRunCoords(&state, params, startOneOverZ, runStartU, runStartV);
+
+			nextOneOverZ = (float)((double)startOneOverZ + _oneOverZStep);
+			nextUOverZ = (float)((double)startUOverZ + _uOverZStep);
+			nextVOverZ = (float)((double)startVOverZ + _vOverZStep);
+		}
+
+		for (int span = numSpans; span > 0; span--) {
+			float spanInverse = (float)(1.0 / (double)nextOneOverZ);
+			float spanU = (float)((double)spanInverse * nextUOverZ);
+			float spanV = (float)((double)spanInverse * nextVOverZ);
+
+			setRunSteps(&state, spanU, spanV, runStartU, runStartV, 0.0625);
+			drawTextureRun(16, &state, params);
+
+			runStartU = spanU;
+			runStartV = spanV;
+			nextOneOverZ = (float)((double)nextOneOverZ + _oneOverZStep);
+			nextUOverZ = (float)((double)nextUOverZ + _uOverZStep);
+			nextVOverZ = (float)((double)_vOverZStep + nextVOverZ);
+		}
+
+		if (tailPixels != 0) {
+			if (tailPixels != 1) {
+				float tailCount = (float)(tailPixels - 1);
+				float tailOneOverZ = (float)(((double)tailCount * _dOneOverZdX - _oneOverZStep) + nextOneOverZ);
+				float tailInverse = (float)(1.0 / (double)tailOneOverZ);
+				float tailUOverZ = (float)(((double)tailCount * _dUOverZdX - _uOverZStep) + nextUOverZ);
+				float tailU = (float)((double)tailUOverZ * tailInverse);
+				float tailVOverZ = (float)(((double)tailCount * _dVOverZdX - _vOverZStep) + nextVOverZ);
+				float tailV = (float)((double)tailInverse * tailVOverZ);
+
+				setRunSteps(&state, tailU, tailV, runStartU, runStartV, _rd->_raster.getOneOverNFlex(tailPixels - 1));
+			}
+
+			drawTextureRun(tailPixels, &state, params);
+		}
+
+		return;
+	}
 
 	double fraction = (double)(state.xStart - state.xLeft) * 0.0000152587890625;
 	float oneOverZ = truncToFloat(truncToFloat(fraction * _dOneOverZdX) + left->oneOverZ);
@@ -1405,7 +1784,7 @@ int RenderDroid::ZRasterModule::drawNGon(RdProcFace *procFace, RdMatCel *cel, fl
 	if (result)
 		return result;
 
-	bool hasCases = (mapping != kSolid && flags == 0);
+	bool hasCases = (mapping != kSolid && flags == 0 && !_rd->_remastered);
 	bool useCase = (hasCases && !_zScaleShift && bpp == 16);
 	bool useCase8 = (hasCases && !_zScaleShift && bpp == 8);
 	bool drawLines = (bpp == 8 || bpp == 16);
@@ -1469,6 +1848,11 @@ int RenderDroid::ZRasterModule::drawNGonLV(RdProcFace *procFace, RdMatCel *cel) 
 		int x = (int)floor(_vertices[i][0]);
 		int y = (int)floor(_vertices[i][1]);
 
+		if (_rd->_remastered) {
+			x = winTruncate(_vertices[i][0]);
+			y = winTruncate(_vertices[i][1]);
+		}
+
 		if (x < 0 || y < 0 || x >= vBuffer->tex.width || y >= vBuffer->tex.height) {
 			warning("RenderDroid::ZRasterModule::drawNGonLV(): pixel outside the buffer");
 			continue;
@@ -1504,7 +1888,10 @@ int RenderDroid::ZRasterModule::drawNGonLW(RdProcFace *procFace, RdMatCel *cel) 
 	for (uint i = 0; i < _numVertices; i++) {
 		uint next = (i + 1 < _numVertices) ? i + 1 : 0;
 
-		_rd->_primit2.drawLine(canvas, (int)floor(_vertices[i][0]), (int)floor(_vertices[i][1]), (int)floor(_vertices[next][0]), (int)floor(_vertices[next][1]), color, 0xFFFFFFFF);
+		if (_rd->_remastered)
+			_rd->_primit2.drawLine(canvas, winTruncate(_vertices[i][0]), winTruncate(_vertices[i][1]), winTruncate(_vertices[next][0]), winTruncate(_vertices[next][1]), color, 0xFFFFFFFF);
+		else
+			_rd->_primit2.drawLine(canvas, (int)floor(_vertices[i][0]), (int)floor(_vertices[i][1]), (int)floor(_vertices[next][0]), (int)floor(_vertices[next][1]), color, 0xFFFFFFFF);
 	}
 
 	return 0;

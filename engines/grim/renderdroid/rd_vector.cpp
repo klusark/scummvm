@@ -171,12 +171,22 @@ float RenderDroid::normalize3QuickAcc(RdVector3 vec) {
 	float middle;
 	float smallest;
 
-	if (z <= y) {
-		if (x >= y) {
+	if (_remastered) {
+		x = (vec[0] < 0.0) ? -vec[0] : vec[0];
+		y = (vec[1] < 0.0) ? -vec[1] : vec[1];
+		z = (vec[2] < 0.0) ? -vec[2] : vec[2];
+	}
+
+	bool zNotAboveY = _remastered ? !(y < z) : (z <= y);
+	bool xNotBelowY = _remastered ? !(y > x) : (x >= y);
+	bool zNotAboveX = _remastered ? !(x < z) : (z <= x);
+
+	if (zNotAboveY) {
+		if (xNotBelowY) {
 			largest = x;
 			middle = y;
 			smallest = z;
-		} else if (z <= x) {
+		} else if (zNotAboveX) {
 			largest = y;
 			middle = x;
 			smallest = z;
@@ -185,7 +195,7 @@ float RenderDroid::normalize3QuickAcc(RdVector3 vec) {
 			middle = z;
 			smallest = x;
 		}
-	} else if (z <= x) {
+	} else if (zNotAboveX) {
 		largest = x;
 		middle = z;
 		smallest = y;

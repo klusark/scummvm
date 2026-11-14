@@ -59,7 +59,7 @@ int RenderDroid::ClipModule::line2(RdCanvas *canvas, int *x0, int *y0, int *x1, 
 	float fx1 = (float)*x1;
 	float fy0 = (float)*y0;
 	float fy1 = (float)*y1;
-	bool vertical = (double)*x0 == fx1;
+	bool vertical = _rd->_remastered ? (fx0 == fx1) : ((double)*x0 == fx1);
 	bool horizontal = fy0 == fy1;
 
 	while (true) {
@@ -72,12 +72,20 @@ int RenderDroid::ClipModule::line2(RdCanvas *canvas, int *x0, int *y0, int *x1, 
 				newX = fx0;
 			else
 				newX = ((double)fx1 - fx0) / ((double)fy1 - fy0) * ((double)canvas->yStart - fy0) + fx0;
+
+			if (_rd->_remastered)
+				newX = (double)(float)newX;
+
 			newY = (double)canvas->yStart;
 		} else if ((outcode & 0x100) != 0) {
 			if (vertical)
 				newX = fx0;
 			else
 				newX = ((double)fx1 - fx0) / ((double)fy1 - fy0) * ((double)canvas->yEnd - fy0) + fx0;
+
+			if (_rd->_remastered)
+				newX = (double)(float)newX;
+
 			newY = (double)canvas->yEnd;
 		} else {
 			float clippedY;
@@ -213,7 +221,7 @@ int RenderDroid::ClipModule::line3(RdClipFrustum *clip, RdVector3 v0, RdVector3 
 
 	if (v0[1] >= (double)clip->zNear) {
 		if (v1[1] < (double)clip->zNear) {
-			double t = ((double)clip->zNear - v0[1]) / ((double)v1[1] - v0[1]);
+			double t = _rd->_remastered ? (double)(float)(((double)clip->zNear - v0[1]) / ((double)v1[1] - v0[1])) : ((double)clip->zNear - v0[1]) / ((double)v1[1] - v0[1]);
 			float x = v1[0];
 
 			v1[1] = clip->zNear;
@@ -223,7 +231,7 @@ int RenderDroid::ClipModule::line3(RdClipFrustum *clip, RdVector3 v0, RdVector3 
 				*clipped1 = 1;
 		}
 	} else {
-		double t = ((double)clip->zNear - v0[1]) / ((double)v1[1] - v0[1]);
+		double t = _rd->_remastered ? (double)(float)(((double)clip->zNear - v0[1]) / ((double)v1[1] - v0[1])) : ((double)clip->zNear - v0[1]) / ((double)v1[1] - v0[1]);
 
 		v0[1] = clip->zNear;
 		v0[2] = (float)(((double)v1[2] - v0[2]) * t + v0[2]);
@@ -238,7 +246,7 @@ int RenderDroid::ClipModule::line3(RdClipFrustum *clip, RdVector3 v0, RdVector3 
 
 		if (v0[1] <= (double)clip->zFar) {
 			if (v1[1] > (double)clip->zFar) {
-				double t = ((double)clip->zFar - v0[1]) / ((double)v1[1] - v0[1]);
+				double t = _rd->_remastered ? (double)(float)(((double)clip->zFar - v0[1]) / ((double)v1[1] - v0[1])) : ((double)clip->zFar - v0[1]) / ((double)v1[1] - v0[1]);
 				float x = v1[0];
 
 				v1[1] = clip->zFar;
@@ -248,7 +256,7 @@ int RenderDroid::ClipModule::line3(RdClipFrustum *clip, RdVector3 v0, RdVector3 
 					*clipped1 = 1;
 			}
 		} else {
-			double t = ((double)clip->zFar - v0[1]) / ((double)v1[1] - v0[1]);
+			double t = _rd->_remastered ? (double)(float)(((double)clip->zFar - v0[1]) / ((double)v1[1] - v0[1])) : ((double)clip->zFar - v0[1]) / ((double)v1[1] - v0[1]);
 
 			v0[1] = clip->zFar;
 			v0[2] = (float)(((double)v1[2] - v0[2]) * t + v0[2]);
@@ -256,6 +264,73 @@ int RenderDroid::ClipModule::line3(RdClipFrustum *clip, RdVector3 v0, RdVector3 
 			if (clipped0)
 				*clipped0 = 1;
 		}
+	}
+
+	if (_rd->_remastered) {
+		float slopes[4] = { clip->left, clip->right, clip->top, clip->bottom };
+		int axes[4] = { 0, 0, 2, 2 };
+		bool keepGreater[4] = { true, false, false, true };
+
+		for (int plane = 0; plane < 4; plane++) {
+			float slope = slopes[plane];
+			int axis = axes[plane];
+			int other = (axis == 0) ? 2 : 0;
+			float limit0 = (float)((double)slope * v0[1]);
+			float limit1 = (float)((double)slope * v1[1]);
+			bool outside0;
+			bool outside1;
+
+			if (keepGreater[plane]) {
+				outside0 = v0[axis] < limit0;
+				outside1 = v1[axis] < limit1;
+			} else {
+				outside0 = v0[axis] > limit0;
+				outside1 = v1[axis] > limit1;
+			}
+
+			if (outside0 && outside1)
+				return 0;
+
+			if (!outside0 && !outside1)
+				continue;
+
+			double deltaAxis = (double)v1[axis] - v0[axis];
+			double deltaY = (double)v1[1] - v0[1];
+			float numerator = (float)((double)v0[axis] * v1[1] - (double)v1[axis] * v0[1]);
+			float denominator = (float)(deltaY * slope - deltaAxis);
+			float crossY = numerator;
+
+			if (denominator != 0.0f)
+				crossY = (float)((double)numerator / denominator);
+
+			float crossAxis = (float)((double)slope * crossY);
+			float cut;
+
+			if (!(fabs(deltaAxis) < fabs(deltaY)))
+				cut = (float)(((double)crossAxis - v0[axis]) / deltaAxis);
+			else
+				cut = (float)(((double)crossY - v0[1]) / deltaY);
+
+			float otherValue = (float)(((double)v1[other] - v0[other]) * cut + v0[other]);
+
+			if (outside0) {
+				v0[axis] = crossAxis;
+				v0[1] = crossY;
+				v0[other] = otherValue;
+
+				if (clipped0)
+					*clipped0 = 1;
+			} else {
+				v1[axis] = crossAxis;
+				v1[1] = crossY;
+				v1[other] = otherValue;
+
+				if (clipped1)
+					*clipped1 = 1;
+			}
+		}
+
+		return 1;
 	}
 
 	float leftLimit = (float)((double)clip->left * v1[1]);
@@ -507,6 +582,9 @@ int RenderDroid::ClipModule::sphereInFrustrum(RdClipFrustum *clip, RdVector3 cen
 
 	if (projectType == 1) {
 		limitNear = (double)clip->top * nearEdge;
+
+		if (_rd->_remastered)
+			limitNear = (double)(float)limitNear;
 		limitFar = (float)((double)clip->top * farEdge);
 	} else {
 		limitNear = clip->orthoTop;
@@ -521,6 +599,9 @@ int RenderDroid::ClipModule::sphereInFrustrum(RdClipFrustum *clip, RdVector3 cen
 
 	if (projectType == 1) {
 		limitNear = (double)clip->bottom * nearEdge;
+
+		if (_rd->_remastered)
+			limitNear = (double)(float)limitNear;
 		limitFar = (float)((double)clip->bottom * farEdge);
 	} else {
 		limitNear = clip->orthoBottom;
@@ -538,6 +619,9 @@ int RenderDroid::ClipModule::sphereInFrustrum(RdClipFrustum *clip, RdVector3 cen
 
 	if (projectType == 1) {
 		limitNear = (double)clip->left * nearEdge;
+
+		if (_rd->_remastered)
+			limitNear = (double)(float)limitNear;
 		limitFar = (float)((double)clip->left * farEdge);
 	} else {
 		limitNear = clip->orthoLeft;
@@ -552,6 +636,9 @@ int RenderDroid::ClipModule::sphereInFrustrum(RdClipFrustum *clip, RdVector3 cen
 
 	if (projectType == 1) {
 		limitNear = (double)clip->right * nearEdge;
+
+		if (_rd->_remastered)
+			limitNear = (double)(float)limitNear;
 		limitFar = (float)((double)clip->right * farEdge);
 	} else {
 		limitNear = clip->orthoRight;
@@ -721,15 +808,24 @@ int RenderDroid::ClipModule::faceToPlane(RdVector3 norm, RdVector3 pt, RdVector3
 	float prevIntensity = intensities ? intensities[numVerts - 1] : 0.0f;
 	float prevDist = (float)(((double)prev[2] - pt[2]) * norm[2] + ((double)prev[0] - pt[0]) * norm[0] + ((double)prev[1] - pt[1]) * norm[1]);
 
+	if (_rd->_remastered)
+		prevDist = (float)((((double)prev[1] - pt[1]) * norm[1] + ((double)prev[0] - pt[0]) * norm[0]) + ((double)prev[2] - pt[2]) * norm[2]);
+
 	for (int i = 0; i < numVerts; i++) {
 		const float *cur = verts[i];
 		const float *curTex = texVerts ? texVerts[i] : nullptr;
 		float curIntensity = intensities ? intensities[i] : 0.0f;
 		double dist = ((double)cur[2] - pt[2]) * norm[2] + ((double)cur[0] - pt[0]) * norm[0] + ((double)cur[1] - pt[1]) * norm[1];
 
+		if (_rd->_remastered)
+			dist = (double)(float)((((double)cur[0] - pt[0]) * norm[0] + ((double)cur[1] - pt[1]) * norm[1]) + ((double)cur[2] - pt[2]) * norm[2]);
+
 		if (prevDist < 0.0f || dist < 0.0) {
 			if (prevDist >= 0.0f || dist >= 0.0) {
 				double t = -((double)prevDist / (dist - prevDist));
+
+				if (_rd->_remastered)
+					t = (double)(float)(-(double)prevDist / (dist - (double)prevDist));
 
 				if (!canAddVertex(outCount))
 					return 0;
@@ -852,39 +948,79 @@ int RenderDroid::ClipModule::clipPerspectiveX(const RdClipPoly *src, int count, 
 
 		float prevBound = (float)((double)prev[1] * slope);
 		double curBound = (double)cur[1] * slope;
+
+		if (_rd->_remastered)
+			curBound = (double)(float)curBound;
+
 		bool prevInside = keepGreater ? !(prev[0] < prevBound) : (prev[0] <= prevBound);
 		bool curInside = keepGreater ? (curBound <= cur[0]) : (curBound >= cur[0]);
+
+		if (_rd->_remastered) {
+			if (keepGreater)
+				curInside = !(cur[0] < curBound);
+			else
+				prevInside = !(prev[0] > prevBound);
+		}
 
 		if (prevInside || curInside) {
 			bool prevOutside = keepGreater ? (prev[0] < (double)prevBound) : (prev[0] > (double)prevBound);
 			bool curOutside = keepGreater ? (curBound > cur[0]) : (curBound < cur[0]);
 
 			if (prev[0] != prevBound && curBound != cur[0] && (prevOutside || curOutside)) {
-				float dy = (float)((double)cur[1] - prev[1]);
-				float dx = (float)((double)cur[0] - prev[0]);
-				double c = (double)cur[1] * prev[0] - (double)prev[1] * cur[0];
-				double denominator = (double)slope * dy - dx;
+				if (_rd->_remastered) {
+					double deltaX = (double)cur[0] - prev[0];
+					double deltaY = (double)cur[1] - prev[1];
+					float numerator = (float)((double)prev[0] * cur[1] - (double)cur[0] * prev[1]);
+					float denominatorStored = (float)(deltaY * slope - deltaX);
+					float crossY = numerator;
 
-				if (denominator != 0.0)
-					c = c / (float)denominator;
+					if (denominatorStored != 0.0f)
+						crossY = (float)((double)numerator / denominatorStored);
 
-				float x = (float)((double)slope * c);
-				double t;
+					float crossX = (float)((double)slope * crossY);
+					float remasteredT;
 
-				if (fabs((double)dy) <= fabs((double)dx))
-					t = ((double)x - prev[0]) / dx;
-				else
-					t = (c - prev[1]) / dy;
+					if (!(fabs(deltaX) < fabs(deltaY)))
+						remasteredT = (float)(((double)crossX - prev[0]) / deltaX);
+					else
+						remasteredT = (float)(((double)crossY - prev[1]) / deltaY);
 
-				if (!canAddVertex(outCount))
-					return 0;
+					if (!canAddVertex(outCount))
+						return 0;
 
-				dst->verts[outCount][0] = x;
-				dst->verts[outCount][1] = (float)c;
-				dst->verts[outCount][2] = (float)(((double)cur[2] - prev[2]) * t + prev[2]);
-				interpolateAttributes(src, prevIdx, curIdx, dst, outCount, t);
-				outCount++;
-				_faceStatus |= status;
+					dst->verts[outCount][0] = crossX;
+					dst->verts[outCount][1] = crossY;
+					dst->verts[outCount][2] = (float)(((double)cur[2] - prev[2]) * remasteredT + prev[2]);
+					interpolateAttributes(src, prevIdx, curIdx, dst, outCount, remasteredT);
+					outCount++;
+					_faceStatus |= status;
+				} else {
+					float dy = (float)((double)cur[1] - prev[1]);
+					float dx = (float)((double)cur[0] - prev[0]);
+					double c = (double)cur[1] * prev[0] - (double)prev[1] * cur[0];
+					double denominator = (double)slope * dy - dx;
+
+					if (denominator != 0.0)
+						c = c / (float)denominator;
+
+					float x = (float)((double)slope * c);
+					double t;
+
+					if (fabs((double)dy) <= fabs((double)dx))
+						t = ((double)x - prev[0]) / dx;
+					else
+						t = (c - prev[1]) / dy;
+
+					if (!canAddVertex(outCount))
+						return 0;
+
+					dst->verts[outCount][0] = x;
+					dst->verts[outCount][1] = (float)c;
+					dst->verts[outCount][2] = (float)(((double)cur[2] - prev[2]) * t + prev[2]);
+					interpolateAttributes(src, prevIdx, curIdx, dst, outCount, t);
+					outCount++;
+					_faceStatus |= status;
+				}
 			}
 
 			if (curInside) {
@@ -912,43 +1048,83 @@ int RenderDroid::ClipModule::clipPerspectiveZ(const RdClipPoly *src, int count, 
 
 		float prevBound = (float)((double)slope * prev[1]);
 		double curBound = (double)cur[1] * slope;
+
+		if (_rd->_remastered)
+			curBound = (double)(float)curBound;
+
 		bool prevInside = keepGreater ? !(prev[2] < prevBound) : (prev[2] <= prevBound);
 		bool curInside = keepGreater ? (curBound <= cur[2]) : (curBound >= cur[2]);
+
+		if (_rd->_remastered) {
+			if (keepGreater)
+				curInside = !(cur[2] < curBound);
+			else
+				prevInside = !(prev[2] > prevBound);
+		}
 
 		if (prevInside || curInside) {
 			bool prevOutside = keepGreater ? (prev[2] < (double)prevBound) : (prev[2] > (double)prevBound);
 			bool curOutside = keepGreater ? (curBound > cur[2]) : (curBound < cur[2]);
 
 			if (prev[2] != prevBound && curBound != cur[2] && (prevOutside || curOutside)) {
-				float dy = (float)((double)cur[1] - prev[1]);
-				float dz = (float)((double)cur[2] - prev[2]);
-				double denominator = (double)slope * dy - dz;
-				double c = (double)cur[1] * prev[2] - (double)cur[2] * prev[1];
+				if (_rd->_remastered) {
+					double deltaY = (double)cur[1] - prev[1];
+					double deltaZ = (double)cur[2] - prev[2];
+					float numerator = (float)((double)cur[1] * prev[2] - (double)cur[2] * prev[1]);
+					float denominatorStored = (float)(deltaY * slope - deltaZ);
+					float crossY = numerator;
 
-				if (denominator != 0.0)
-					c = c / (float)denominator;
+					if (denominatorStored != 0.0f)
+						crossY = (float)((double)numerator / denominatorStored);
 
-				double z = (double)slope * c;
-				double t;
+					float crossZ = (float)((double)slope * crossY);
+					float remasteredT;
 
-				// The versions with texture or intensities keep z as a float
-				if (src->texVerts || src->intensities)
-					z = (float)z;
+					if (!(fabs(deltaZ) < fabs(deltaY)))
+						remasteredT = (float)(((double)crossZ - prev[2]) / deltaZ);
+					else
+						remasteredT = (float)(((double)crossY - prev[1]) / deltaY);
 
-				if (fabs((double)dy) <= fabs((double)dz))
-					t = (z - prev[2]) / dz;
-				else
-					t = (c - prev[1]) / dy;
+					if (!canAddVertex(outCount))
+						return 0;
 
-				if (!canAddVertex(outCount))
-					return 0;
+					dst->verts[outCount][0] = (float)(((double)cur[0] - prev[0]) * remasteredT + prev[0]);
+					dst->verts[outCount][1] = crossY;
+					dst->verts[outCount][2] = crossZ;
+					interpolateAttributes(src, prevIdx, curIdx, dst, outCount, remasteredT);
+					outCount++;
+					_faceStatus |= status;
+				} else {
+					float dy = (float)((double)cur[1] - prev[1]);
+					float dz = (float)((double)cur[2] - prev[2]);
+					double denominator = (double)slope * dy - dz;
+					double c = (double)cur[1] * prev[2] - (double)cur[2] * prev[1];
 
-				dst->verts[outCount][0] = (float)(((double)cur[0] - prev[0]) * t + prev[0]);
-				dst->verts[outCount][1] = (float)c;
-				dst->verts[outCount][2] = (float)z;
-				interpolateAttributes(src, prevIdx, curIdx, dst, outCount, t);
-				outCount++;
-				_faceStatus |= status;
+					if (denominator != 0.0)
+						c = c / (float)denominator;
+
+					double z = (double)slope * c;
+					double t;
+
+					// The versions with texture or intensities keep z as a float
+					if (src->texVerts || src->intensities)
+						z = (float)z;
+
+					if (fabs((double)dy) <= fabs((double)dz))
+						t = (z - prev[2]) / dz;
+					else
+						t = (c - prev[1]) / dy;
+
+					if (!canAddVertex(outCount))
+						return 0;
+
+					dst->verts[outCount][0] = (float)(((double)cur[0] - prev[0]) * t + prev[0]);
+					dst->verts[outCount][1] = (float)c;
+					dst->verts[outCount][2] = (float)z;
+					interpolateAttributes(src, prevIdx, curIdx, dst, outCount, t);
+					outCount++;
+					_faceStatus |= status;
+				}
 			}
 
 			if (curInside) {
@@ -983,6 +1159,9 @@ int RenderDroid::ClipModule::clipOrtho(const RdClipPoly *src, int count, RdClipP
 
 			if (prev[axis] != bound && bound != cur[axis] && (prevOutside || curOutside)) {
 				double t = ((double)bound - prev[axis]) / ((double)cur[axis] - prev[axis]);
+
+				if (_rd->_remastered)
+					t = (double)(float)t;
 
 				if (!canAddVertex(outCount))
 					return 0;
@@ -1031,6 +1210,9 @@ int RenderDroid::ClipModule::clipDepth(const RdClipPoly *src, int count, RdClipP
 
 			if (prev[1] != plane && cur[1] != plane && (prevOutside || curOutside)) {
 				double t = ((double)plane - prev[1]) / ((double)cur[1] - prev[1]);
+
+				if (_rd->_remastered)
+					t = (double)(float)t;
 
 				if (!canAddVertex(outCount))
 					return 0;

@@ -138,8 +138,8 @@ void Lua_V1::BlastImage() {
 		int slot = findImage(imageObj);
 
 		if (slot >= 0) {
-			int x = luaFtol(lua_getnumber(xObj));
-			int y = luaFtol(lua_getnumber(yObj));
+			int x = luaFtolSse(lua_getnumber(xObj));
+			int y = luaFtolSse(lua_getnumber(yObj));
 			StdVBuffer *dst = g_grim->_sputRender->drawBuffer();
 
 			if (!dst) {
@@ -178,8 +178,8 @@ void Lua_V1::StartMovie() {
 	if (lua_isstring(nameObj)) {
 		g_grim->getImuse()->soundsFloodMusicBuffer();
 
-		int y = lua_isnumber(yObj) ? luaFtol(lua_getnumber(yObj)) : -1;
-		int x = lua_isnumber(xObj) ? luaFtol(lua_getnumber(xObj)) : -1;
+		int y = lua_isnumber(yObj) ? luaFtolSse(lua_getnumber(yObj)) : -1;
+		int x = lua_isnumber(xObj) ? luaFtolSse(lua_getnumber(xObj)) : -1;
 
 		if (g_grim->playMovie(lua_getstring(nameObj), 0, !lua_isnil(loopObj), x, y) == 1) {
 			pushbool(true);
@@ -259,6 +259,7 @@ void Lua_V1::DrawPolygon() {
 	PrimitiveQueue *queue = g_grim->_sputPrimitive->getCurrent();
 	int layer = 2;
 	int color = 0;
+	uint colorRgb = 0;
 	lua_Object pointsObj = lua_getparam(1);
 	lua_Object tableObj = lua_getparam(2);
 
@@ -271,8 +272,10 @@ void Lua_V1::DrawPolygon() {
 		lua_pushobject(tableObj);
 		lua_pushstring("color");
 		lua_Object colorObj = lua_gettable();
-		if (lua_isuserdata(colorObj) && lua_tag(colorObj) == MKTAG('R','L','O','C'))
+		if (lua_isuserdata(colorObj) && lua_tag(colorObj) == MKTAG('R','L','O','C')) {
 			color = getScreenColor(lua_getuserdata(colorObj));
+			colorRgb = (uint)lua_getuserdata(colorObj);
+		}
 
 		lua_pushobject(tableObj);
 		lua_pushstring("layer");
@@ -307,19 +310,22 @@ void Lua_V1::DrawPolygon() {
 		lua_pushobject(pointsObj);
 		lua_pushnumber((float)index);
 		index++;
-		points[i * 2] = luaFtol(lua_getnumber(lua_gettable()));
+		points[i * 2] = luaFtolSse(lua_getnumber(lua_gettable()));
 
 		lua_pushobject(pointsObj);
 		lua_pushnumber((float)index);
 		index++;
 		lua_Object yObj = lua_gettable();
 		if (!lua_isnil(yObj))
-			points[i * 2 + 1] = luaFtol(lua_getnumber(yObj));
+			points[i * 2 + 1] = luaFtolSse(lua_getnumber(yObj));
 		else
 			points[i * 2 + 1] = 0;
 	}
 
 	int id = queue->addPolygon(numPoints, points, color, layer);
+
+	if (g_grim->isRemastered())
+		queue->changeColorRgb(id, colorRgb);
 
 	delete[] points;
 	points = nullptr;
@@ -331,6 +337,7 @@ void Lua_V1::DrawLine() {
 	PrimitiveQueue *queue = g_grim->_sputPrimitive->getCurrent();
 	int layer = 2;
 	int color = 0;
+	uint colorRgb = 0;
 	lua_Object x1Obj = lua_getparam(1);
 	lua_Object y1Obj = lua_getparam(2);
 	lua_Object x2Obj = lua_getparam(3);
@@ -342,17 +349,19 @@ void Lua_V1::DrawLine() {
 		return;
 	}
 
-	int x1 = luaFtol(lua_getnumber(x1Obj));
-	int y1 = luaFtol(lua_getnumber(y1Obj));
-	int x2 = luaFtol(lua_getnumber(x2Obj));
-	int y2 = luaFtol(lua_getnumber(y2Obj));
+	int x1 = luaFtolSse(lua_getnumber(x1Obj));
+	int y1 = luaFtolSse(lua_getnumber(y1Obj));
+	int x2 = luaFtolSse(lua_getnumber(x2Obj));
+	int y2 = luaFtolSse(lua_getnumber(y2Obj));
 
 	if (lua_istable(tableObj)) {
 		lua_pushobject(tableObj);
 		lua_pushstring("color");
 		lua_Object colorObj = lua_gettable();
-		if (lua_isuserdata(colorObj) && lua_tag(colorObj) == MKTAG('R','L','O','C'))
+		if (lua_isuserdata(colorObj) && lua_tag(colorObj) == MKTAG('R','L','O','C')) {
 			color = getScreenColor(lua_getuserdata(colorObj));
+			colorRgb = (uint)lua_getuserdata(colorObj);
+		}
 
 		lua_pushobject(tableObj);
 		lua_pushstring("layer");
@@ -361,7 +370,12 @@ void Lua_V1::DrawLine() {
 			layer = luaFtol(lua_getnumber(layerObj));
 	}
 
-	lua_pushnumber((float)(uint)queue->addLine(x1, y1, x2, y2, color, layer));
+	int id = queue->addLine(x1, y1, x2, y2, color, layer);
+
+	if (g_grim->isRemastered())
+		queue->changeColorRgb(id, colorRgb);
+
+	lua_pushnumber((float)(uint)id);
 }
 
 void Lua_V1::ChangePrimitive() {
@@ -400,9 +414,9 @@ void Lua_V1::ChangePrimitive() {
 		int x = 0;
 		int y = 0;
 		if (lua_isnumber(xObj))
-			x = luaFtol(lua_getnumber(xObj));
+			x = luaFtolSse(lua_getnumber(xObj));
 		if (lua_isnumber(yObj))
-			y = luaFtol(lua_getnumber(yObj));
+			y = luaFtolSse(lua_getnumber(yObj));
 		queue->move(id, x, y);
 	}
 
@@ -416,9 +430,9 @@ void Lua_V1::ChangePrimitive() {
 		int x = -1;
 		int y = -1;
 		if (lua_isnumber(xObj))
-			x = luaFtol(lua_getnumber(xObj));
+			x = luaFtolSse(lua_getnumber(xObj));
 		if (lua_isnumber(yObj))
-			y = luaFtol(lua_getnumber(yObj));
+			y = luaFtolSse(lua_getnumber(yObj));
 		queue->moveTo(id, x, y);
 	}
 
@@ -432,9 +446,9 @@ void Lua_V1::ChangePrimitive() {
 		int x = -1;
 		int y = -1;
 		if (lua_isnumber(xObj))
-			x = luaFtol(lua_getnumber(xObj));
+			x = luaFtolSse(lua_getnumber(xObj));
 		if (lua_isnumber(yObj))
-			y = luaFtol(lua_getnumber(yObj));
+			y = luaFtolSse(lua_getnumber(yObj));
 		queue->moveEndpoint(id, x, y);
 	}
 
@@ -448,9 +462,9 @@ void Lua_V1::ChangePrimitive() {
 		int w = -1;
 		int h = -1;
 		if (lua_isnumber(width))
-			w = luaFtol(lua_getnumber(width));
+			w = luaFtolSse(lua_getnumber(width));
 		if (lua_isnumber(height))
-			h = luaFtol(lua_getnumber(height));
+			h = luaFtolSse(lua_getnumber(height));
 		queue->changeDimensions(id, w, h);
 	}
 }
@@ -473,10 +487,10 @@ void Lua_V1::DrawRectangle() {
 		return;
 	}
 
-	int x1 = luaFtol(lua_getnumber(x1Obj));
-	int y1 = luaFtol(lua_getnumber(y1Obj));
-	int x2 = luaFtol(lua_getnumber(x2Obj));
-	int y2 = luaFtol(lua_getnumber(y2Obj));
+	int x1 = luaFtolSse(lua_getnumber(x1Obj));
+	int y1 = luaFtolSse(lua_getnumber(y1Obj));
+	int x2 = luaFtolSse(lua_getnumber(x2Obj));
+	int y2 = luaFtolSse(lua_getnumber(y2Obj));
 
 	if (lua_istable(tableObj)) {
 		lua_pushobject(tableObj);
@@ -503,7 +517,7 @@ void Lua_V1::DrawRectangle() {
 			lua_pushobject(tableObj);
 			lua_pushstring("alpha");
 			lua_Object alphaObj = lua_gettable();
-			if (lua_isnumber(alphaObj))
+			if (!lua_isnil(alphaObj))
 				alpha = lua_getnumber(alphaObj);
 		}
 	}
@@ -532,10 +546,10 @@ void Lua_V1::BlastRect() {
 		return;
 	}
 
-	int x1 = luaFtol(lua_getnumber(x1Obj));
-	int y1 = luaFtol(lua_getnumber(y1Obj));
-	int x2 = luaFtol(lua_getnumber(x2Obj));
-	int y2 = luaFtol(lua_getnumber(y2Obj));
+	int x1 = luaFtolSse(lua_getnumber(x1Obj));
+	int y1 = luaFtolSse(lua_getnumber(y1Obj));
+	int x2 = luaFtolSse(lua_getnumber(x2Obj));
+	int y2 = luaFtolSse(lua_getnumber(y2Obj));
 
 	if (lua_istable(tableObj)) {
 		lua_pushobject(tableObj);
@@ -629,10 +643,10 @@ void Lua_V1::DimRegion() {
 	lua_Object widthObj = lua_getparam(3);
 	lua_Object heightObj = lua_getparam(4);
 	lua_Object scaleObj = lua_getparam(5);
-	int x = luaFtol(lua_getnumber(xObj));
-	int y = luaFtol(lua_getnumber(yObj));
-	int width = luaFtol(lua_getnumber(widthObj));
-	int height = luaFtol(lua_getnumber(heightObj));
+	int x = luaFtolSse(lua_getnumber(xObj));
+	int y = luaFtolSse(lua_getnumber(yObj));
+	int width = luaFtolSse(lua_getnumber(widthObj));
+	int height = luaFtolSse(lua_getnumber(heightObj));
 
 	g_grim->_sputRender->dimRegion(x, y, width, height, lua_getnumber(scaleObj));
 }
@@ -644,10 +658,10 @@ void Lua_V1::ScreenShot() {
 	int height = 480;
 
 	if (!lua_isnil(widthObj) && lua_isnumber(widthObj))
-		width = luaFtol(lua_getnumber(widthObj));
+		width = luaFtolSse(lua_getnumber(widthObj));
 
 	if (!lua_isnil(heightObj) && lua_isnumber(heightObj))
-		height = luaFtol(lua_getnumber(heightObj));
+		height = luaFtolSse(lua_getnumber(heightObj));
 
 	StdVBuffer *image = g_grim->_sputRender->screenShot(width, height);
 
@@ -672,7 +686,7 @@ void Lua_V1::Display() {
 }
 
 void Lua_V1::EngineDisplay() {
-	g_grim->_sputRender->setPageFlip(luaFtol(lua_getnumber(lua_getparam(1))));
+	g_grim->_sputRender->setPageFlip(luaFtolSse(lua_getnumber(lua_getparam(1))));
 }
 
 void Lua_V1::ForceRefresh() {
@@ -698,9 +712,9 @@ void Lua_V1::IrisUp() {
 	lua_Object xObj = lua_getparam(1);
 	lua_Object yObj = lua_getparam(2);
 	lua_Object timeObj = lua_getparam(3);
-	int time = luaFtol(lua_getnumber(timeObj));
-	int y = luaFtol(lua_getnumber(yObj));
-	int x = luaFtol(lua_getnumber(xObj));
+	int time = luaFtolSse(lua_getnumber(timeObj));
+	int y = luaFtolSse(lua_getnumber(yObj));
+	int x = luaFtolSse(lua_getnumber(xObj));
 
 	g_grim->_sputRender->irisUp(x, y, time);
 }
@@ -709,9 +723,9 @@ void Lua_V1::IrisDown() {
 	lua_Object xObj = lua_getparam(1);
 	lua_Object yObj = lua_getparam(2);
 	lua_Object timeObj = lua_getparam(3);
-	int time = luaFtol(lua_getnumber(timeObj));
-	int y = luaFtol(lua_getnumber(yObj));
-	int x = luaFtol(lua_getnumber(xObj));
+	int time = luaFtolSse(lua_getnumber(timeObj));
+	int y = luaFtolSse(lua_getnumber(yObj));
+	int x = luaFtolSse(lua_getnumber(xObj));
 
 	g_grim->_sputRender->irisDown(x, y, time);
 }
@@ -725,6 +739,9 @@ void Lua_V1::PreRender() {
 }
 
 void Lua_V1::ResetTextures() {
+	if (g_grim->isRemastered())
+		return;
+
 #if defined(GRIM_STD3D)
 	if (g_grim->_std3D)
 		g_grim->_std3D->purgeTextureCache();

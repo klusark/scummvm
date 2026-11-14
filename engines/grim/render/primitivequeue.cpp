@@ -171,12 +171,8 @@ void PrimitiveQueue::changeLayer(int id, int layer) {
 	for (SputPrimitiveObject *obj = findPrimitive(id, nullptr); obj; obj = findPrimitive(id, obj)) {
 		markDirty(obj);
 
-		if (g_grim->isRemastered()) {
-			if (layer != 1 && layer != 4 && layer != 8)
-				layer = 2;
-		} else if (layer != 2 && layer != 1) {
+		if (layer != 2 && layer != 1)
 			layer = 2;
-		}
 
 		obj->layer = layer;
 	}

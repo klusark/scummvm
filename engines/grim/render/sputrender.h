@@ -135,6 +135,7 @@ public:
 	void markAllPagesDirty(const StdRect *rectPointer, int page);
 	void freeCacheRects();
 	CacheRect *createCacheRect(int x, int y, int width, int height);
+	CacheRect *findCacheRect(int32 handle);
 	void restoreCacheRect();
 	void addAnimationBitmap(void *bitmap, int layer);
 	void removeAnimationBitmap(void *bitmap);
@@ -157,6 +158,8 @@ public:
 	float getGamma() const { return _gammaCorrection; }
 	void setAdvancedLighting(uint32 value) { _advancedLighting = value; }
 	uint32 getAdvancedLighting() const { return _advancedLighting; }
+	void setResolutionScaling(float value) { _resolutionScaling = value; }
+	float getResolutionScaling() const { return _resolutionScaling; }
 	void dim(int force, char shift);
 	void dimRegion(int x, int y, int width, int height, float scale);
 
@@ -257,6 +260,7 @@ private:
 	uint16 _colorLookup[65536];
 	float _gammaCorrection;
 	uint32 _advancedLighting = 1;
+	float _resolutionScaling = 2.0f;
 	StdColorFormat *_colorInfo;
 	int _b3DAcceleration;
 	int _acceleratedZBuffers;

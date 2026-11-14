@@ -141,7 +141,7 @@ int SputResource::findResources() {
 		else
 			addResourcePathInternal(dataDirectory.c_str());
 
-		if (!_extraDataPath.empty() && !_extraDataPath.equalsIgnoreCase(dataDirectory))
+		if (!_extraDataPath.empty())
 			addResourcePathInternal(_extraDataPath.c_str());
 
 		return 1;

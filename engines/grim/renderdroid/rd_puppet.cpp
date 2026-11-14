@@ -113,7 +113,7 @@ int RenderDroid::PuppetModule::fadeInTrack(RdPuppet *puppet, int trackNum, float
 	RdPuppetTrack *track = &puppet->tracks[trackNum];
 
 	track->status = (track->status & 0xFFFFFFF1) | 6;
-	if (time <= 0.0)
+	if (_rd->_remastered ? !(time > 0.0) : (time <= 0.0))
 		track->fadeSpeed = 1.0f;
 	else
 		track->fadeSpeed = (float)(1.0 / time);
@@ -125,7 +125,7 @@ int RenderDroid::PuppetModule::fadeOutTrack(RdPuppet *puppet, int trackNum, floa
 	RdPuppetTrack *track = &puppet->tracks[trackNum];
 
 	track->status = (track->status & 0xFFFFFFF3) | 8;
-	if (time <= 0.0)
+	if (_rd->_remastered ? !(time > 0.0) : (time <= 0.0))
 		track->fadeSpeed = 1.0f;
 	else
 		track->fadeSpeed = (float)(1.0 / time);
@@ -194,7 +194,7 @@ void RenderDroid::PuppetModule::advanceTrack(RdPuppet *puppet, int trackNum, flo
 
 					keyframe = track->keyframe;
 				}
-			} else if (wraps <= 1.0) {
+			} else if (_rd->_remastered ? !(wraps > 1.0) : (wraps <= 1.0)) {
 				for (uint i = 0; i < keyframe->numMarkers; i++) {
 					if (keyframe->markerFrame[i] > (double)track->prevFrame || keyframe->markerFrame[i] <= (double)track->curFrame)
 						track->callback(puppet->thing->userArg, trackNum, keyframe->markerType[i]);
@@ -327,7 +327,7 @@ void RenderDroid::PuppetModule::buildJointMatrices(RdThing *thing, RdMatrix34 ba
 				int next = index + 1;
 
 				if (track->curFrame >= (double)node->paEntries[next].frame) {
-					while (next != last && track->curFrame >= (double)node->paEntries[next + 1].frame)
+					while (next != last && (_rd->_remastered ? !((double)node->paEntries[next + 1].frame > track->curFrame) : (track->curFrame >= (double)node->paEntries[next + 1].frame)))
 						next++;
 
 					if (n < 0x40)
@@ -375,7 +375,7 @@ void RenderDroid::PuppetModule::buildJointMatrices(RdThing *thing, RdMatrix34 ba
 				if (priority < secondPriority)
 					continue;
 
-				if (!(priority >= topPriority || topFade < 1.0f))
+				if (_rd->_remastered ? (priority < topPriority && topFade >= 1.0f) : !(priority >= topPriority || topFade < 1.0f))
 					continue;
 
 				if (hNode->num >= 0x40) {

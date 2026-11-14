@@ -79,6 +79,15 @@ CacheRect *SputRender::createCacheRect(int x, int y, int width, int height) {
 	return rect;
 }
 
+CacheRect *SputRender::findCacheRect(int32 handle) {
+	for (CacheRect *rect = _cacheRectList; rect; rect = rect->next) {
+		if ((int32)(intptr)rect == handle)
+			return rect;
+	}
+
+	return nullptr;
+}
+
 void SputRender::restoreCacheRect() {
 	CacheRect *rect = _cacheRectList;
 
@@ -270,14 +279,16 @@ StdVBuffer *SputRender::screenShot(int width, int height) {
 	StdVBuffer *shot = _stdDisplay->vBufferNew(&format, 0, 0, nullptr);
 
 	// The original could divide by zero here, let's avoid that...
-	float xStep = 0.0f;
-	float yStep = 0.0f;
+	double xStep = 0.0;
+	double yStep = 0.0;
 
 	if (width > 0)
 		xStep = (float)(640.0 / (double)width);
 
 	if (height > 0)
 		yStep = (float)(480.0 / (double)height);
+
+	bool remastered = _grim->isRemastered();
 
 	_stdDisplay->vBufferLock(shot);
 	_stdDisplay->vBufferLock(clean);
@@ -291,10 +302,16 @@ StdVBuffer *SputRender::screenShot(int width, int height) {
 
 		for (int column = 0; column < width; column++) {
 			dstRow[column] = srcRow[(int)x];
-			x = x + (double)xStep;
+			x = x + xStep;
+
+			if (remastered)
+				x = (float)x;
 		}
 
-		y = y + (double)yStep;
+		y = y + yStep;
+
+		if (remastered)
+			y = (float)y;
 	}
 
 	if (_rd->getRemasteredLookRenderer())

@@ -112,7 +112,7 @@ int RenderDroid::SpriteModule::draw(RdThing *thing, RdMatrix34 mat) {
 
 	float halfWidth;
 
-	if (offset[0] >= 0.0)
+	if (_rd->_remastered ? !(offset[0] < 0.0) : (offset[0] >= 0.0))
 		halfWidth = -sprite->halfWidth;
 	else
 		halfWidth = sprite->halfWidth;
@@ -138,6 +138,13 @@ int RenderDroid::SpriteModule::draw(RdThing *thing, RdMatrix34 mat) {
 	float bottom = (float)((double)offset[2] + center[2]);
 	float top = (float)(((double)center[2] + sprite->halfHeight + sprite->halfHeight) + offset[2]);
 	float topSecond = (float)((double)center[2] + (((double)sprite->halfHeight + sprite->halfHeight) + offset[2]));
+
+	if (_rd->_remastered) {
+		float heightPart = (float)((double)sprite->halfHeight * 2.0 + offset[2]);
+
+		top = (float)((double)center[2] + heightPart);
+		topSecond = top;
+	}
 
 	_spriteVerts[0] = (float)((double)center[0] + left);
 	_spriteVerts[1] = y;
@@ -222,7 +229,7 @@ int RenderDroid::SpriteModule::draw(RdThing *thing, RdMatrix34 mat) {
 	int lightingMode = procFace->lightingMode;
 
 	if (lightingMode) {
-		if (procFace->ambientLight < 1.0f) {
+		if (_rd->_remastered ? !(procFace->ambientLight >= 1.0f) : (procFace->ambientLight < 1.0f)) {
 			if (lightingMode == 2) {
 				if (procFace->diffuseLight >= 1.0f && curMap == identityMap)
 					procFace->lightingMode = 0;

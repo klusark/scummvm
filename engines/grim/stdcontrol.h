@@ -126,6 +126,7 @@ public:
 	int open();
 	int close();
 	void flush();
+	void resetDoubleClick();
 	void reset();
 	int toggleMouse();
 	int pressButton(uint button);

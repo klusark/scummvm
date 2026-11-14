@@ -152,6 +152,8 @@ private:
 
 	int _centerValue;
 	int _offscreenTextPos;
+	int _hdCenterValue = 960;
+	int _hdOffscreenTextPos = 1012;
 	int _textPosX;
 	int _textPosY;
 

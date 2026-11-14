@@ -289,6 +289,21 @@ void SputActorModule::applyPendingScale(SputActor *actor, ModelInst *list) {
 			}
 		}
 
+		if (g_grim->isRemastered()) {
+			float inverse = (float)(1.0 / (double)actor->scale);
+			double remasteredDifference = 1.0 - (double)inverse;
+
+			actor->scale = inverse;
+
+			if (remasteredDifference < 0.0)
+				remasteredDifference = -remasteredDifference;
+
+			if (!(remasteredDifference > 9.999999747378752e-06))
+				actor->scale = 1.0f;
+
+			continue;
+		}
+
 		double difference = 1.0 - 1.0 / (double)actor->scale;
 
 		actor->scale = (float)(1.0 / (double)actor->scale);

@@ -86,7 +86,7 @@ bool RemasteredLookRenderer::open(int hostWidth, int hostHeight) {
 
 	_hostWidth = hostWidth;
 	_hostHeight = hostHeight;
-	_resolutionScaling = _registry->getFloat("ResolutionScaling", 2.0f);
+	_resolutionScaling = _render->getResolutionScaling();
 	_widescreen = (int)_registry->getFloat("Widescreen", 0.0f) == 2;
 	_remasteredLookPipeline = new RemasteredLookPipeline(_remasteredLookDevice);
 
@@ -1050,7 +1050,7 @@ void RemasteredLookRenderer::present(const byte *software565, int softwarePitch)
 			_widescreen, _resolutionScaling);
 
 	bool widescreen = (int)_registry->getFloat("Widescreen", 0.0f) == 2;
-	float scaling = _registry->getFloat("ResolutionScaling", 2.0f);
+	float scaling = _render->getResolutionScaling();
 
 	if (widescreen != _widescreen || (float)(uint)scaling != (float)(uint)_resolutionScaling) {
 		_widescreen = widescreen;

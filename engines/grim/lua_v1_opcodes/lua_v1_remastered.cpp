@@ -49,20 +49,7 @@ enum {
 };
 
 void Lua_V1::GetPlatform() {
-	int platform = 1;
-
-	switch (g_grim->getGamePlatform()) {
-	case Common::kPlatformMacintosh:
-		platform = 2;
-		break;
-	case Common::kPlatformLinux:
-		platform = 3;
-		break;
-	default:
-		break;
-	}
-
-	lua_pushnumber((float)platform);
+	lua_pushnumber(1.0f);
 }
 
 void Lua_V1::UnlockAchievement() {
@@ -130,7 +117,7 @@ void Lua_V1::SetActorBWMode() {
 	if (!actor)
 		return;
 
-	if (lua_getnumber(modeObj) <= 0.0f) {
+	if (!(lua_getnumber(modeObj) > 0.0f)) {
 		if (actor->flags & kActorFlagBlackAndWhite) {
 			actor->flags &= ~kActorFlagBlackAndWhite;
 
@@ -189,7 +176,7 @@ void Lua_V1::EnableBackgroundRender() {
 	if (!lua_isnumber(enableObj))
 		return;
 
-	int enable = luaFtol(lua_getnumber(enableObj));
+	int enable = luaFtolSse(lua_getnumber(enableObj));
 
 	g_grim->_sputRender->preRendered(enable, enable);
 }
@@ -204,7 +191,7 @@ void Lua_V1::ImSetCommentaryVol() {
 	if (!lua_isnumber(volObj))
 		return;
 
-	g_grim->getImuse()->imSetGroupVol(kImuseGroupCommentary, luaFtol(lua_getnumber(volObj)));
+	g_grim->getImuse()->imSetGroupVol(kImuseGroupCommentary, luaFtolSse(lua_getnumber(volObj)));
 }
 
 void Lua_V1::SetResolutionScaling() {
@@ -213,7 +200,7 @@ void Lua_V1::SetResolutionScaling() {
 	if (!lua_isnumber(valueObj) || g_grim->getLibMode() == GrimEngine::kLibModeUser)
 		return;
 
-	_resolutionScaling = lua_getnumber(valueObj);
+	g_grim->_sputRender->setResolutionScaling(lua_getnumber(valueObj));
 }
 
 void Lua_V1::SetAdvancedLighting() {
@@ -222,13 +209,13 @@ void Lua_V1::SetAdvancedLighting() {
 	if (!lua_isnumber(valueObj) || g_grim->getLibMode() == GrimEngine::kLibModeUser)
 		return;
 
-	g_grim->_sputRender->setAdvancedLighting((uint32)luaFtol(lua_getnumber(valueObj)));
+	g_grim->_sputRender->setAdvancedLighting((uint32)luaFtolSse(lua_getnumber(valueObj)));
 }
 
 void Lua_V1::SetGameRenderMode() {
 	lua_Object modeObj = lua_getparam(1);
 	lua_Object keepObj = lua_getparam(2);
-	int mode = luaFtol(lua_getnumber(modeObj));
+	int mode = luaFtolSse(lua_getnumber(modeObj));
 	int oldMode = g_grim->getLibMode();
 
 	if (mode == oldMode)
@@ -242,7 +229,7 @@ void Lua_V1::SetGameRenderMode() {
 	} else if (!isPaused && wasPaused) {
 		g_grim->_sputSmush->pause(0);
 
-		if (lua_isnil(keepObj) || luaFtol(lua_getnumber(keepObj)) == 0)
+		if (lua_isnil(keepObj) || luaFtolSse(lua_getnumber(keepObj)) == 0)
 			g_grim->_sputRender->forceRefresh();
 	}
 
@@ -262,7 +249,7 @@ void Lua_V1::SetLanguage() {
 	lua_Object languageObj = lua_getparam(1);
 
 	if (lua_isnumber(languageObj))
-		g_grim->setLanguage(luaFtol(lua_getnumber(languageObj)));
+		g_grim->setLanguage(luaFtolSse(lua_getnumber(languageObj)));
 }
 
 void Lua_V1::GetLanguage() {

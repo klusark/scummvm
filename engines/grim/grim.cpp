@@ -24,6 +24,7 @@
 #include "common/file.h"
 #include "common/fs.h"
 #include "common/language.h"
+#include "common/memstream.h"
 #include "common/config-manager.h"
 #include "common/compression/deflate.h"
 #include "common/translation.h"
@@ -2123,6 +2124,18 @@ StdVBuffer *GrimEngine::getSaveGameImage(const char *fileName) {
 }
 
 void GrimEngine::imuseSave() {
+	if (isRemastered()) {
+		Common::MemoryWriteStreamDynamic memory(DisposeAfterUse::YES);
+
+		soundsSave(&memory);
+		_imuseSaveBuffer.resize(memory.size());
+
+		if (memory.size())
+			memcpy(&_imuseSaveBuffer[0], memory.getData(), memory.size());
+
+		return;
+	}
+
 	Common::OutSaveFile *file = g_system->getSavefileManager()->openForSaving("grim.tmp");
 
 	if (!file)
@@ -2134,6 +2147,18 @@ void GrimEngine::imuseSave() {
 }
 
 void GrimEngine::imuseRestore() {
+	if (isRemastered()) {
+		_imuse->imStopAllSounds();
+
+		if (_imuseSaveBuffer.empty())
+			return;
+
+		Common::MemoryReadStream memory(&_imuseSaveBuffer[0], _imuseSaveBuffer.size());
+
+		soundsRestore(&memory);
+		return;
+	}
+
 	Common::InSaveFile *file = g_system->getSavefileManager()->openForLoading("grim.tmp");
 
 	if (!file)

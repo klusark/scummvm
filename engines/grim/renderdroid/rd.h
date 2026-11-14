@@ -517,6 +517,7 @@ public:
 	void identity34(RdMatrix34 out);
 	void invertOrtho34(RdMatrix34 out, RdMatrix34 in);
 	void lookAt(RdMatrix34 out, RdVector3 pos, RdVector3 target, float roll);
+	void buildFromLook34Remastered(RdMatrix34 out, RdVector3 look);
 	void multiply34(RdMatrix34 out, RdMatrix34 a, RdMatrix34 b);
 	void postMultiply34(RdMatrix34 dst, RdMatrix34 src);
 	void postTranslate34(RdMatrix34 mat, RdVector3 vec);
@@ -928,12 +929,12 @@ public:
 
 	private:
 		friend class RenderDroid;
-		float _vertices[98304];
-		float _texVertices[65536];
-		float _intensities[32768];
-		float _greenIntensities[32768];
-		float _blueIntensities[32768];
-		RdProcFace _procFaces[1024];
+		float _vertices[786432];
+		float _texVertices[524288];
+		float _intensities[262144];
+		float _greenIntensities[262144];
+		float _blueIntensities[262144];
+		RdProcFace _procFaces[8192];
 		size_t _numProcFaces;
 		uint _numUsedVertices;
 		uint _numUsedTexVertices;
@@ -1712,6 +1713,7 @@ public:
 		bool setZScaleShift();
 		float truncToFloat(double value);
 		int toFixed(double value);
+		static int winTruncate(double value);
 		int wrapVertex(int index, int last);
 		void selectGradientVertices(int *vertA, int *vertB, int *refVertPointer);
 		void selectMipLevel(float z);
@@ -1794,6 +1796,7 @@ public:
 		int _caseV;
 		int _caseUStep;
 		int _caseVStep;
+		bool _warnedIdlePointer;
 		float _oneOverZ[32];
 		float _uOverZ[32];
 		float _vOverZ[32];

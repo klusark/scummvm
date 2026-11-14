@@ -632,6 +632,27 @@ int SputRender::buildShadowBitmap(float *out, float *pointA, float *pointB, floa
 		return 1;
 	}
 
+	if (_grim->isRemastered()) {
+		float remasteredDeltaX = (float)((double)pointB[0] - (double)pointA[0]);
+		float remasteredDeltaY = (float)((double)pointB[1] - (double)pointA[1]);
+		float remasteredDeltaZ = (float)((double)pointB[2] - (double)pointA[2]);
+		float remasteredDistA = (float)((((double)pointA[0] * a + (double)pointA[1] * b) + (double)pointA[2] * c) + d);
+		float remasteredDistB = (float)((((double)pointB[1] * b + (double)pointB[0] * a) + (double)pointB[2] * c) + d);
+		double remasteredDifference = (double)remasteredDistA - (double)remasteredDistB;
+		double remasteredAbs = remasteredDifference < 0.0 ? -remasteredDifference : remasteredDifference;
+
+		if (remasteredAbs < 0.1)
+			return 0;
+
+		float remasteredT = (float)((double)remasteredDistA / remasteredDifference);
+
+		out[0] = (float)((double)remasteredT * remasteredDeltaX + pointA[0]);
+		out[1] = (float)((double)remasteredT * remasteredDeltaY + pointA[1]);
+		out[2] = (float)((double)remasteredT * remasteredDeltaZ + pointA[2]);
+
+		return 1;
+	}
+
 	double deltaX = (double)pointB[0] - (double)pointA[0];
 	float deltaY = (float)((double)pointB[1] - (double)pointA[1]);
 	float deltaZ = (float)((double)pointB[2] - (double)pointA[2]);

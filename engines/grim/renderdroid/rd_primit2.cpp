@@ -119,8 +119,12 @@ void RenderDroid::Primit2Module::drawCircle(RdCanvas *canvas, int cx, int cy, fl
 				y = nextY;
 				angle = (float)nextAngle;
 
-				if (nextAngle > 360.0)
+				if (_rd->_remastered) {
+					if (!(angle <= 360.0))
+						break;
+				} else if (nextAngle > 360.0) {
 					break;
+				}
 			}
 		}
 	}

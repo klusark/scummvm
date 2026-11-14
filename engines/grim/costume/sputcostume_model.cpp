@@ -24,6 +24,7 @@
 #include "common/textconsole.h"
 #include "common/util.h"
 
+#include "engines/grim/grim.h"
 #include "engines/grim/costume/sputcostume.h"
 #include "engines/grim/sputresource.h"
 
@@ -509,7 +510,12 @@ int SpriteHandler::request(int costume, int fourcc, void *parentId, int parentFo
 	char *token = strtok(nullptr, ",");
 
 	if (token) {
-		width = (float)((double)atoi(token) * (double)0.01f);
+		bool remastered = g_grim->isRemastered();
+
+		if (remastered)
+			width = (float)((double)atoi(token) / 100.0);
+		else
+			width = (float)((double)atoi(token) * (double)0.01f);
 
 		const char *tokens[4];
 
@@ -520,17 +526,17 @@ int SpriteHandler::request(int costume, int fourcc, void *parentId, int parentFo
 				warning("SpriteHandler::request(): missing sprite parameter in %s", args);
 		}
 
-		if (tokens[0])
-			height = (float)((double)atoi(tokens[0]) * (double)0.01f);
+		float *values[4] = { &height, &offsetX, &offsetY, &offsetZ };
 
-		if (tokens[1])
-			offsetX = (float)((double)atoi(tokens[1]) * (double)0.01f);
+		for (int i = 0; i < 4; i++) {
+			if (!tokens[i])
+				continue;
 
-		if (tokens[2])
-			offsetY = (float)((double)atoi(tokens[2]) * (double)0.01f);
-
-		if (tokens[3])
-			offsetZ = (float)((double)atoi(tokens[3]) * (double)0.01f);
+			if (remastered)
+				*values[i] = (float)((double)atoi(tokens[i]) / 100.0);
+			else
+				*values[i] = (float)((double)atoi(tokens[i]) * (double)0.01f);
+		}
 	}
 
 	SpriteCompRes *res = new SpriteCompRes();

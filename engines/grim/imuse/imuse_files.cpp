@@ -1439,6 +1439,18 @@ int IMuse::iMUSEGetSoundCacheSize() {
 void IMuse::iMUSESetVoiceEffect(const char *effectName) {
 	Common::strlcpy(_curEffectName, effectName, sizeof(_curEffectName));
 
+	if (_remastered) {
+		// Only ever switched off: after "OFF" a later effect name changes nothing
+		if (!_hmiFxInitialized || !scumm_stricmp(effectName, "OFF")) {
+			_voiceEffectDisabled = true;
+			_curEffectId = 0;
+		} else if (!_voiceEffectDisabled) {
+			_curEffectId = registerHMIEffect(effectName);
+		}
+
+		return;
+	}
+
 	if (!_hmiFxInitialized || !scumm_stricmp(effectName, "OFF"))
 		_curEffectId = 0;
 	else

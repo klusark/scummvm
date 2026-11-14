@@ -256,6 +256,33 @@ int RenderDroid::ColormapModule::buildRGB16(byte *dst, byte *palette, byte r, by
 	color = palette + 24;
 
 	for (uint col = 8; col < 256; col++) {
+		if (_rd->_remastered) {
+			float floatR = (float)color[0];
+			float floatG = (float)color[1];
+			float floatB = (float)color[2];
+			color += 3;
+
+			float floatStepR = (float)((targetR - floatR) * 0.015625);
+			float floatStepG = (float)((targetG - floatG) * 0.015625);
+			float floatStepB = (float)((targetB - floatB) * 0.015625);
+
+			for (uint row = 64; row > 0; row--) {
+				floatR = (float)((double)floatR + floatStepR);
+				floatG = (float)((double)floatG + floatStepG);
+				floatB = (float)((double)floatB + floatStepB);
+
+				int red = (int)(floatR <= 0.0f ? (double)floatR - 0.5 : (double)floatR + 0.5);
+				int green = (int)(floatG <= 0.0f ? (double)floatG - 0.5 : (double)floatG + 0.5);
+				int blue = (int)(floatB <= 0.0f ? (double)floatB - 0.5 : (double)floatB + 0.5);
+
+				out[(row - 1) * 256 + col] = (red >> colorFormat->redLoss << colorFormat->redShift) |
+					(green >> colorFormat->greenLoss << colorFormat->greenShift) |
+					(blue >> colorFormat->blueLoss << colorFormat->blueShift);
+			}
+
+			continue;
+		}
+
 		double curR = color[0];
 		double curG = color[1];
 		double curB = color[2];

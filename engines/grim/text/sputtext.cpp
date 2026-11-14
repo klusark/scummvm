@@ -62,8 +62,8 @@ SputText::SputText(Res *res, RenderDroid *rd, NormalText *normalText, Text *text
 		_luaTextObjFadeRef(0), _luaTextObjHighlightRef(0), _luaTextObjCacheRef(0), _luaTextObjMirrorModeRef(0) {
 	_printLineClip.x = 0;
 	_printLineClip.y = 0;
-	_printLineClip.width = 640;
-	_printLineClip.height = 480;
+	_printLineClip.width = g_grim->isRemastered() ? 1920 : 640;
+	_printLineClip.height = g_grim->isRemastered() ? 1080 : 480;
 
 	_printLineParams.surface = _blastText->getSurface();
 	_printLineParams.clip = &_printLineClip;
@@ -731,7 +731,7 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 		obj = lua_gettable();
 
 		if (obj && lua_isnumber(obj))
-			params->coords = luaFtol(lua_getnumber(obj));
+			params->coords = luaFtolSse(lua_getnumber(obj));
 	}
 
 	lua_pushobject(tableObj);
@@ -739,7 +739,7 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 	obj = lua_gettable();
 
 	if (obj && lua_isnumber(obj)) {
-		int x = luaFtol(lua_getnumber(obj));
+		int x = luaFtolSse(lua_getnumber(obj));
 
 		params->x = x;
 
@@ -752,7 +752,7 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 	obj = lua_gettable();
 
 	if (obj && lua_isnumber(obj)) {
-		int y = luaFtol(lua_getnumber(obj));
+		int y = luaFtolSse(lua_getnumber(obj));
 
 		if (_grim->isRemastered()) {
 			params->y = y;
@@ -789,7 +789,7 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 	obj = lua_gettable();
 
 	if (obj && lua_isnumber(obj) && clip)
-		clip->width = luaFtol(lua_getnumber(obj));
+		clip->width = luaFtolSse(lua_getnumber(obj));
 
 	if (_grim->isRemastered()) {
 		lua_pushobject(tableObj);
@@ -797,7 +797,7 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 		obj = lua_gettable();
 
 		if (obj && lua_isnumber(obj) && clip)
-			clip->x = luaFtol(lua_getnumber(obj));
+			clip->x = luaFtolSse(lua_getnumber(obj));
 	}
 
 	lua_pushobject(tableObj);
@@ -805,7 +805,7 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 	obj = lua_gettable();
 
 	if (obj && lua_isnumber(obj) && clip)
-		clip->height = luaFtol(lua_getnumber(obj));
+		clip->height = luaFtolSse(lua_getnumber(obj));
 
 	lua_pushobject(tableObj);
 	lua_pushobject(lua_getref(_luaTextObjFGColorRef));
@@ -865,7 +865,7 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 	int duration = -1;
 
 	if (obj && lua_isnumber(obj))
-		duration = luaFtol(lua_getnumber(obj));
+		duration = luaFtolSse(lua_getnumber(obj));
 
 	if (_grim->isRemastered()) {
 		lua_pushobject(tableObj);
@@ -873,7 +873,7 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 		obj = lua_gettable();
 
 		if (obj && lua_isnumber(obj)) {
-			int layer = luaFtol(lua_getnumber(obj));
+			int layer = luaFtolSse(lua_getnumber(obj));
 
 			if (layer == 1)
 				params->flags |= 0x10;
@@ -890,7 +890,7 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 		obj = lua_gettable();
 
 		if (obj && lua_isnumber(obj)) {
-			int fade = luaFtol(lua_getnumber(obj));
+			int fade = luaFtolSse(lua_getnumber(obj));
 
 			params->flags &= ~0x1C00;
 
@@ -909,7 +909,7 @@ int SputText::getTextObjectParams(TextParams *params, lua_Object tableObj, SputT
 		obj = lua_gettable();
 
 		if (obj && lua_isnumber(obj))
-			params->highlight = luaFtol(lua_getnumber(obj));
+			params->highlight = luaFtolSse(lua_getnumber(obj));
 	}
 
 	return duration;
@@ -923,14 +923,14 @@ void SputText::parseSayLineTable(lua_Object tableObj, int *background, int *volu
 	obj = lua_gettable();
 
 	if (lua_isnumber(obj) && *x)
-		*x = luaFtol(lua_getnumber(obj));
+		*x = luaFtolSse(lua_getnumber(obj));
 
 	lua_pushobject(tableObj);
 	lua_pushobject(lua_getref(_luaTextObjYRef));
 	obj = lua_gettable();
 
 	if (lua_isnumber(obj) && *y)
-		*y = luaFtol(lua_getnumber(obj));
+		*y = luaFtolSse(lua_getnumber(obj));
 
 	lua_pushobject(tableObj);
 	lua_pushobject(lua_getref(_luaTextObjBackgroundRef));
@@ -944,14 +944,14 @@ void SputText::parseSayLineTable(lua_Object tableObj, int *background, int *volu
 	obj = lua_gettable();
 
 	if (lua_isnumber(obj) && *volume)
-		*volume = luaFtol(lua_getnumber(obj));
+		*volume = luaFtolSse(lua_getnumber(obj));
 
 	lua_pushobject(tableObj);
 	lua_pushobject(lua_getref(_luaTextObjBufferRef));
 	obj = lua_gettable();
 
 	if (lua_isnumber(obj) && *pan)
-		*pan = luaFtol(lua_getnumber(obj));
+		*pan = luaFtolSse(lua_getnumber(obj));
 }
 
 int SputText::save(Common::WriteStream *stream) {
@@ -1123,7 +1123,7 @@ int SputText::getCoordsFromTable(lua_Object tableObj) {
 	lua_Object obj = lua_gettable();
 
 	if (obj && lua_isnumber(obj))
-		return luaFtol(lua_getnumber(obj));
+		return luaFtolSse(lua_getnumber(obj));
 
 	return 0;
 }

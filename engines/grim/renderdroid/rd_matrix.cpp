@@ -329,9 +329,9 @@ void RenderDroid::lookAt(RdMatrix34 out, RdVector3 pos, RdVector3 target, float 
 	if (facing < 0.0)
 		facing = -facing;
 
-	if (facing <= 0.999)
+	if (_remastered ? !(facing > 0.999) : (facing <= 0.999))
 		transformVector34(up, worldUp, rollMatrix);
-	else if (out[1][2] <= 0.0)
+	else if (_remastered ? !(out[1][2] > 0.0) : (out[1][2] <= 0.0))
 		transformVector34(up, lookingDownUp, rollMatrix);
 	else
 		transformVector34(up, lookingUpUp, rollMatrix);
@@ -789,6 +789,42 @@ void RenderDroid::extractAngles34Remastered(RdMatrix34 mat, RdVector3 pyr) {
 
 	if (negSideZ < 0.0f)
 		pyr[2] = -pyr[2];
+}
+
+void RenderDroid::buildFromLook34Remastered(RdMatrix34 out, RdVector3 look) {
+	out[1][0] = look[0];
+	out[1][1] = look[1];
+	out[1][2] = look[2];
+
+	out[0][0] = (float)((double)out[1][1] * 1.0 - (double)out[1][2] * 0.0);
+	out[0][1] = (float)((double)out[1][2] * 0.0 - 1.0 * (double)out[1][0]);
+	out[0][2] = (float)(0.0 * (double)out[1][0] - (double)out[1][1] * 0.0);
+
+	if (normalize3AccRemastered(out[0]) == 0.0f) {
+		float productA = (float)((double)out[1][2] * 0.0);
+		float productB = (float)((double)out[1][1] * 0.0);
+
+		out[2][0] = (float)((double)productA - productB);
+
+		float productC = (float)(0.0 * (double)out[1][0]);
+		float productD = (float)((double)out[1][2] * 1.0);
+
+		out[2][1] = (float)((double)productC - productD);
+
+		float productE = (float)((double)out[1][1] * 1.0);
+		float productF = (float)(0.0 * (double)out[1][0]);
+
+		out[2][2] = (float)((double)productE - productF);
+		normalize3AccRemastered(out[2]);
+
+		out[0][0] = (float)((double)out[1][1] * out[2][2] - (double)out[1][2] * out[2][1]);
+		out[0][1] = (float)((double)out[1][2] * out[2][0] - (double)out[2][2] * out[1][0]);
+		out[0][2] = (float)((double)out[2][1] * out[1][0] - (double)out[1][1] * out[2][0]);
+	} else {
+		out[2][0] = (float)((double)out[1][2] * out[0][1] - (double)out[1][1] * out[0][2]);
+		out[2][1] = (float)((double)out[1][0] * out[0][2] - (double)out[1][2] * out[0][0]);
+		out[2][2] = (float)((double)out[1][1] * out[0][0] - (double)out[0][1] * out[1][0]);
+	}
 }
 
 } // End of namespace Grim

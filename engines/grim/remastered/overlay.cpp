@@ -494,7 +494,7 @@ int OverlayManager::restore(Common::ReadStream *stream) {
 }
 
 // The handle is the next number that no slot has, the slot after the last one included
-int OverlayManager::create(const Common::String &name, int x, int y, const OverlayProps &props) {
+int OverlayManager::create(const Common::String &name, int x, int y, const OverlayProps &props, bool noImage) {
 	if (_numOverlays >= kMaxOverlays) {
 		warning("OverlayManager::create(): too many overlays");
 		return kNoHandle;
@@ -502,7 +502,7 @@ int OverlayManager::create(const Common::String &name, int x, int y, const Overl
 
 	CachedImage *image = nullptr;
 
-	if (!name.empty())
+	if (!noImage)
 		image = acquireImage(name);
 
 	int slot = _numOverlays++;
@@ -582,8 +582,13 @@ void OverlayManager::setLayer(int handle, int layer) {
 void OverlayManager::setHidden(int handle, int hidden) {
 	int index = findOverlay(handle);
 
-	if (index >= 0)
-		_overlays[index].hidden = hidden;
+	if (index < 0)
+		return;
+
+	if (_overlays[index].image)
+		ensureLoaded(_overlays[index].image);
+
+	_overlays[index].hidden = hidden;
 }
 
 void OverlayManager::removeOverlay(int index) {

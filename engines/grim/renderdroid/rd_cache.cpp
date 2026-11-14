@@ -81,19 +81,21 @@ void RenderDroid::CacheModule::clearFrameCounters() {
 
 RdProcFace *RenderDroid::CacheModule::getProcEntry() {
 	size_t numProcFaces = _numProcFaces;
+	size_t maxProcFaces = _rd->_remastered ? 0x2000 : 0x400;
+	uint maxEntries = _rd->_remastered ? 0x40000 : 0x8000;
 
-	if (numProcFaces >= 0x400) {
+	if (numProcFaces >= maxProcFaces) {
 		flush();
 		numProcFaces = _numProcFaces;
 	}
 
-	if (0x8000 - _numUsedVertices < 0x20)
+	if (maxEntries - _numUsedVertices < 0x20)
 		return nullptr;
 
-	if (0x8000 - _numUsedTexVertices < 0x20)
+	if (maxEntries - _numUsedTexVertices < 0x20)
 		return nullptr;
 
-	if (0x8000 - _numUsedIntensities < 0x20)
+	if (maxEntries - _numUsedIntensities < 0x20)
 		return nullptr;
 
 	RdProcFace *procFace = &_procFaces[numProcFaces];
@@ -164,7 +166,7 @@ int RenderDroid::CacheModule::flush() {
 }
 
 int RenderDroid::CacheModule::addProcFace(uint flags, uint numVertices, char bufferFlags) {
-	if (_numProcFaces >= 0x400)
+	if (_numProcFaces >= (_rd->_remastered ? 0x2000 : 0x400))
 		return 0;
 
 	RdProcFace *procFace = &_procFaces[_numProcFaces];
@@ -290,6 +292,23 @@ RdMatCel *RenderDroid::CacheModule::selectCel(const RdProcFace *procFace) {
 }
 
 float RenderDroid::CacheModule::calcFaceLight(const RdProcFace *procFace, int lightingMode, float ambientLight) {
+	if (_rd->_remastered) {
+		double sum = procFace->extraLight;
+
+		if (lightingMode == 2)
+			sum = (double)procFace->extraLight + procFace->diffuseLight;
+
+		double remasteredClamped = 0.0;
+
+		if (sum >= 0.0)
+			remasteredClamped = sum > 1.0 ? 1.0 : sum;
+
+		if (!(remasteredClamped > ambientLight))
+			remasteredClamped = ambientLight;
+
+		return (float)(remasteredClamped * 63.0);
+	}
+
 	float light = procFace->extraLight;
 
 	if (lightingMode == 2)
@@ -309,6 +328,23 @@ float RenderDroid::CacheModule::calcFaceLight(const RdProcFace *procFace, int li
 }
 
 void RenderDroid::CacheModule::calcVertexLights(RdProcFace *procFace, float ambientLight) {
+	if (_rd->_remastered) {
+		for (uint i = 0; i < procFace->numVertices; i++) {
+			double sum = (double)procFace->extraLight + procFace->intensities[i];
+			double remasteredClamped = 0.0;
+
+			if (sum >= 0.0)
+				remasteredClamped = sum > 1.0 ? 1.0 : sum;
+
+			if (!(remasteredClamped > ambientLight))
+				remasteredClamped = ambientLight;
+
+			procFace->intensities[i] = (float)(remasteredClamped * 63.0);
+		}
+
+		return;
+	}
+
 	for (uint i = 0; i < procFace->numVertices; i++) {
 		float light = (float)((double)procFace->extraLight + procFace->intensities[i]);
 		double clamped = light;

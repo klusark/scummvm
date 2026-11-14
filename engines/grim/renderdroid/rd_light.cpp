@@ -55,6 +55,79 @@ void RenderDroid::LightModule::setAngles(RdLight *light, float angleX, float ang
 float RenderDroid::LightModule::calcVertexIntensities(RdLight **lights, RdVector3 *lightPos, RdVector3 *lightDir, uint numLights, RdVector3 *normals, RdVector3 *vertices, float *staticIntensities, float *dynamicIntensities, uint numVertices, float attenuation) {
 	float total = 0.0f;
 
+	if (_rd->_remastered) {
+		for (uint i = 0; i < numVertices; i++) {
+			dynamicIntensities[i] = staticIntensities[i];
+
+			for (uint j = 0; j < numLights; j++) {
+				RdLight *light = lights[j];
+				RdVector3 vec;
+				float distanceSquared = 0.0f;
+
+				if (light->type >= 2) {
+					vec[0] = (float)((double)lightPos[j][0] - vertices[i][0]);
+					vec[1] = (float)((double)lightPos[j][1] - vertices[i][1]);
+					vec[2] = (float)((double)lightPos[j][2] - vertices[i][2]);
+					distanceSquared = (float)(((double)vec[1] * vec[1] + (double)vec[0] * vec[0]) + (double)vec[2] * vec[2]);
+				}
+
+				if ((double)distanceSquared < (double)light->falloffMin * light->falloffMin) {
+					switch (light->type) {
+					case 0:
+					case 1: {
+						float dot = (float)(((double)normals[i][0] * lightDir[j][0] + (double)normals[i][1] * lightDir[j][1]) + (double)normals[i][2] * lightDir[j][2]);
+
+						if (dot > 0.0f)
+							dynamicIntensities[i] = (float)((double)dot * light->intensity + dynamicIntensities[i]);
+
+						break;
+					}
+					case 2: {
+						float distance = _rd->normalize3Acc(vec);
+						float dot = (float)(((double)normals[i][1] * vec[1] + (double)normals[i][0] * vec[0]) + (double)normals[i][2] * vec[2]);
+
+						if (dot > 0.0f)
+							dynamicIntensities[i] = (float)((((double)light->intensity - (double)distance * attenuation) * dot) + dynamicIntensities[i]);
+
+						break;
+					}
+					case 3: {
+						float distance = _rd->normalize3Acc(vec);
+						float cosine = (float)(((double)lightDir[j][0] * vec[0] + (double)lightDir[j][1] * vec[1]) + (double)lightDir[j][2] * vec[2]);
+
+						if (light->cosAngleY < cosine) {
+							float intensity = light->intensity;
+
+							if (light->cosAngleX > cosine)
+								intensity = (float)((1.0 - ((double)light->cosAngleX - cosine) * light->lux) * intensity);
+
+							float dot = (float)(((double)normals[i][0] * lightDir[j][0] + (double)normals[i][1] * lightDir[j][1]) + (double)normals[i][2] * lightDir[j][2]);
+
+							dynamicIntensities[i] = (float)(((double)dot * ((double)intensity - (double)distance * attenuation)) + dynamicIntensities[i]);
+						}
+
+						break;
+					}
+					default:
+						break;
+					}
+				}
+
+				if (dynamicIntensities[i] > 1.0) {
+					dynamicIntensities[i] = 1.0f;
+					break;
+				}
+
+				if (dynamicIntensities[i] == 1.0f)
+					break;
+			}
+
+			total = (float)((double)total + dynamicIntensities[i]);
+		}
+
+		return (float)((double)total / (double)numVertices);
+	}
+
 	for (uint i = 0; i < numVertices; i++) {
 		dynamicIntensities[i] = staticIntensities[i];
 
@@ -139,6 +212,36 @@ float RenderDroid::LightModule::calcVertexIntensities(RdLight **lights, RdVector
 
 float RenderDroid::LightModule::calcFaceIntensity(RdLight **lights, RdVector3 *lightPos, RdVector3 *lightDir, uint numLights, RdFace3 *face, RdVector3 normal, RdVector3 *vertices, float attenuation) {
 	float total = 0.0f;
+
+	if (_rd->_remastered) {
+		for (uint i = 0; i < numLights; i++) {
+			RdLight *light = lights[i];
+
+			if (light->active) {
+				RdVector3 vec;
+				int vertex = face->vertices[0];
+
+				vec[0] = (float)((double)lightPos[i][0] - vertices[vertex][0]);
+				vec[1] = (float)((double)lightPos[i][1] - vertices[vertex][1]);
+				vec[2] = (float)((double)lightPos[i][2] - vertices[vertex][2]);
+
+				float distanceSquared = (float)(((double)vec[1] * vec[1] + (double)vec[0] * vec[0]) + (double)vec[2] * vec[2]);
+
+				if ((double)distanceSquared < (double)light->falloffMin * light->falloffMin) {
+					float distance = _rd->normalize3Acc(vec);
+					float dot = (float)(((double)normal[1] * vec[1] + (double)normal[0] * vec[0]) + (double)normal[2] * vec[2]);
+
+					if (dot > 0.0f)
+						total = (float)((((double)light->intensity - (double)distance * attenuation) * dot) + total);
+				}
+			}
+
+			if (total >= 1.0)
+				break;
+		}
+
+		return total;
+	}
 
 	for (uint i = 0; i < numLights; i++) {
 		RdLight *light = lights[i];

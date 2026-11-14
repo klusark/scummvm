@@ -220,7 +220,7 @@ void SputRender::dimRegion(int x, int y, int width, int height, float scale) {
 		return;
 	}
 
-	if (x < 0 || y < 0 || width < 0 || height < 0 || x + width > _backBuffer->tex.width || y + height > _backBuffer->tex.height) {
+	if (width > 0 && height > 0 && (x < 0 || y < 0 || x + width > _backBuffer->tex.width || y + height > _backBuffer->tex.height)) {
 		warning("SputRender::dimRegion(): region outside of the back buffer");
 		return;
 	}

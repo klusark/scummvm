@@ -156,8 +156,21 @@ int StdControl::close() {
 void StdControl::flush() {
 	_curReadTime = g_system->getMillis();
 
+	if (_remastered)
+		return;
+
 	flushKeyboard();
 	flushMouse();
+}
+
+void StdControl::resetDoubleClick() {
+	for (int i = 0; i < kNumKeys; i++) {
+		StdControlKey *key = &_keyInfo[i];
+
+		key->lastPressTime = 0;
+		key->doubleClick = 0;
+		key->longFlag = 1;
+	}
 }
 
 void StdControl::reset() {

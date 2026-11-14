@@ -106,6 +106,7 @@ private:
 	Common::StringArray _reportedStubs;
 	Common::Array<SaveStore::SlotInfo> _foundSaves;
 	int _findSaveGamesStatus = 0;
+	float _mouseSpeedScale = 1.0f;
 };
 
 } // end of namespace Grim

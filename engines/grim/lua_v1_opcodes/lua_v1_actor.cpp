@@ -63,7 +63,7 @@ bool Lua_V1::findCostumeInStack(lua_Object obj, CostumeNode *stack, CostumeNode 
 		return true;
 
 	if (lua_isnumber(obj)) {
-		int depth = luaFtol(lua_getnumber(obj));
+		int depth = luaFtolSse(lua_getnumber(obj));
 
 		if (*found) {
 			while (depth > 0) {
@@ -201,7 +201,7 @@ void Lua_V1::SetActorRestChore() {
 	if (lua_isnil(choreObj))
 		chore = -1;
 	else
-		chore = luaFtol(lua_getnumber(choreObj));
+		chore = luaFtolSse(lua_getnumber(choreObj));
 
 	g_grim->_sputActor->setRestChore(actor, chore, node);
 }
@@ -230,7 +230,7 @@ void Lua_V1::SetActorWalkChore() {
 		return;
 
 	if (lua_isnumber(choreObj))
-		chore = luaFtol(lua_getnumber(choreObj));
+		chore = luaFtolSse(lua_getnumber(choreObj));
 	else
 		chore = -1;
 
@@ -258,8 +258,8 @@ void Lua_V1::SetActorTurnChores() {
 	else if (!findCostumeInStack(costumeObj, actor->costumeStack, &node))
 		return;
 
-	int rightChore = luaFtol(lua_getnumber(rightChoreObj));
-	int leftChore = luaFtol(lua_getnumber(leftChoreObj));
+	int rightChore = luaFtolSse(lua_getnumber(rightChoreObj));
+	int leftChore = luaFtolSse(lua_getnumber(leftChoreObj));
 
 	g_grim->_sputActor->setTurnChores(actor, leftChore, rightChore, node);
 }
@@ -275,7 +275,7 @@ void Lua_V1::SetActorTalkChore() {
 	if (!isSputActor(actorObj) || !lua_isnumber(indexObj) || (!lua_isnumber(choreObj) && !lua_isnil(choreObj)))
 		return;
 
-	int index = luaFtol(lua_getnumber(indexObj));
+	int index = luaFtolSse(lua_getnumber(indexObj));
 
 	if (index < 1 || index > 16)
 		return;
@@ -295,7 +295,7 @@ void Lua_V1::SetActorTalkChore() {
 		return;
 
 	if (lua_isnumber(choreObj))
-		chore = luaFtol(lua_getnumber(choreObj));
+		chore = luaFtolSse(lua_getnumber(choreObj));
 	else
 		chore = -1;
 
@@ -311,7 +311,7 @@ void Lua_V1::SetActorMumblechore() {
 	if (!isSputActor(actorObj) || !lua_isnumber(choreObj))
 		return;
 
-	int chore = luaFtol(lua_getnumber(choreObj));
+	int chore = luaFtolSse(lua_getnumber(choreObj));
 	SputActor *actor = getSputActor(actorObj);
 
 	if (!actor)
@@ -403,7 +403,9 @@ void Lua_V1::SetActorTimeScale() {
 	else
 		actor->extra->timeScale = 1.0f;
 
-	if (!(actor->extra->timeScale >= 0.0f))
+	bool negative = g_grim->isRemastered() ? actor->extra->timeScale < 0.0f : !(actor->extra->timeScale >= 0.0f);
+
+	if (negative)
 		actor->extra->timeScale = -actor->extra->timeScale;
 }
 
@@ -426,7 +428,7 @@ void Lua_V1::SetActorCollisionMode() {
 	if (!actor->extra)
 		g_grim->_sputActor->allocateActorExtra(actor);
 
-	actor->extra->collisionMode = luaFtol(lua_getnumber(modeObj));
+	actor->extra->collisionMode = luaFtolSse(lua_getnumber(modeObj));
 }
 
 void Lua_V1::SetActorCollisionScale() {
@@ -476,7 +478,7 @@ void Lua_V1::PutActorAt() {
 		lua_Object keepObj = lua_getparam(5);
 
 		if (lua_isnumber(keepObj))
-			clearWalk = lua_getnumber(keepObj) <= 0.0f;
+			clearWalk = !(lua_getnumber(keepObj) > 0.0f);
 	}
 
 	g_grim->_sputActor->setActorPosition(actor, pos, clearWalk);
@@ -590,7 +592,17 @@ void Lua_V1::GetAngleBetweenActors() {
 	g_grim->_rd->normalize3Acc(lookVec);
 	g_grim->_rd->normalize3Acc(targetVec);
 
-	float dot = (float)(((double)targetVec[0] * lookVec[0] + (double)targetVec[1] * lookVec[1]) + (double)targetVec[2] * lookVec[2]);
+	float dot = 0.0f;
+
+	if (g_grim->isRemastered()) {
+		float productY = (float)((double)lookVec[1] * targetVec[1]);
+		float productX = (float)((double)lookVec[0] * targetVec[0]);
+		float productZ = (float)((double)targetVec[2] * lookVec[2]);
+
+		dot = (float)(((double)productY + productX) + productZ);
+	} else {
+		dot = (float)(((double)targetVec[0] * lookVec[0] + (double)targetVec[1] * lookVec[1]) + (double)targetVec[2] * lookVec[2]);
+	}
 
 	lua_pushnumber((float)(90.0f - (double)g_grim->_stdMath->arcSin3(dot)));
 }
@@ -732,7 +744,9 @@ void Lua_V1::SetActorTurnRate() {
 		g_grim->_sputActor->allocateActorExtra(actor);
 
 	// The demo stores the rate as it is
-	if (!(actor->extra->turnRate >= 0.0f) && !(g_grim->getGameFlags() & ADGF_DEMO))
+	bool negative = g_grim->isRemastered() ? actor->extra->turnRate < 0.0f : !(actor->extra->turnRate >= 0.0f);
+
+	if (negative && !(g_grim->getGameFlags() & ADGF_DEMO))
 		rate = rate * -1.0f;
 
 	actor->extra->turnRate = rate;
@@ -824,7 +838,7 @@ void Lua_V1::ActorPuckOrient() {
 	if (!actor)
 		return;
 
-	if (lua_isnil(orientObj) || !luaFtol(lua_getnumber(orientObj)))
+	if (lua_isnil(orientObj) || !luaFtolSse(lua_getnumber(orientObj)))
 		actor->flags &= ~0x10;
 	else
 		actor->flags |= 0x10;
@@ -1048,6 +1062,9 @@ void Lua_V1::SetActorWalkDominate() {
 		return;
 
 	int dominate = lua_isnil(modeObj);
+	if (g_grim->isRemastered())
+		dominate = !dominate;
+
 	SputActor *actor = getSputActor(actorObj);
 
 	if (!actor)
@@ -1173,7 +1190,7 @@ void Lua_V1::GetActorCostume() {
 		if (!lua_isnumber(costumeObj))
 			return;
 
-		int depth = luaFtol(lua_getnumber(costumeObj));
+		int depth = luaFtolSse(lua_getnumber(costumeObj));
 
 		while (node && depth > 0) {
 			depth--;
@@ -1399,8 +1416,8 @@ void Lua_V1::FadeOutChore() {
 	if (!actor)
 		return;
 
-	int choreIndex = luaFtol(lua_getnumber(choreObj));
-	int timeMs = luaFtol(lua_getnumber(timeObj));
+	int choreIndex = luaFtolSse(lua_getnumber(choreObj));
+	int timeMs = luaFtolSse(lua_getnumber(timeObj));
 
 	if ((lua_isstring(costumeObj) || lua_isnumber(costumeObj)) && findCostumeInStack(costumeObj, actor->costumeStack, &node))
 		g_grim->_sputCostume->fadeKeysOut(node->costumeInstance, choreIndex, timeMs);
@@ -1422,8 +1439,8 @@ void Lua_V1::FadeInChore() {
 	if (!actor)
 		return;
 
-	int choreIndex = luaFtol(lua_getnumber(choreObj));
-	int timeMs = luaFtol(lua_getnumber(timeObj));
+	int choreIndex = luaFtolSse(lua_getnumber(choreObj));
+	int timeMs = luaFtolSse(lua_getnumber(timeObj));
 
 	if ((lua_isstring(costumeObj) || lua_isnumber(costumeObj)) && findCostumeInStack(costumeObj, actor->costumeStack, &node)) {
 		g_grim->_sputCostume->getCos()->instPlayChore(node->costumeInstance, choreIndex, 0, 0);
@@ -1726,7 +1743,182 @@ void Lua_V1::PointActorAt() {
 		actor->extra->turnRate = actor->extra->turnRate * -1.0f;
 }
 
+void Lua_V1::walkActorVectorRemastered() {
+	RenderDroid *rd = g_grim->_rd;
+	lua_Object actorObj = lua_getparam(1);
+	lua_Object refObj = lua_getparam(2);
+	lua_Object xObj = lua_getparam(3);
+	lua_Object yObj = lua_getparam(4);
+	lua_Object zObj = lua_getparam(5);
+	lua_Object adjustObj = lua_getparam(6);
+	lua_Object tableObj = lua_getparam(7);
+	lua_Object yawObj = lua_getparam(8);
+
+	if (!isSputActor(actorObj) || !isSputActor(refObj))
+		return;
+
+	SputActor *actor = getSputActor(actorObj);
+	SputActor *refActor = getSputActor(refObj);
+	RdVector3 vec;
+
+	vec[0] = lua_getnumber(xObj);
+	vec[1] = lua_getnumber(yObj);
+	vec[2] = lua_getnumber(zObj);
+
+	if (!actor || !actor->extra || !actor->extra->puck)
+		return;
+
+	Puck *puck = actor->extra->puck;
+	RdMatrix34 matrix;
+	RdMatrix34 savedMatrix;
+
+	memset(matrix, 0, sizeof(RdMatrix34));
+
+	if (!lua_istable(tableObj)) {
+		RdMatrix34 orient;
+
+		memcpy(orient, g_grim->_sputActor->getOrientMatrix(refActor), sizeof(RdMatrix34));
+
+		RdCamera *camera = rd->_camera.getCurrent();
+
+		if (camera) {
+			RdVector3 look;
+			RdVector3 cameraPoint;
+			RdVector3 projected;
+			RdVector3 angles;
+			RdVector3 yawAngles;
+			RdMatrix34 rotation;
+
+			for (int i = 0; i < 3; i++)
+				look[i] = (float)((double)actor->actorPos[i] - orient[3][i]);
+
+			rd->normalize3Acc(look);
+			rd->transformPoint34(cameraPoint, actor->actorPos, camera->viewMatrix);
+			(rd->_camera.*camera->project)(projected, cameraPoint);
+
+			float screenOffset = (float)(((double)projected[0] / 640.0 - 0.5) * 2.0);
+
+			rd->extractAngles34(orient, angles);
+
+			float yaw = (float)(((double)angles[0] * 0.5) * -(double)screenOffset);
+
+			yawAngles[0] = 0.0f;
+			yawAngles[1] = yaw;
+			yawAngles[2] = 0.0f;
+			rd->buildRotate34(rotation, yawAngles);
+			rd->transformVector34Acc(look, rotation);
+			rd->buildFromLook34Remastered(matrix, look);
+			matrix[0][0] = orient[0][0];
+			matrix[0][1] = orient[0][1];
+			matrix[0][2] = orient[0][2];
+		} else {
+			warning("WalkActorVector(): no current camera");
+			memcpy(matrix, orient, sizeof(RdMatrix34));
+		}
+
+		_walkVectorYaw = 0.0f;
+		memcpy(_walkVectorMatrix, orient, sizeof(RdMatrix34));
+	} else {
+		float yawOffset = _walkVectorYaw;
+
+		if (lua_isnumber(yawObj))
+			yawOffset = lua_getnumber(yawObj);
+
+		float difference = (float)((double)_walkVectorYaw - yawOffset);
+
+		if (difference < 0.0f)
+			difference = -difference;
+
+		if (difference > 0.001f) {
+			RdVector3 yawAngles;
+			RdMatrix34 rotation;
+			RdMatrix34 product;
+			RdMatrix34 previous;
+
+			yawAngles[0] = 0.0f;
+			yawAngles[1] = yawOffset;
+			yawAngles[2] = 0.0f;
+			memcpy(previous, _walkVectorMatrix, sizeof(RdMatrix34));
+			rd->buildRotate34(rotation, yawAngles);
+			rd->multiply34(product, rotation, previous);
+			memcpy(_walkVectorMatrix, product, sizeof(RdMatrix34));
+			_walkVectorYaw = yawOffset;
+		}
+
+		memcpy(matrix, _walkVectorMatrix, sizeof(RdMatrix34));
+	}
+
+	if (lua_isnumber(adjustObj)) {
+		RdVector3 adjust;
+
+		adjust[0] = 0.0f;
+		adjust[1] = lua_getnumber(adjustObj);
+		adjust[2] = 0.0f;
+		memcpy(savedMatrix, matrix, sizeof(RdMatrix34));
+		matrix[3][0] = 0.0f;
+		matrix[3][1] = 0.0f;
+		matrix[3][2] = 0.0f;
+		rd->preRotate34(matrix, adjust);
+		matrix[3][0] = savedMatrix[3][0];
+		matrix[3][1] = savedMatrix[3][1];
+		matrix[3][2] = savedMatrix[3][2];
+	}
+
+	RdVector3 direction;
+	RdVector3 target;
+	RdVector3 localTarget;
+
+	rd->transformVector34Acc(vec, matrix);
+	rd->normalize3Acc(vec);
+
+	for (int i = 0; i < 3; i++) {
+		direction[i] = vec[i];
+		target[i] = (float)((double)vec[i] + actor->actorPos[i]);
+		localTarget[i] = target[i];
+	}
+
+	puck->invXform(localTarget);
+	rd->normalize3Acc(localTarget);
+
+	float turnAngle = (float)(90.0 - (double)g_grim->_stdMath->arcSin3(localTarget[1]));
+	float turnRate = actor->extra->turnRate;
+
+	if (turnRate < 0.0f)
+		turnRate = -turnRate;
+
+	float step = (float)((double)g_grim->_sputTime->getFrameTimeFlex() * turnRate);
+
+	if (puck->_constrained) {
+		float dot = rd->dot3(direction, puck->_constraint);
+		float absDot = dot < 0.0f ? -dot : dot;
+
+		if ((double)absDot > 0.4000000059604645) {
+			float sign = dot <= 0.0f ? -1.0f : 1.0f;
+			RdVector3 pointTarget;
+
+			for (int i = 0; i < 3; i++) {
+				pointTarget[i] = (float)((double)puck->_constraint[i] * sign);
+				pointTarget[i] = (float)((double)pointTarget[i] + actor->actorPos[i]);
+			}
+
+			puck->pointAt(pointTarget, 999999.0f);
+		}
+	} else {
+		puck->pointAt(target, (float)((double)step + step));
+	}
+
+	if (turnAngle < 90.0f) {
+		actor->mode &= ~1;
+		g_grim->_sputActor->forward(actor);
+	}
+}
+
 void Lua_V1::WalkActorVector() {
+	if (g_grim->isRemastered()) {
+		walkActorVectorRemastered();
+		return;
+	}
+
 	lua_Object actorObj = lua_getparam(1);
 	lua_Object refObj = lua_getparam(2);
 	lua_Object xObj = lua_getparam(3);
@@ -2032,9 +2224,9 @@ void Lua_V1::GetVisibleThings() {
 }
 
 void Lua_V1::SetShadowColor() {
-	int r = luaFtol(lua_getnumber(lua_getparam(1)));
-	int g = luaFtol(lua_getnumber(lua_getparam(2)));
-	int b = luaFtol(lua_getnumber(lua_getparam(3)));
+	int r = luaFtolSse(lua_getnumber(lua_getparam(1)));
+	int g = luaFtolSse(lua_getnumber(lua_getparam(2)));
+	int b = luaFtolSse(lua_getnumber(lua_getparam(3)));
 
 	g_grim->_sputCostume->setShadowColor(r, g, b);
 }
@@ -2076,7 +2268,7 @@ void Lua_V1::SetActiveShadow() {
 	if (!actor->extra)
 		g_grim->_sputActor->allocateActorExtra(actor);
 
-	actor->extra->activeShadow = luaFtol(lua_getnumber(shadowIdObj));
+	actor->extra->activeShadow = luaFtolSse(lua_getnumber(shadowIdObj));
 }
 
 void Lua_V1::SetActorShadowPoint() {
@@ -2170,7 +2362,7 @@ void Lua_V1::ActivateActorShadow() {
 
 	int active = !lua_isnil(stateObj);
 
-	g_grim->_sputActor->activateActorShadow(actor, luaFtol(lua_getnumber(shadowIdObj)), active);
+	g_grim->_sputActor->activateActorShadow(actor, luaFtolSse(lua_getnumber(shadowIdObj)), active);
 }
 
 void Lua_V1::SetActorShadowValid() {
@@ -2190,7 +2382,7 @@ void Lua_V1::SetActorShadowValid() {
 	if (!actor->extra)
 		g_grim->_sputActor->allocateActorExtra(actor);
 
-	g_grim->_sputActor->setShadowValid(actor, actor->extra->activeShadow, luaFtol(lua_getnumber(numObj)));
+	g_grim->_sputActor->setShadowValid(actor, actor->extra->activeShadow, luaFtolSse(lua_getnumber(numObj)));
 }
 
 void Lua_V1::GetActorRect() {
@@ -2223,7 +2415,7 @@ void Lua_V1::SetActorInvClipNode() {
 	if (lua_isnil(nodeObj))
 		nodeId = -1;
 	else
-		nodeId = luaFtol(lua_getnumber(nodeObj));
+		nodeId = luaFtolSse(lua_getnumber(nodeObj));
 
 	SputActor *actor = getSputActor(actorObj);
 
@@ -2244,9 +2436,6 @@ void Lua_V1::SetActorClipPlane() {
 	lua_Object pointXObj = lua_getparam(5);
 	lua_Object pointYObj = lua_getparam(6);
 	lua_Object pointZObj = lua_getparam(7);
-
-	if (!isSputActor(actorObj))
-		return;
 
 	SputActor *actor = getSputActor(actorObj);
 
@@ -2276,15 +2465,12 @@ void Lua_V1::SetActorClipActive() {
 	lua_Object actorObj = lua_getparam(1);
 	lua_Object stateObj = lua_getparam(2);
 
-	if (!isSputActor(actorObj))
-		return;
-
 	SputActor *actor = getSputActor(actorObj);
 
 	if (!actor)
 		return;
 
-	g_grim->_sputActor->setClipPlaneActive(actor, luaFtol(lua_getnumber(stateObj)));
+	g_grim->_sputActor->setClipPlaneActive(actor, luaFtolSse(lua_getnumber(stateObj)));
 }
 
 void Lua_V1::SetActorFrustrumCull() {
@@ -2299,7 +2485,7 @@ void Lua_V1::SetActorFrustrumCull() {
 	if (!actor)
 		return;
 
-	g_grim->_sputActor->setFrustrumCull(actor, luaFtol(lua_getnumber(stateObj)));
+	g_grim->_sputActor->setFrustrumCull(actor, luaFtolSse(lua_getnumber(stateObj)));
 }
 
 void Lua_V1::DriveActorTo() {

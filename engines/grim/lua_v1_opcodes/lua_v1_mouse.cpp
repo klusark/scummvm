@@ -70,7 +70,7 @@ void Lua_V1::WalkActorToMouseTarget() {
 }
 
 void Lua_V1::PathfinderMode() {
-	g_grim->_sputActor->setPathfinderMode(luaFtol(lua_getnumber(lua_getparam(1))));
+	g_grim->_sputActor->setPathfinderMode(luaFtolSse(lua_getnumber(lua_getparam(1))));
 }
 
 void Lua_V1::DialogLogGetLineCount() {
@@ -114,7 +114,7 @@ void Lua_V1::DialogLogGetLine() {
 
 	char buffer[kLogBufferSize];
 
-	if (!g_grim->_dialogLog->copyLine(luaFtol(lua_getnumber(slotObj)), buffer, kLogBufferSize, kLogLineLength)) {
+	if (!g_grim->_dialogLog->copyLine(luaFtolSse(lua_getnumber(slotObj)), buffer, kLogBufferSize, kLogLineLength)) {
 		warning("Lua_V1::DialogLogGetLine(): there is no line in that slot");
 		lua_pushnil();
 		return;
@@ -140,7 +140,7 @@ void Lua_V1::DialogLogAddLine() {
 }
 
 void Lua_V1::QueryActiveHotspots() {
-	int mode = luaFtol(lua_getnumber(lua_getparam(1)));
+	int mode = luaFtolSse(lua_getnumber(lua_getparam(1)));
 	SputMouse *mouse = g_grim->_sputMouse;
 	const Hotspot *hotspots[kMaxActiveHotspots];
 	int x;
@@ -225,16 +225,16 @@ void Lua_V1::GetFloorWalkPos() {
 }
 
 void Lua_V1::GetSelectedDialog() {
-	int x = luaFtol(lua_getnumber(lua_getparam(1)));
-	int y = luaFtol(lua_getnumber(lua_getparam(2)));
-	int height = luaFtol(lua_getnumber(lua_getparam(3)));
-	int numLines = luaFtol(lua_getnumber(lua_getparam(4)));
+	int x = luaFtolSse(lua_getnumber(lua_getparam(1)));
+	int y = luaFtolSse(lua_getnumber(lua_getparam(2)));
+	int height = luaFtolSse(lua_getnumber(lua_getparam(3)));
+	int numLines = luaFtolSse(lua_getnumber(lua_getparam(4)));
 
 	lua_pushnumber((float)g_grim->_sputMouse->getSelectedDialog(x, y, height, numLines));
 }
 
 void Lua_V1::SetCursor() {
-	g_grim->_sputMouse->setCursor(luaFtol(lua_getnumber(lua_getparam(1))));
+	g_grim->_sputMouse->setCursor(luaFtolSse(lua_getnumber(lua_getparam(1))));
 }
 
 // The actor is the one of handle 0 when the first parameter is not an actor
@@ -256,7 +256,7 @@ void Lua_V1::ProjectToAxis() {
 }
 
 void Lua_V1::ShowCursor() {
-	g_grim->_sputMouse->showCursor(luaFtol(lua_getnumber(lua_getparam(1))) != 0);
+	g_grim->_sputMouse->showCursor(luaFtolSse(lua_getnumber(lua_getparam(1))) != 0);
 }
 
 void Lua_V1::AddHotspot() {
@@ -271,23 +271,23 @@ void Lua_V1::AddHotspot() {
 	lua_Object menuObj = lua_getparam(8);
 	lua_Object hoverObj = lua_getparam(9);
 	lua_Object layerObj = lua_getparam(10);
-	int x = luaFtol(lua_getnumber(lua_getparam(2)));
-	int y = luaFtol(lua_getnumber(lua_getparam(3)));
-	int width = luaFtol(lua_getnumber(lua_getparam(4)));
-	int height = luaFtol(lua_getnumber(lua_getparam(5)));
-	int cursor = luaFtol(lua_getnumber(lua_getparam(6)));
-	int boost = luaFtol(lua_getnumber(lua_getparam(7)));
-	int menuType = lua_isnumber(menuObj) ? luaFtol(lua_getnumber(menuObj)) : 0;
+	int x = luaFtolSse(lua_getnumber(lua_getparam(2)));
+	int y = luaFtolSse(lua_getnumber(lua_getparam(3)));
+	int width = luaFtolSse(lua_getnumber(lua_getparam(4)));
+	int height = luaFtolSse(lua_getnumber(lua_getparam(5)));
+	int cursor = luaFtolSse(lua_getnumber(lua_getparam(6)));
+	int boost = luaFtolSse(lua_getnumber(lua_getparam(7)));
+	int menuType = lua_isnumber(menuObj) ? luaFtolSse(lua_getnumber(menuObj)) : 0;
 	const char *hoverImage = lua_isstring(hoverObj) ? lua_getstring(hoverObj) : "";
-	int hoverLayer = lua_isnumber(layerObj) ? luaFtol(lua_getnumber(layerObj)) : 2;
-	int coords = luaFtol(lua_getnumber(lua_getparam(11)));
+	int hoverLayer = lua_isnumber(layerObj) ? luaFtolSse(lua_getnumber(layerObj)) : 2;
+	int coords = luaFtolSse(lua_getnumber(lua_getparam(11)));
 
 	lua_pushnumber((float)g_grim->_sputMouse->getHotspots()->addHotspot(id, x, y, width, height, cursor, boost, menuType,
 			hoverImage, hoverLayer, coords));
 }
 
 void Lua_V1::RemoveHotspot() {
-	g_grim->_sputMouse->getHotspots()->removeHotspot(luaFtol(lua_getnumber(lua_getparam(1))));
+	g_grim->_sputMouse->getHotspots()->removeHotspot(luaFtolSse(lua_getnumber(lua_getparam(1))));
 }
 
 void Lua_V1::GetCursorPosition() {
@@ -300,17 +300,17 @@ void Lua_V1::GetCursorPosition() {
 }
 
 void Lua_V1::CursorAnimation() {
-	int first = luaFtol(lua_getnumber(lua_getparam(1)));
-	int last = luaFtol(lua_getnumber(lua_getparam(2)));
+	int first = luaFtolSse(lua_getnumber(lua_getparam(1)));
+	int last = luaFtolSse(lua_getnumber(lua_getparam(2)));
 
 	g_grim->_sputMouse->cursorAnimation(first, last);
 }
 
 void Lua_V1::UpdateHotspot() {
 	const char *id = lua_getstring(lua_getparam(1));
-	int coords = luaFtol(lua_getnumber(lua_getparam(4)));
-	int x = luaFtol(lua_getnumber(lua_getparam(2)));
-	int y = luaFtol(lua_getnumber(lua_getparam(3)));
+	int coords = luaFtolSse(lua_getnumber(lua_getparam(4)));
+	int x = luaFtolSse(lua_getnumber(lua_getparam(2)));
+	int y = luaFtolSse(lua_getnumber(lua_getparam(3)));
 
 	if (!id) {
 		warning("Lua_V1::UpdateHotspot(): the id is not a text");
@@ -341,7 +341,7 @@ void Lua_V1::PreloadCursors() {
 }
 
 void Lua_V1::CursorMovieEnabled() {
-	g_grim->_sputMouse->setVisibleInMovie(luaFtol(lua_getnumber(lua_getparam(1))));
+	g_grim->_sputMouse->setVisibleInMovie(luaFtolSse(lua_getnumber(lua_getparam(1))));
 }
 
 } // end of namespace Grim

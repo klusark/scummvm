@@ -76,7 +76,10 @@ void SputActorModule::setShadowPlane(SputActor *actor, const char *planeName) {
 
 	shadow->active = 1;
 	shadow->side = 0;
-	shadow->planeD = (float)-(xTerm + (yTerm + zTerm));
+	if (g_grim->isRemastered())
+		shadow->planeD = (float)-(zTerm + (xTerm + yTerm));
+	else
+		shadow->planeD = (float)-(xTerm + (yTerm + zTerm));
 }
 
 void SputActorModule::setShadowPoint(SputActor *actor, float x, float y, float z) {
@@ -152,6 +155,12 @@ void SputActorModule::loadShadowResources(SputActor *actor) {
 
 			distance = distance + (double)actor->actorPos[1] * shadow->normal[1];
 			distance = distance + shadow->planeD;
+
+			if (_grim->isRemastered()) {
+				double remasteredSum = ((double)actor->actorPos[1] * shadow->normal[1] + (double)actor->actorPos[0] * shadow->normal[0]) + (double)actor->actorPos[2] * shadow->normal[2];
+
+				distance = (float)(remasteredSum + shadow->planeD);
+			}
 
 			if (side == -1 && distance > 0.0)
 				init = false;
@@ -286,7 +295,13 @@ void SputActorModule::drawShadowPolygon(const float *poly, int numPoly, float *m
 			RdProcFace *face = nullptr;
 			RemasteredLookRenderer *remasteredLookRenderer = _rd->getRemasteredLookRenderer();
 
-			if (!remasteredLookRenderer || !remasteredLookRenderer->drawShadowGeometry(clipped[0], numClipped, 0))
+			uint shadowColour = 0;
+			RdColormap *shadowColormap = _sputCostume->getShadowColormap();
+
+			if (shadowColormap && shadowColormap->rgb16)
+				shadowColour = *(uint16 *)shadowColormap->rgb16;
+
+			if (!remasteredLookRenderer || !remasteredLookRenderer->drawShadowGeometry(clipped[0], numClipped, shadowColour))
 				face = _rd->_primit3.drawPolygon(clipped, numClipped, _shadowMaterial);
 
 			if (face) {

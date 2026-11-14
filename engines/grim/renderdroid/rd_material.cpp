@@ -231,6 +231,10 @@ int RenderDroid::MaterialModule::destroy(RdMaterial *&material) {
 	}
 
 	freeEntry(material);
+
+	if (_rd->_remasteredLookRenderer)
+		_rd->_remasteredLookRenderer->notifyFree(material);
+
 	delete material;
 	material = nullptr;
 
@@ -238,9 +242,6 @@ int RenderDroid::MaterialModule::destroy(RdMaterial *&material) {
 }
 
 void RenderDroid::MaterialModule::freeEntry(RdMaterial *material) {
-	if (_rd->_remasteredLookRenderer)
-		_rd->_remasteredLookRenderer->notifyFree(material);
-
 	for (uint i = 0; i < material->numCels; i++) {
 		delete material->cels[i];
 		material->cels[i] = nullptr;

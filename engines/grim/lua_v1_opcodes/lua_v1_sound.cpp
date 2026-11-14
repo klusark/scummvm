@@ -35,7 +35,7 @@ namespace Grim {
 static const char *getSoundKey(lua_Object nameObj) {
 	// The demo always uses the name, ImStartSound doesn't return a number there
 	if (!(g_grim->getGameFlags() & ADGF_DEMO) && lua_isnumber(nameObj))
-		return (const char *)(intptr)luaFtol(lua_getnumber(nameObj));
+		return (const char *)(intptr)luaFtolSse(lua_getnumber(nameObj));
 
 	return lua_getstring(nameObj);
 }
@@ -51,8 +51,8 @@ void Lua_V1::ImStartSound() {
 		return;
 
 	const char *soundName = lua_getstring(nameObj);
-	int priority = luaFtol(lua_getnumber(priorityObj));
-	int group = luaFtol(lua_getnumber(groupObj));
+	int priority = luaFtolSse(lua_getnumber(priorityObj));
+	int group = luaFtolSse(lua_getnumber(groupObj));
 
 	int result = g_grim->getImuse()->soundsLoadStartSound(soundName, priority, group);
 
@@ -103,7 +103,7 @@ void Lua_V1::ImSetMusicVol() {
 	lua_Object volObj = lua_getparam(1);
 	if (!lua_isnumber(volObj))
 		return;
-	g_grim->getImuse()->setMusicGroupVol(luaFtol(lua_getnumber(volObj)));
+	g_grim->getImuse()->setMusicGroupVol(luaFtolSse(lua_getnumber(volObj)));
 }
 
 void Lua_V1::ImGetMusicVol() {
@@ -114,7 +114,7 @@ void Lua_V1::ImSetVoiceVol() {
 	lua_Object volObj = lua_getparam(1);
 	if (!lua_isnumber(volObj))
 		return;
-	g_grim->getImuse()->setVoiceGroupVol(luaFtol(lua_getnumber(volObj)));
+	g_grim->getImuse()->setVoiceGroupVol(luaFtolSse(lua_getnumber(volObj)));
 }
 
 void Lua_V1::ImGetVoiceVol() {
@@ -125,7 +125,7 @@ void Lua_V1::ImSetSfxVol() {
 	lua_Object volObj = lua_getparam(1);
 	if (!lua_isnumber(volObj))
 		return;
-	g_grim->getImuse()->setSFXGroupVol(luaFtol(lua_getnumber(volObj)));
+	g_grim->getImuse()->setSFXGroupVol(luaFtolSse(lua_getnumber(volObj)));
 }
 
 void Lua_V1::ImGetSfxVol() {
@@ -149,8 +149,8 @@ void Lua_V1::ImSetParam() {
 	if (!lua_isnumber(paramObj) || !lua_isnumber(valueObj))
 		return;
 
-	int param = luaFtol(lua_getnumber(paramObj));
-	int value = luaFtol(lua_getnumber(valueObj));
+	int param = luaFtolSse(lua_getnumber(paramObj));
+	int value = luaFtolSse(lua_getnumber(valueObj));
 	if (value < 0 && !(g_grim->getGameFlags() & ADGF_DEMO))
 		value = 0;
 
@@ -172,7 +172,7 @@ void Lua_V1::ImGetParam() {
 		return;
 	}
 
-	int param = luaFtol(lua_getnumber(paramObj));
+	int param = luaFtolSse(lua_getnumber(paramObj));
 	lua_pushnumber(g_grim->getImuse()->soundsGetParam(getSoundKey(nameObj), param));
 }
 
@@ -196,11 +196,11 @@ void Lua_V1::ImFadeParam() {
 	if (!lua_isnumber(opcodeObj) || !lua_isnumber(valueObj) || !lua_isnumber(durationObj))
 		return;
 
-	int opcode = luaFtol(lua_getnumber(opcodeObj));
-	int value = luaFtol(lua_getnumber(valueObj));
+	int opcode = luaFtolSse(lua_getnumber(opcodeObj));
+	int value = luaFtolSse(lua_getnumber(valueObj));
 	if (value < 0 && !demo)
 		value = 0;
-	int duration = luaFtol(lua_getnumber(durationObj));
+	int duration = luaFtolSse(lua_getnumber(durationObj));
 
 	g_grim->getImuse()->soundsFadeParam(getSoundKey(nameObj), opcode, value, duration);
 }
@@ -212,11 +212,11 @@ void Lua_V1::ImSetState() {
 
 	// The demo sets the state right away and returns the new one
 	if (g_grim->getGameFlags() & ADGF_DEMO) {
-		lua_pushnumber(g_grim->getImuse()->imSetState(luaFtol(lua_getnumber(stateObj))));
+		lua_pushnumber(g_grim->getImuse()->imSetState(luaFtolSse(lua_getnumber(stateObj))));
 		return;
 	}
 
-	g_grim->setImuseState(luaFtol(lua_getnumber(stateObj)));
+	g_grim->setImuseState(luaFtolSse(lua_getnumber(stateObj)));
 }
 
 void Lua_V1::ImSetSequence() {
@@ -224,7 +224,7 @@ void Lua_V1::ImSetSequence() {
 	if (!lua_isnumber(stateObj))
 		return;
 
-	int state = luaFtol(lua_getnumber(stateObj));
+	int state = luaFtolSse(lua_getnumber(stateObj));
 	lua_pushnumber(g_grim->getImuse()->imSetSequence(state));
 }
 
@@ -274,13 +274,13 @@ void Lua_V1::SetSoundPosition() {
 	lua_Object maxDistObj = lua_getparam(argId + 2);
 
 	if (lua_isnumber(minVolObj)) {
-		minVol = (byte)luaFtol(lua_getnumber(minVolObj));
+		minVol = (byte)luaFtolSse(lua_getnumber(minVolObj));
 		if (minVol > 127)
 			minVol = 127;
 	}
 
 	if (lua_isnumber(maxVolObj)) {
-		maxVol = (byte)luaFtol(lua_getnumber(maxVolObj));
+		maxVol = (byte)luaFtolSse(lua_getnumber(maxVolObj));
 		if (maxVol > 127)
 			maxVol = 127;
 		else if (maxVol < minVol)
@@ -338,13 +338,13 @@ void Lua_V1::SetSoundPositionDemo() {
 	lua_Object maxDistObj = lua_getparam(argId + 2);
 
 	if (lua_isnumber(minVolObj)) {
-		minVol = luaFtol(lua_getnumber(minVolObj));
+		minVol = luaFtolSse(lua_getnumber(minVolObj));
 		if (minVol > 127)
 			minVol = 127;
 	}
 
 	if (lua_isnumber(maxVolObj)) {
-		int value = luaFtol(lua_getnumber(maxVolObj));
+		int value = luaFtolSse(lua_getnumber(maxVolObj));
 
 		if ((uint)value > 127) {
 			maxVol = 127;

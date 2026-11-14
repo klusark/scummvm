@@ -272,7 +272,28 @@ void LuaBase::dummyHandler() {
 void LuaBase::typeOverride() {
 	lua_Object data = lua_getparam(1);
 
-	if (lua_isuserdata(data)) {
+	if (lua_isuserdata(data) && g_grim->getGameType() != GType_MONKEY4 && !(g_grim->getGameFlags() & ADGF_DEMO)) {
+		switch (lua_tag(data)) {
+			case MKTAG('R','T','C','A'):
+				lua_pushstring("actor");
+				lua_pushnumber(lua_tag(data));
+				return;
+			case MKTAG('T','S','O','C'):
+				lua_pushstring("costume");
+				lua_pushnumber(lua_tag(data));
+				return;
+			case MKTAG(' ','T','E','S'):
+				lua_pushstring("set");
+				lua_pushnumber(lua_tag(data));
+				return;
+			case MKTAG('F','Y','E','K'):
+				lua_pushstring("keyframe");
+				lua_pushnumber(lua_tag(data));
+				return;
+			default:
+				break;
+		}
+	} else if (lua_isuserdata(data)) {
 		switch (lua_tag(data)) {
 			case MKTAG('A','C','T','R'):
 			case MKTAG('R','T','C','A'):
@@ -327,9 +348,25 @@ void LuaBase::concatFallback() {
 
 		if (lua_isnil(params[i]))
 			Common::sprintf_s(ptr, sizeof(result) - pos, "(nil)");
-		else if (lua_isstring(params[i]))
-			Common::sprintf_s(ptr, sizeof(result) - pos, "%s", lua_getstring(params[i]));
-		else if (lua_tag(params[i]) == MKTAG('R','T','C','A')) {
+		else if (lua_isstring(params[i])) {
+			const char *text = lua_getstring(params[i]);
+
+			if (g_grim->getGameType() == GType_MONKEY4 || (g_grim->getGameFlags() & ADGF_DEMO)) {
+				Common::sprintf_s(ptr, sizeof(result) - pos, "%s", text);
+			} else {
+				// The exe passes the string as the printf format: only "%%" is deterministic
+				int out = pos;
+
+				while (*text && out < (int)sizeof(result) - 1) {
+					if (text[0] == '%' && text[1] == '%')
+						text++;
+
+					result[out++] = *text++;
+				}
+
+				result[out] = 0;
+			}
+		} else if (lua_tag(params[i]) == MKTAG('R','T','C','A')) {
 			int handle = lua_getuserdata(params[i]);
 			SputActor *actor = g_grim->_sputActor->actorDeref(handle);
 			const char *modelName = "";

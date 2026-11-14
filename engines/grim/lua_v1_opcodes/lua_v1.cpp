@@ -23,6 +23,10 @@
 #include "common/savefile.h"
 #include "common/system.h"
 #include "common/config-manager.h"
+#include "common/fs.h"
+#include "common/ustr.h"
+
+#include "gui/message.h"
 
 #include "graphics/surface.h"
 #include "graphics/renderer.h"
@@ -37,6 +41,8 @@
 #include "engines/grim/legacy_savegames/legacy_savegames.h"
 #include "engines/grim/res.h"
 #include "engines/grim/actor/sputactor.h"
+#include "engines/grim/chore/cos.h"
+#include "engines/grim/costume/sputcostume.h"
 #include "engines/grim/sputobjectstate.h"
 #include "engines/grim/render/sputrender.h"
 #include "engines/grim/sputresource.h"
@@ -70,6 +76,18 @@ int luaFtol(float value) {
 		warning("luaFtol(): value out of range");
 
 	return (int)(uint32)result;
+}
+
+int luaFtolSse(float value) {
+	if (!g_grim->isRemastered())
+		return luaFtol(value);
+
+	double number = value;
+
+	if (!(number > -2147483649.0 && number < 2147483648.0))
+		return (int)0x80000000;
+
+	return (int)number;
 }
 
 byte clamp_color(int c) {
@@ -294,7 +312,29 @@ void Lua_V1::GetAngleBetweenVectors() {
 	g_grim->_rd->normalize3Acc(vec1);
 	g_grim->_rd->normalize3Acc(vec2);
 
-	float dot = (float)(((double)vec2[0] * vec1[0] + (double)vec2[1] * vec1[1]) + (double)vec2[2] * vec1[2]);
+	float dot = 0.0f;
+
+	if (g_grim->isRemastered()) {
+		float productY = (float)((double)vec2[1] * vec1[1]);
+		float productX = (float)((double)vec2[0] * vec1[0]);
+		float productZ = (float)((double)vec2[2] * vec1[2]);
+
+		dot = (float)(((double)productY + productX) + productZ);
+
+		float absDot = dot;
+
+		if (absDot < 0.0f)
+			absDot = -absDot;
+
+		float delta = (float)((double)absDot - 1.0);
+
+		if (delta > -0.001f && delta < 0.001f) {
+			lua_pushnumber(0.0f);
+			return;
+		}
+	} else {
+		dot = (float)(((double)vec2[0] * vec1[0] + (double)vec2[1] * vec1[1]) + (double)vec2[2] * vec1[2]);
+	}
 
 	lua_pushnumber((float)(90.0f - (double)g_grim->_stdMath->arcSin3(dot)));
 }
@@ -563,6 +603,44 @@ void Lua_V1::FileFindFirst() {
 	Lua_V1::FileFindDispose();
 
 	const char *extension = lua_getstring(extObj);
+
+	if (g_grim->isRemastered()) {
+		lua_Object dirObj = lua_getparam(2);
+		Common::String directory;
+
+		if (!lua_isnil(dirObj))
+			directory = lua_getstring(dirObj);
+
+		Common::String pattern = extension;
+
+		if (!strchr(extension, '.'))
+			pattern = "*." + pattern;
+
+		if (directory == ".")
+			directory = ConfMan.get("path");
+
+		Common::FSList children;
+		Common::FSNode node((Common::Path(directory, Common::Path::kNativeSeparator)));
+
+		if (!directory.empty() && node.exists() && node.isDirectory())
+			node.getChildren(children, Common::FSNode::kListAll);
+
+		for (uint i = 0; i < children.size(); i++) {
+			if (children[i].getName().matchString(pattern, true))
+				g_grim->_listFiles.push_back(children[i].getName());
+		}
+
+		Common::sort(g_grim->_listFiles.begin(), g_grim->_listFiles.end());
+		g_grim->_listFilesIter = g_grim->_listFiles.begin();
+
+		if (g_grim->_listFilesIter == g_grim->_listFiles.end())
+			lua_pushnil();
+		else
+			Lua_V1::FileFindNext();
+
+		return;
+	}
+
 	Common::String searchString = extension;
 	if (searchString == "*.gsv") {
 		searchString = "grim##.gsv";
@@ -580,6 +658,10 @@ void Lua_V1::FileFindFirst() {
 
 void Lua_V1::PerSecond() {
 	lua_Object rateObj = lua_getparam(1);
+
+	if (g_grim->isRemastered() && !lua_isnumber(rateObj))
+		lua_pushnil();
+
 	float frameTime = g_grim->_sputTime->getFrameTimeFlex();
 
 	lua_pushnumber((float)((double)lua_getnumber(rateObj) * frameTime));
@@ -592,7 +674,7 @@ void Lua_V1::EnableControl() {
 		lua_pushnil();
 		return;
 	}
-	g_grim->_sputControl->enableControl((uint)(int)lua_getnumber(numObj));
+	g_grim->_sputControl->enableControl((uint)luaFtol(lua_getnumber(numObj)));
 }
 
 void Lua_V1::DisableControl() {
@@ -602,16 +684,20 @@ void Lua_V1::DisableControl() {
 		lua_pushnil();
 		return;
 	}
-	g_grim->_sputControl->disableControl((uint)(int)lua_getnumber(numObj));
+	g_grim->_sputControl->disableControl((uint)luaFtol(lua_getnumber(numObj)));
 }
 
 void Lua_V1::GetControlState() {
 	lua_Object numObj = lua_getparam(1);
 
-	if (!lua_isnumber(numObj))
-		return;
+	if (!lua_isnumber(numObj)) {
+		if (g_grim->isRemastered())
+			lua_pushnil();
 
-	uint index = (uint)(int)lua_getnumber(numObj);
+		return;
+	}
+
+	uint index = (uint)luaFtol(lua_getnumber(numObj));
 
 	if (index >= (uint)g_grim->_sputControl->getNumSymbols())
 		return;
@@ -645,7 +731,7 @@ void Lua_V1::Exit() {
 	lua_Object exitObj = lua_getparam(1);
 
 	if (lua_isnumber(exitObj))
-		g_grim->requestShutdown((int)lua_getnumber(exitObj));
+		g_grim->requestShutdown(luaFtolSse(lua_getnumber(exitObj)));
 	else
 		g_grim->requestShutdown(0);
 }
@@ -850,7 +936,18 @@ void Lua_V1::Remove() {
 void Lua_V1::LockFont() {
 	lua_Object param1 = lua_getparam(1);
 	if (lua_isstring(param1)) {
-		void *font = g_grim->_sputResource->alloc(kSputTagFont, lua_getstring(param1));
+		const char *fontName = lua_getstring(param1);
+		void *font = nullptr;
+
+		if (g_grim->isRemastered()) {
+			ResNode *loaded = g_grim->_res->isResourceLoaded(kSputTagFont, fontName);
+
+			if (loaded)
+				font = loaded->handle;
+		}
+
+		if (!font)
+			font = g_grim->_sputResource->alloc(kSputTagFont, fontName);
 
 		if (font) {
 			ResNode *node = g_grim->_res->checkAllocatedRes(font);
@@ -947,6 +1044,9 @@ void Lua_V1::SetEmergencyFont() {
 }
 
 void Lua_V1::NukeResources() {
+	if (g_grim->isRemastered())
+		return;
+
 	g_grim->_sputRoom->setCurrentRoom(nullptr);
 	g_grim->_sputActor->nukeCostumeStacks();
 	g_grim->_res->freeAll();
@@ -982,36 +1082,254 @@ void Lua_V1::GetFontDimensions() {
 	warning("GetFontDimensions(): the original dereferences a Lua object as a font pointer and crashes");
 }
 
+int Lua_V1::queryDialog(const char *caption, const char *text, int type) {
+	if (g_grim->isRemastered())
+		return 0;
+
+	Common::U32String message(Common::String::format("%s\n%s", caption, text));
+	Common::U32String defaultButton;
+	Common::U32StringArray altButtons;
+
+	if (type == 1) {
+		defaultButton = Common::U32String("OK");
+		altButtons.push_back(Common::U32String("Cancel"));
+	} else {
+		defaultButton = Common::U32String("Yes");
+		altButtons.push_back(Common::U32String("No"));
+
+		if (type == 3)
+			altButtons.push_back(Common::U32String("Cancel"));
+	}
+
+	GUI::MessageDialog dialog(message, defaultButton, altButtons);
+	int result = dialog.runModal();
+
+	g_grim->clearEventQueue();
+
+	if (type == 1)
+		return result == GUI::kMessageOK ? 1 : 2;
+
+	if (result == GUI::kMessageOK)
+		return 6;
+
+	if (result == GUI::kMessageAlt)
+		return 7;
+
+	return type == 3 ? 2 : 7;
+}
+
+bool Lua_V1::getLightIndex(lua_Object obj, int *index) {
+	if (lua_isnumber(obj)) {
+		*index = luaFtolSse(lua_getnumber(obj));
+		return true;
+	}
+
+	if (lua_isstring(obj)) {
+		*index = g_grim->_sputRoom->findLightByName(nullptr, lua_getstring(obj));
+		return true;
+	}
+
+	return false;
+}
+
 void Lua_V1::EnginePause() {
-	warning("Lua_V1::EnginePause(): not implemented");
+	g_grim->setPause(1);
 }
 
 void Lua_V1::EngineResume() {
-	warning("Lua_V1::EngineResume(): not implemented");
+	g_grim->setPause(0);
 }
 
 void Lua_V1::SearchForFileOrSwapCDs() {
-	warning("Lua_V1::SearchForFileOrSwapCDs(): not implemented");
+	lua_Object captionObj = lua_getparam(1);
+	lua_Object textObj = lua_getparam(2);
+	lua_Object fileObj = lua_getparam(3);
+
+	if (!lua_isstring(captionObj) || !lua_isstring(textObj) || !lua_isstring(fileObj))
+		return;
+
+	Common::SeekableReadStream *file = g_grim->openFile(lua_getstring(fileObj));
+
+	if (file) {
+		delete file;
+		lua_pushnumber(1.0f);
+		lua_pushnil();
+		return;
+	}
+
+	g_grim->getImuse()->imSetState(0);
+	g_grim->getImuse()->imStopAllSounds();
+	g_grim->getImuse()->soundsCloseVoiceFile();
+
+	while (true) {
+		if (queryDialog(lua_getstring(captionObj), lua_getstring(textObj), 1) == 2)
+			break;
+
+		g_grim->_sputResource->closeResources();
+		g_grim->findResources();
+
+		file = g_grim->openFile(lua_getstring(fileObj));
+
+		if (file) {
+			delete file;
+			lua_pushnumber(1.0f);
+			lua_pushnumber(1.0f);
+			return;
+		}
+
+		if (g_grim->isRemastered()) {
+			warning("Lua_V1::SearchForFileOrSwapCDs(): the dialog never answers, the original loops forever");
+			break;
+		}
+	}
+
+	lua_pushnil();
+	lua_pushnil();
 }
 
 void Lua_V1::GetActorTurnRate() {
-	warning("Lua_V1::GetActorTurnRate(): not implemented");
+	lua_Object actorObj = lua_getparam(1);
+
+	if (!isSputActor(actorObj))
+		return;
+
+	SputActor *actor = getSputActor(actorObj);
+
+	if (!actor)
+		return;
+
+	if (!actor->extra)
+		g_grim->_sputActor->allocateActorExtra(actor);
+
+	lua_pushnumber(actor->extra->turnRate);
 }
 
 void Lua_V1::SetActorOffsetYaw() {
-	warning("Lua_V1::SetActorOffsetYaw(): not implemented");
+	lua_Object actorObj = lua_getparam(1);
+	lua_Object yawObj = lua_getparam(2);
+
+	if (!isSputActor(actorObj)) {
+		lua_pushnil();
+		return;
+	}
+
+	SputActor *actor = getSputActor(actorObj);
+
+	if (!actor)
+		return;
+
+	if (!actor->extra)
+		g_grim->_sputActor->allocateActorExtra(actor);
+
+	actor->extra->offsetYaw = lua_getnumber(yawObj);
 }
 
 void Lua_V1::IsActorLooking() {
-	warning("Lua_V1::IsActorLooking(): not implemented");
+	lua_Object actorObj = lua_getparam(1);
+
+	if (!isSputActor(actorObj))
+		return;
+
+	SputActor *actor = getSputActor(actorObj);
+
+	if (!actor)
+		return;
+
+	if (actor->mode & 2)
+		lua_pushnumber(1.0f);
+	else
+		lua_pushnil();
 }
 
 void Lua_V1::CanActorSee() {
-	warning("Lua_V1::CanActorSee(): not implemented");
+	lua_Object actorObj = lua_getparam(1);
+	lua_Object targetObj = lua_getparam(2);
+
+	if (!isSputActor(actorObj))
+		return;
+
+	SputActor *actor = getSputActor(actorObj);
+
+	if (!actor)
+		return;
+
+	float distance;
+	int visible;
+
+	if (lua_isnumber(targetObj)) {
+		lua_Object yObj = lua_getparam(3);
+		lua_Object zObj = lua_getparam(4);
+		float point[3];
+
+		point[0] = lua_getnumber(targetObj);
+		point[1] = lua_isnumber(yObj) ? lua_getnumber(yObj) : 0.0f;
+		point[2] = lua_isnumber(zObj) ? lua_getnumber(zObj) : 0.0f;
+		visible = g_grim->_sputActor->canActorSeePoint(actor, point, &distance);
+	} else if (isSputActor(targetObj)) {
+		SputActor *target = getSputActor(targetObj);
+
+		if (!target)
+			return;
+
+		visible = g_grim->_sputActor->canActorSeeActor(actor, target, &distance);
+	} else if (lua_isnil(targetObj) && g_grim->_sputActor->getSelectedActor()) {
+		visible = g_grim->_sputActor->canActorSeeActor(g_grim->_sputActor->getSelectedActor(), actor, &distance);
+	} else {
+		return;
+	}
+
+	if (visible)
+		lua_pushnumber(distance);
+	else
+		lua_pushnil();
 }
 
 void Lua_V1::GetActorLoopingChores() {
-	warning("Lua_V1::GetActorLoopingChores(): not implemented");
+	lua_Object actorObj = lua_getparam(1);
+	lua_Object costumeObj = lua_getparam(2);
+	CostumeNode *node;
+
+	if (!isSputActor(actorObj)) {
+		lua_pushnil();
+		return;
+	}
+
+	SputActor *actor = getSputActor(actorObj);
+
+	if (!actor)
+		return;
+
+	if (!findCostumeInStack(costumeObj, actor->costumeStack, &node))
+		return;
+
+	if (!node) {
+		lua_pushnil();
+		return;
+	}
+
+	Cos *cos = g_grim->_sputCostume->getCos();
+	lua_Object choreTable = lua_createtable();
+	int numChores = cos->instCountChores(node->costumeInstance);
+	int loopingCount = 0;
+
+	for (int i = 0; i < numChores; i++) {
+		int status = cos->instChoreStatus(node->costumeInstance, i);
+
+		if ((status & kCosChoreStatePlaying) && (status & kCosChoreStateLooping)) {
+			lua_pushobject(choreTable);
+			lua_pushnumber((float)i);
+			lua_pushnumber((float)i);
+			lua_settable();
+			loopingCount++;
+		}
+	}
+
+	lua_pushobject(choreTable);
+	lua_pushstring("count");
+	lua_pushnumber((float)loopingCount);
+	lua_settable();
+
+	lua_pushobject(choreTable);
 }
 
 void Lua_V1::ScreenToWorld() {
@@ -1054,11 +1372,47 @@ void Lua_V1::ScreenToWorld() {
 }
 
 void Lua_V1::PrintMessage() {
-	warning("Lua_V1::PrintMessage(): not implemented");
+	lua_Object messageObj = lua_getparam(1);
+	Common::String message;
+
+	if (lua_isnil(messageObj))
+		message = "(nil)";
+	else if (lua_isstring(messageObj))
+		message = lua_getstring(messageObj);
+	else
+		return;
+
+	if (message.size() > 1023)
+		message = message.substr(0, 1023);
+
+	if (!message.empty() && message.lastChar() == '\n')
+		message.deleteLastChar();
+
+	debug("%s", message.c_str());
 }
 
 void Lua_V1::QueryDialog() {
-	warning("Lua_V1::QueryDialog(): not implemented");
+	lua_Object captionObj = lua_getparam(1);
+	lua_Object textObj = lua_getparam(2);
+	lua_Object thirdObj = lua_getparam(3);
+
+	if (lua_isstring(captionObj) && lua_isstring(textObj)) {
+		const char *caption = lua_getstring(captionObj);
+		const char *text = lua_getstring(textObj);
+		int result = queryDialog(caption, text, lua_isnil(thirdObj) ? 4 : 3) - 2;
+
+		if (result == 0) {
+			lua_pushnumber(0.0f);
+			return;
+		}
+
+		if (result != 5) {
+			lua_pushnumber(1.0f);
+			return;
+		}
+	}
+
+	lua_pushnil();
 }
 
 void Lua_V1::SpewShutdown() {
@@ -1066,63 +1420,340 @@ void Lua_V1::SpewShutdown() {
 }
 
 void Lua_V1::GetPhysicalBytes() {
-	warning("Lua_V1::GetPhysicalBytes(): not implemented");
+	lua_pushnumber((float)(int)kPhysicalRam);
 }
 
 void Lua_V1::SetMemoryUsage() {
-	warning("Lua_V1::SetMemoryUsage(): not implemented");
+	lua_Object limitObj = lua_getparam(1);
+	lua_Object purgeObj = lua_getparam(2);
+	int purgeAmount = luaFtolSse(lua_getnumber(purgeObj));
+	int limit = luaFtolSse(lua_getnumber(limitObj));
+
+	g_grim->_sputResource->setMemoryUsage(limit, purgeAmount);
 }
 
 void Lua_V1::GetCameraInterest() {
-	warning("Lua_V1::GetCameraInterest(): not implemented");
+	RoomCamera *camera = g_grim->_sputRender->getCamera();
+
+	if (!camera) {
+		warning("GetCameraInterest(): no camera");
+		lua_pushnil();
+		return;
+	}
+
+	lua_pushnumber(camera->interest[0]);
+	lua_pushnumber(camera->interest[1]);
+	lua_pushnumber(camera->interest[2]);
 }
 
 void Lua_V1::SnapToPlane() {
-	warning("Lua_V1::SnapToPlane(): not implemented");
+	lua_Object planeObj = lua_getparam(1);
+	lua_Object xObj = lua_getparam(2);
+	lua_Object yObj = lua_getparam(3);
+	lua_Object zObj = lua_getparam(4);
+	const char *planeName = lua_getstring(planeObj);
+	WalkPlane *plane = nullptr;
+
+	if (planeName)
+		plane = g_grim->_walkSystem->planeNamed(planeName);
+
+	if (!plane) {
+		lua_pushnil();
+		return;
+	}
+
+	float point[3];
+
+	point[0] = lua_getnumber(xObj);
+	point[1] = lua_getnumber(yObj);
+	point[2] = lua_getnumber(zObj);
+	plane->snapTo(point);
+
+	lua_pushnumber(point[0]);
+	lua_pushnumber(point[1]);
+	lua_pushnumber(point[2]);
 }
 
 void Lua_V1::FindLight() {
-	warning("Lua_V1::FindLight(): not implemented");
+	lua_Object nameObj = lua_getparam(1);
+
+	if (!lua_isstring(nameObj)) {
+		lua_pushnil();
+		return;
+	}
+
+	int index = g_grim->_sputRoom->findLightByName(nullptr, lua_getstring(nameObj));
+
+	if (index == -1)
+		lua_pushnil();
+	else
+		lua_pushnumber((float)index);
 }
 
 void Lua_V1::IsLightOn() {
-	warning("Lua_V1::IsLightOn(): not implemented");
+	lua_Object lightObj = lua_getparam(1);
+	int lightIndex;
+
+	if (!getLightIndex(lightObj, &lightIndex)) {
+		lua_pushnil();
+		return;
+	}
+
+	RoomLight *light = g_grim->_sputRoom->getLight(nullptr, lightIndex);
+
+	if (light && light->light.active)
+		lua_pushnumber(1.0f);
+	else
+		lua_pushnil();
 }
 
 void Lua_V1::SetLightType() {
-	warning("Lua_V1::SetLightType(): not implemented");
+	lua_Object lightObj = lua_getparam(1);
+	lua_Object typeObj = lua_getparam(2);
+	Room *room = g_grim->_sputRoom->getCurrentRoom();
+	int lightIndex;
+
+	if (!getLightIndex(lightObj, &lightIndex))
+		return;
+
+	RoomLight *light = g_grim->_sputRoom->getLight(nullptr, lightIndex);
+
+	if (!light || !lua_isstring(typeObj))
+		return;
+
+	const char *typeName = lua_getstring(typeObj);
+
+	if (strstr(typeName, "parallel") || strstr(typeName, "global"))
+		light->light.type = 1;
+	else if (strstr(typeName, "spot"))
+		light->light.type = 3;
+	else
+		light->light.type = 2;
+
+	for (uint s = 0; s < room->numSetups; s++) {
+		RdCamera *camera = room->setups[s].camera.prdCamera;
+
+		if (!camera || !camera->lights[lightIndex]) {
+			warning("SetLightType(): setup %u has no camera light %d", s, lightIndex);
+			continue;
+		}
+
+		camera->lights[lightIndex]->type = light->light.type;
+	}
 }
 
 void Lua_V1::GetLightType() {
-	warning("Lua_V1::GetLightType(): not implemented");
+	lua_Object lightObj = lua_getparam(1);
+	int lightIndex;
+
+	if (getLightIndex(lightObj, &lightIndex)) {
+		RoomLight *light = g_grim->_sputRoom->getLight(nullptr, lightIndex);
+
+		if (light) {
+			if (light->light.type == 1) {
+				lua_pushstring("parallel");
+				return;
+			}
+
+			if (light->light.type == 3) {
+				lua_pushstring("spot");
+				return;
+			}
+
+			if (light->light.type == 2) {
+				lua_pushstring("omni");
+				return;
+			}
+		}
+	}
+
+	lua_pushnil();
 }
 
 void Lua_V1::GetLightPosition() {
-	warning("Lua_V1::GetLightPosition(): not implemented");
+	lua_Object lightObj = lua_getparam(1);
+	int lightIndex;
+
+	if (getLightIndex(lightObj, &lightIndex) && g_grim->_sputRoom->getCurrentRoom()) {
+		RoomLight *light = g_grim->_sputRoom->getLight(nullptr, lightIndex);
+
+		if (light) {
+			lua_pushnumber(light->position[0]);
+			lua_pushnumber(light->position[1]);
+			lua_pushnumber(light->position[2]);
+			return;
+		}
+	}
+
+	lua_pushnil();
 }
 
 void Lua_V1::SetLightRotation() {
-	warning("Lua_V1::SetLightRotation(): not implemented");
+	lua_Object lightObj = lua_getparam(1);
+	lua_Object xObj = lua_getparam(2);
+	lua_Object yObj = lua_getparam(3);
+	lua_Object zObj = lua_getparam(4);
+	Room *room = g_grim->_sputRoom->getCurrentRoom();
+	int lightIndex;
+
+	if (!getLightIndex(lightObj, &lightIndex))
+		return;
+
+	RoomLight *light = g_grim->_sputRoom->getLight(nullptr, lightIndex);
+
+	if (!light)
+		return;
+
+	RdVector3 rotation;
+	RdVector3 direction;
+
+	rotation[0] = lua_isnumber(xObj) ? lua_getnumber(xObj) : 0.0f;
+	rotation[1] = lua_isnumber(yObj) ? lua_getnumber(yObj) : 0.0f;
+	rotation[2] = lua_isnumber(zObj) ? lua_getnumber(zObj) : 0.0f;
+
+	direction[0] = 0.0f;
+	direction[1] = 1.0f;
+	direction[2] = 0.0f;
+	g_grim->_rd->rotate3Acc(direction, rotation);
+
+	light->light.direction[0] = direction[0];
+	light->light.direction[1] = direction[1];
+	light->light.direction[2] = direction[2];
+
+	for (uint s = 0; s < room->numSetups; s++) {
+		RdCamera *camera = room->setups[s].camera.prdCamera;
+
+		if (!camera || !camera->lights[lightIndex]) {
+			warning("SetLightRotation(): setup %u has no camera light %d", s, lightIndex);
+			continue;
+		}
+
+		camera->lights[lightIndex]->direction[0] = direction[0];
+		camera->lights[lightIndex]->direction[1] = direction[1];
+		camera->lights[lightIndex]->direction[2] = direction[2];
+	}
 }
 
 void Lua_V1::GetLightRotation() {
-	warning("Lua_V1::GetLightRotation(): not implemented");
+	lua_Object lightObj = lua_getparam(1);
+	int lightIndex;
+
+	if (getLightIndex(lightObj, &lightIndex)) {
+		RoomLight *light = g_grim->_sputRoom->getLight(nullptr, lightIndex);
+
+		if (light) {
+			RdVector3 angles;
+
+			g_grim->_rd->extractAngles(light->light.direction, angles);
+			lua_pushnumber(angles[0]);
+			lua_pushnumber(angles[1]);
+			lua_pushnumber(angles[2]);
+			return;
+		}
+	}
+
+	lua_pushnil();
 }
 
 void Lua_V1::SetLightAngles() {
-	warning("Lua_V1::SetLightAngles(): not implemented");
+	lua_Object lightObj = lua_getparam(1);
+	lua_Object angleXObj = lua_getparam(2);
+	lua_Object angleYObj = lua_getparam(3);
+	int lightIndex;
+
+	if (!getLightIndex(lightObj, &lightIndex))
+		return;
+
+	RoomLight *light = g_grim->_sputRoom->getLight(nullptr, lightIndex);
+
+	if (!light)
+		return;
+
+	float angleX = lua_isnumber(angleXObj) ? lua_getnumber(angleXObj) : 0.0f;
+	float angleY = lua_isnumber(angleYObj) ? lua_getnumber(angleYObj) : 0.0f;
+
+	g_grim->_rd->_light.setAngles(&light->light, angleX, angleY);
 }
 
 void Lua_V1::GetLightAngles() {
-	warning("Lua_V1::GetLightAngles(): not implemented");
+	lua_Object lightObj = lua_getparam(1);
+	int lightIndex;
+
+	if (getLightIndex(lightObj, &lightIndex)) {
+		RoomLight *light = g_grim->_sputRoom->getLight(nullptr, lightIndex);
+
+		if (light) {
+			lua_pushnumber(light->light.angleX);
+			lua_pushnumber(light->light.angleY);
+			return;
+		}
+	}
+
+	lua_pushnil();
 }
 
 void Lua_V1::GetLightIntensity() {
-	warning("Lua_V1::GetLightIntensity(): not implemented");
+	lua_Object lightObj = lua_getparam(1);
+	int lightIndex;
+
+	lua_getparam(2);
+
+	if (getLightIndex(lightObj, &lightIndex)) {
+		RoomLight *light = g_grim->_sputRoom->getLight(nullptr, lightIndex);
+
+		if (light) {
+			lua_pushnumber(light->light.intensity);
+			return;
+		}
+	}
+
+	lua_pushnil();
 }
 
 void Lua_V1::PointLightAt() {
-	warning("Lua_V1::PointLightAt(): not implemented");
+	lua_Object lightObj = lua_getparam(1);
+	lua_Object targetObj = lua_getparam(2);
+	lua_Object yObj = lua_getparam(3);
+	lua_Object zObj = lua_getparam(4);
+	int lightIndex;
+
+	if (!getLightIndex(lightObj, &lightIndex))
+		return;
+
+	RoomLight *light = g_grim->_sputRoom->getLight(nullptr, lightIndex);
+
+	if (!light || (!isSputActor(targetObj) && !lua_isnumber(targetObj)))
+		return;
+
+	float x;
+	float y;
+	float z;
+
+	if (isSputActor(targetObj)) {
+		SputActor *actor = getSputActor(targetObj);
+
+		if (!actor)
+			return;
+
+		x = actor->actorPos[0];
+		y = actor->actorPos[1];
+		z = actor->actorPos[2];
+	} else {
+		x = lua_getnumber(targetObj);
+		y = lua_isnumber(yObj) ? lua_getnumber(yObj) : 0.0f;
+		z = lua_isnumber(zObj) ? lua_getnumber(zObj) : 0.0f;
+	}
+
+	RdVector3 direction;
+
+	direction[0] = x - light->position[0];
+	direction[1] = y - light->position[1];
+	direction[2] = z - light->position[2];
+	g_grim->_rd->normalize3Acc(direction);
+
+	light->light.direction[0] = direction[0];
+	light->light.direction[1] = direction[1];
+	light->light.direction[2] = direction[2];
 }
 
 void Lua_V1::ImStartRecording() {
@@ -1134,55 +1765,199 @@ void Lua_V1::ImStopRecording() {
 }
 
 void Lua_V1::ImGetMasterVol() {
-	warning("Lua_V1::ImGetMasterVol(): not implemented");
+	lua_pushnumber((float)g_grim->getImuse()->imSetGroupVol(0, -1));
 }
 
 void Lua_V1::ImSetMasterVol() {
-	warning("Lua_V1::ImSetMasterVol(): not implemented");
+	lua_Object volObj = lua_getparam(1);
+
+	if (lua_isnumber(volObj))
+		g_grim->getImuse()->imSetGroupVol(0, luaFtolSse(lua_getnumber(volObj)));
 }
 
 void Lua_V1::ImStartVoice() {
-	warning("Lua_V1::ImStartVoice(): not implemented");
+	lua_Object nameObj = lua_getparam(1);
+	lua_Object volumeObj = lua_getparam(2);
+	lua_Object panObj = lua_getparam(3);
+
+	if ((lua_isstring(nameObj) || lua_isnil(nameObj)) && lua_isnumber(volumeObj) && lua_isnumber(panObj)) {
+		int pan = luaFtolSse(lua_getnumber(panObj));
+		int volume = luaFtolSse(lua_getnumber(volumeObj));
+		const char *name = lua_getstring(nameObj);
+
+		if (!name) {
+			warning("Lua_V1::ImStartVoice(): no voice name");
+			return;
+		}
+
+		g_grim->getImuse()->soundStartVoiceStream(name, volume, pan);
+	}
 }
 
 void Lua_V1::ImStopVoice() {
-	warning("Lua_V1::ImStopVoice(): not implemented");
+	g_grim->getImuse()->soundStopVoiceStream();
 }
 
 void Lua_V1::ImSetAttribute() {
-	warning("Lua_V1::ImSetAttribute(): not implemented");
+	lua_Object attributeObj = lua_getparam(1);
+	lua_Object valueObj = lua_getparam(2);
+
+	if (lua_isnumber(attributeObj) && lua_isnumber(valueObj)) {
+		int value = luaFtolSse(lua_getnumber(valueObj));
+		int attribute = luaFtolSse(lua_getnumber(attributeObj));
+
+		lua_pushnumber((float)g_grim->getImuse()->imSetAttribute(attribute, value));
+	}
 }
 
 void Lua_V1::ImSetCuePoint() {
-	warning("Lua_V1::ImSetCuePoint(): not implemented");
+	lua_Object cueObj = lua_getparam(1);
+
+	if (lua_isnumber(cueObj))
+		g_grim->getImuse()->imSetCuePoint(luaFtolSse(lua_getnumber(cueObj)));
 }
 
 void Lua_V1::ImGetMemoryFootprint() {
-	warning("Lua_V1::ImGetMemoryFootprint(): not implemented");
+	lua_pushnumber((float)(uint)(g_grim->isRemastered() ? -1 : g_grim->getImuse()->iMUSEGetMemoryFootprint()));
 }
 
 void Lua_V1::ImGetSoundCacheSize() {
-	warning("Lua_V1::ImGetSoundCacheSize(): not implemented");
+	lua_pushnumber((float)(uint)(g_grim->isRemastered() ? -1 : g_grim->getImuse()->iMUSEGetSoundCacheSize()));
 }
 
 void Lua_V1::ActorShadow() {
-	warning("Lua_V1::ActorShadow(): not implemented");
+	lua_Object actorObj = lua_getparam(1);
+
+	if (isSputActor(actorObj)) {
+		SputActor *actor = getSputActor(actorObj);
+
+		if (actor && g_grim->_sputActor->actorHasShadow(actor)) {
+			lua_pushnumber(1.0f);
+			return;
+		}
+	}
+
+	lua_pushnil();
 }
 
 void Lua_V1::ActorDistToShadowPlane() {
-	warning("Lua_V1::ActorDistToShadowPlane(): not implemented");
+	lua_Object actorObj = lua_getparam(1);
+	lua_Object indexObj = lua_getparam(2);
+	int shadowIndex = luaFtolSse(lua_getnumber(indexObj));
+
+	if (!isSputActor(actorObj)) {
+		lua_pushnil();
+		return;
+	}
+
+	SputActor *actor = getSputActor(actorObj);
+
+	if (!actor) {
+		lua_pushnil();
+		return;
+	}
+
+	if (!actor->extra)
+		g_grim->_sputActor->allocateActorExtra(actor);
+
+	if (shadowIndex < 0 || shadowIndex >= (int)ARRAYSIZE(actor->extra->shadows)) {
+		warning("Lua_V1::ActorDistToShadowPlane(): invalid shadow index %d", shadowIndex);
+		lua_pushnil();
+		return;
+	}
+
+	Grim::ActorShadow *shadow = &actor->extra->shadows[shadowIndex];
+	float distance;
+
+	if (g_grim->isRemastered()) {
+		double sum = (double)shadow->normal[1] * actor->actorPos[1] + (double)shadow->normal[0] * actor->actorPos[0];
+
+		sum = sum + (double)shadow->normal[2] * actor->actorPos[2];
+		sum = sum + shadow->planeD;
+		distance = (float)sum;
+
+		if (distance < 0.0f)
+			distance = -distance;
+	} else {
+		double sum = (double)shadow->normal[0] * actor->actorPos[0] + (double)shadow->normal[2] * actor->actorPos[2];
+
+		sum = sum + (double)actor->actorPos[1] * shadow->normal[1];
+		sum = sum + shadow->planeD;
+
+		if (sum < 0.0)
+			sum = -sum;
+
+		distance = (float)sum;
+	}
+
+	lua_pushnumber(distance);
 }
 
 void Lua_V1::MarkDirtyRect() {
-	warning("Lua_V1::MarkDirtyRect(): not implemented");
+	lua_Object firstObj = lua_getparam(1);
+	lua_Object yObj = lua_getparam(2);
+	lua_Object widthObj = lua_getparam(3);
+	lua_Object heightObj = lua_getparam(4);
+
+	if (isSputActor(firstObj)) {
+		SputActor *actor = getSputActor(firstObj);
+
+		if (!actor)
+			return;
+
+		if (actor->onScreen && actor->drawnRect.width > 0 && actor->drawnRect.height > 0)
+			g_grim->_sputRender->markDirtyRect(&actor->drawnRect, 1);
+		else
+			lua_pushnil();
+	} else {
+		StdRect rect;
+
+		rect.x = luaFtolSse(lua_getnumber(firstObj));
+		rect.y = luaFtolSse(lua_getnumber(yObj));
+		rect.width = luaFtolSse(lua_getnumber(widthObj));
+		rect.height = luaFtolSse(lua_getnumber(heightObj));
+		g_grim->_sputRender->markDirtyRect(&rect, 1);
+	}
 }
 
 void Lua_V1::CacheRect() {
-	warning("Lua_V1::CacheRect(): not implemented");
+	lua_Object firstObj = lua_getparam(1);
+	lua_Object yObj = lua_getparam(2);
+	lua_Object widthObj = lua_getparam(3);
+	lua_Object heightObj = lua_getparam(4);
+	Grim::CacheRect *rect;
+
+	if (isSputActor(firstObj)) {
+		SputActor *actor = getSputActor(firstObj);
+
+		if (!actor || !actor->onScreen || actor->drawnRect.width <= 0 || actor->drawnRect.height <= 0) {
+			lua_pushnil();
+			return;
+		}
+
+		rect = g_grim->_sputRender->createCacheRect(actor->drawnRect.x, actor->drawnRect.y, actor->drawnRect.width, actor->drawnRect.height);
+	} else {
+		int x = luaFtolSse(lua_getnumber(firstObj));
+		int y = luaFtolSse(lua_getnumber(yObj));
+		int width = luaFtolSse(lua_getnumber(widthObj));
+		int height = luaFtolSse(lua_getnumber(heightObj));
+
+		rect = g_grim->_sputRender->createCacheRect(x, y, width, height);
+	}
+
+	lua_pushusertag((int32)(intptr)rect, MKTAG('P', 'O', 'I', 'N'));
 }
 
 void Lua_V1::RestoreCacheRect() {
-	warning("Lua_V1::RestoreCacheRect(): not implemented");
+	lua_Object rectObj = lua_getparam(1);
+	int32 handle = lua_getuserdata(rectObj);
+
+	if (handle) {
+		Grim::CacheRect *rect = g_grim->_sputRender->findCacheRect(handle);
+
+		if (rect && rect->magic == 0x11111111)
+			g_grim->_sputRender->restoreCacheRect();
+	}
 }
 
 void Lua_V1::ResReport() {
@@ -1190,27 +1965,93 @@ void Lua_V1::ResReport() {
 }
 
 void Lua_V1::HardwareAccelerated() {
-	warning("Lua_V1::HardwareAccelerated(): not implemented");
+	if (g_grim->_sputRender->is3DHardware())
+		lua_pushnumber(1.0f);
+	else
+		lua_pushnumber(0.0f);
 }
 
 void Lua_V1::IrisComplete() {
-	warning("Lua_V1::IrisComplete(): not implemented");
+	lua_pushnumber((float)(g_grim->_sputRender->irisComplete() != 0));
 }
 
 void Lua_V1::SaveScreen() {
-	warning("Lua_V1::SaveScreen(): not implemented");
+	lua_Object pathObj = lua_getparam(1);
+
+	if (!lua_isnil(pathObj) && lua_isstring(pathObj))
+		g_grim->_sputRender->saveScreen(lua_getstring(pathObj));
 }
 
 void Lua_V1::FindFileOnAnyCD() {
-	warning("Lua_V1::FindFileOnAnyCD(): not implemented");
+	lua_Object fileObj = lua_getparam(1);
+
+	if (!lua_isstring(fileObj) || !lua_getstring(fileObj)) {
+		lua_pushnil();
+		return;
+	}
+
+	Common::SeekableReadStream *file = g_grim->openFile(lua_getstring(fileObj));
+
+	if (file) {
+		delete file;
+		lua_pushnumber(1.0f);
+	} else {
+		lua_pushnil();
+	}
 }
 
 void Lua_V1::SetSoundParameters() {
-	warning("Lua_V1::SetSoundParameters(): not implemented");
+	lua_Object maxDistObj = lua_getparam(1);
+	lua_Object minVolObj = lua_getparam(2);
+	lua_Object maxVolObj = lua_getparam(3);
+	lua_Object panFactorObj = lua_getparam(4);
+	lua_Object maxRadiusObj = lua_getparam(5);
+	Room *room = g_grim->_sputRoom->getCurrentRoom();
+
+	if (!room)
+		return;
+
+	if (lua_isnil(maxDistObj) && lua_isnil(minVolObj) && lua_isnil(maxVolObj) && lua_isnil(panFactorObj) && lua_isnil(maxRadiusObj)) {
+		g_grim->_sputRoom->setSoundParameters(room, 8.0f, 20, 127, 1.5f, 0.80000001f);
+		return;
+	}
+
+	float maxDist;
+	byte minVol;
+	byte maxVol;
+	float panFactor;
+	float maxRadius;
+
+	g_grim->_sputRoom->getSoundParameters(room, &maxDist, &minVol, &maxVol, &panFactor, &maxRadius);
+
+	float newMaxRadius = lua_isnil(maxRadiusObj) ? maxRadius : lua_getnumber(maxRadiusObj);
+	float newPanFactor = lua_isnil(panFactorObj) ? panFactor : lua_getnumber(panFactorObj);
+	byte newMaxVol = lua_isnil(maxVolObj) ? maxVol : (byte)luaFtolSse(lua_getnumber(maxVolObj));
+	byte newMinVol = lua_isnil(minVolObj) ? minVol : (byte)luaFtolSse(lua_getnumber(minVolObj));
+	float newMaxDist = lua_isnil(maxDistObj) ? maxDist : lua_getnumber(maxDistObj);
+
+	g_grim->_sputRoom->setSoundParameters(room, newMaxDist, newMinVol, newMaxVol, newPanFactor, newMaxRadius);
 }
 
 void Lua_V1::GetSoundParameters() {
-	warning("Lua_V1::GetSoundParameters(): not implemented");
+	Room *room = g_grim->_sputRoom->getCurrentRoom();
+
+	if (!room)
+		return;
+
+	float maxDist;
+	byte minVol;
+	byte maxVol;
+	float panFactor;
+	float maxRadius;
+
+	g_grim->_sputRoom->getSoundParameters(room, &maxDist, &minVol, &maxVol, &panFactor, &maxRadius);
+
+	lua_pushnumber(maxDist);
+	lua_pushnumber((float)minVol);
+	lua_pushnumber((float)maxVol);
+	lua_pushnumber(panFactor);
+	lua_pushnumber(maxRadius);
 }
 
 void Lua_V1::TEST() {
@@ -1218,11 +2059,21 @@ void Lua_V1::TEST() {
 }
 
 void Lua_V1::GetTickCount() {
-	warning("Lua_V1::GetTickCount(): not implemented");
+	lua_pushnumber((float)g_system->getMillis());
 }
 
 void Lua_V1::ActorVoiceIs3D() {
-	warning("Lua_V1::ActorVoiceIs3D(): not implemented");
+	lua_Object actorObj = lua_getparam(1);
+	lua_Object flagObj = lua_getparam(2);
+	SputActor *actor = getSputActor(actorObj);
+
+	if (!actor)
+		return;
+
+	if (lua_isnil(flagObj))
+		actor->flags &= ~8;
+	else
+		actor->flags |= 8;
 }
 
 void Lua_V1::DumpMemoryLog() {
@@ -1230,19 +2081,32 @@ void Lua_V1::DumpMemoryLog() {
 }
 
 void Lua_V1::BuildCache() {
-	warning("Lua_V1::BuildCache(): not implemented");
+	g_grim->_walkSystem->buildCache();
 }
 
 void Lua_V1::RestoreCache() {
-	warning("Lua_V1::RestoreCache(): not implemented");
+	g_grim->_walkSystem->restoreCache();
 }
 
 void Lua_V1::SetWalkSystemFadeTime() {
-	warning("Lua_V1::SetWalkSystemFadeTime(): not implemented");
+	lua_Object timeObj = lua_getparam(1);
+
+	if (!lua_isnil(timeObj))
+		g_grim->_sputActor->setWalkSystemFadeTime(luaFtolSse(lua_getnumber(timeObj)));
 }
 
 void Lua_V1::GetKeyLength() {
-	warning("Lua_V1::GetKeyLength(): not implemented");
+	lua_Object keyObj = lua_getparam(1);
+	ResNode *node = g_grim->_res->resourceHandleFromSerialNumber(lua_getuserdata(keyObj));
+
+	if (!node || !node->handle) {
+		warning("Lua_V1::GetKeyLength(): bad keyframe reference");
+		return;
+	}
+
+	RdKeyframe *keyframe = static_cast<RdKeyframe *>(node->handle);
+
+	lua_pushnumber((float)((double)keyframe->numFrames / keyframe->fps * 1000.0));
 }
 
 void Lua_V1::GetSmushLength() {

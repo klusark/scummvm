@@ -68,6 +68,16 @@ int SputActorModule::canActorSeePoint(SputActor *actor, float *point, float *dis
 	flat[2] = 0.0f;
 	_rd->normalize3Acc(flat);
 
+	if (g_grim->isRemastered()) {
+		float *orient = getOrientMatrix(actor)[1];
+		float productY = (float)((double)orient[1] * flat[1]);
+		float productX = (float)((double)orient[0] * flat[0]);
+		float productZ = (float)((double)orient[2] * flat[2]);
+		float sum = (float)(((double)productY + productX) + productZ);
+
+		return (double)node->headLookRef <= (double)sum;
+	}
+
 	float xTerm = (float)((double)getOrientMatrix(actor)[1][0] * flat[0]);
 	float xyTerm = (float)((double)getOrientMatrix(actor)[1][1] * flat[1] + xTerm);
 	double dot = (double)getOrientMatrix(actor)[1][2] * flat[2] + xyTerm;

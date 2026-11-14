@@ -152,6 +152,9 @@ int SputRoom::parseLights() {
 							warning("SputRoom::parseLights(): light name %s is too long", name);
 
 						Common::strlcpy(light->name, name, 32);
+
+						if (_grim->isRemastered() && !scumm_stricmp(light->name, "flash"))
+							light->light.active = 0;
 					}
 				}
 

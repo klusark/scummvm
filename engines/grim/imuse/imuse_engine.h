@@ -304,6 +304,7 @@ private:
 	bool _hmiFxInitialized;
 	int _curHMIEffectIdInternal;
 	int _curEffectId;
+	bool _voiceEffectDisabled = false;
 	char _curEffectName[40];
 	bool _soundsLegacyLayout; // only while soundsSaveLoad runs
 	uint8 *_voiceSrcBuf;

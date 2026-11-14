@@ -100,6 +100,8 @@ void Lua_V1::ChangeTextObject() {
 			return;
 		}
 
+		SputTextEvent before = *event;
+
 		for (int i = 0; i < 2; i++) {
 			lua_Object paramObj = lua_getparam(paramId++);
 			if (!paramObj)
@@ -116,8 +118,18 @@ void Lua_V1::ChangeTextObject() {
 			}
 		}
 
-		if (g_grim->isRemastered())
-			sputText->invalidateHdText(event);
+		if (g_grim->isRemastered()) {
+			bool changed = strcmp(before.text, event->text) != 0 ||
+					memcmp(&before.params, &event->params, sizeof(before.params)) != 0 ||
+					before.x != event->x || before.y != event->y || before.clip.x != event->clip.x ||
+					before.clip.y != event->clip.y || before.clip.width != event->clip.width ||
+					before.clip.height != event->clip.height || before.duration != event->duration ||
+					before.actor != event->actor || before.flags != event->flags || before.serial != event->serial ||
+					before.firstLine != event->firstLine || before.lineCount != event->lineCount;
+
+			if (changed)
+				sputText->invalidateHdText(event);
+		}
 
 		lua_pushnumber((float)g_grim->_text->getStringWidth(&event->params, event->text));
 		lua_pushnumber((float)g_grim->_text->getStringHeight(&event->params, event->text));
@@ -133,7 +145,7 @@ void Lua_V1::SetTextSpeed() {
 	if (!lua_isnumber(speedObj))
 		return;
 
-	g_grim->_sputActor->setActorTextRate(luaFtol(lua_getnumber(speedObj)));
+	g_grim->_sputActor->setActorTextRate(luaFtolSse(lua_getnumber(speedObj)));
 }
 
 void Lua_V1::MakeTextObject() {
@@ -190,7 +202,7 @@ void Lua_V1::GetTextObjectDimensions() {
 
 	if (g_grim->isRemastered()) {
 		lua_Object modeObj = lua_getparam(2);
-		int mode = luaFtol(lua_getnumber(modeObj));
+		int mode = luaFtolSse(lua_getnumber(modeObj));
 		int x = 0;
 		int y = 0;
 		int width = 0;
@@ -268,7 +280,7 @@ void Lua_V1::GetTextCharPosition() {
 	lua_Object posObj = lua_getparam(2);
 	if (lua_isuserdata(textObj) && lua_tag(textObj) == MKTAG('T', 'X', 'E', 'T')) {
 		SputTextEvent *event = getTextEvent(textObj);
-		int pos = luaFtol(lua_getnumber(posObj));
+		int pos = luaFtolSse(lua_getnumber(posObj));
 		int width = 0;
 
 		if (!event)
@@ -301,38 +313,27 @@ void Lua_V1::BlastText() {
 	clip.width = g_grim->_blastText->getSurface()->width;
 	clip.height = g_grim->_blastText->getSurface()->height;
 
+	bool remastered = g_grim->isRemastered();
+
+	if (remastered)
+		warning("BlastText is not supported.");
+
 	lua_Object textObj = lua_getparam(1);
 	if (!lua_isstring(textObj)) {
 		return;
 	}
 
 	const char *msgId = lua_getstring(textObj);
-	bool remastered = g_grim->isRemastered();
 
-	if (remastered)
-		warning("BlastText is not supported.");
-
-	if (!remastered)
-		g_grim->_stdDisplay->vBufferLock(g_grim->_sputRender->drawBuffer());
+	g_grim->_stdDisplay->vBufferLock(g_grim->_sputRender->drawBuffer());
 
 	TextParams params = sputText->_blastTextParams;
 
-	if (!remastered)
-		params.surface->pixels = g_grim->_sputRender->drawBuffer()->pixels;
+	params.surface->pixels = g_grim->_sputRender->drawBuffer()->pixels;
 
 	params.clip = &clip;
 
 	lua_Object tableObj = lua_getparam(2);
-
-	if (remastered) {
-		int coords = 0;
-
-		if (tableObj && lua_istable(tableObj))
-			coords = sputText->getCoordsFromTable(tableObj);
-
-		params.coords = coords;
-		sputText->getHdClip(&clip, coords);
-	}
 
 	if (tableObj && lua_istable(tableObj))
 		sputText->getTextObjectParams(&params, tableObj, nullptr);
@@ -343,27 +344,29 @@ void Lua_V1::BlastText() {
 
 	sputText->drawTextEvent(event, 0);
 
-	if (!remastered)
-		g_grim->_stdDisplay->vBufferUnlock(g_grim->_sputRender->drawBuffer());
+	g_grim->_stdDisplay->vBufferUnlock(g_grim->_sputRender->drawBuffer());
 
 	sputText->killEvent(event);
 }
 
 void Lua_V1::SetOffscreenTextPos() {
-	if (g_grim->isRemastered())
-		return;
-
 	lua_Object xObj = lua_getparam(1);
 	lua_Object yObj = lua_getparam(2);
 	SputText *sputText = g_grim->_sputText;
 
+	if (g_grim->isRemastered()) {
+		sputText->_hdCenterValue = lua_isnumber(xObj) ? luaFtolSse(lua_getnumber(xObj)) : 960;
+		sputText->_hdOffscreenTextPos = lua_isnumber(yObj) ? luaFtolSse(lua_getnumber(yObj)) : 1012;
+		return;
+	}
+
 	if (lua_isnumber(xObj))
-		sputText->_centerValue = luaFtol(lua_getnumber(xObj));
+		sputText->_centerValue = luaFtolSse(lua_getnumber(xObj));
 	else
 		sputText->_centerValue = 320;
 
 	if (lua_isnumber(yObj))
-		sputText->_offscreenTextPos = luaFtol(lua_getnumber(yObj));
+		sputText->_offscreenTextPos = luaFtolSse(lua_getnumber(yObj));
 	else
 		sputText->_offscreenTextPos = 450;
 }
@@ -387,7 +390,7 @@ void Lua_V1::TextFileGetLine() {
 		return;
 	}
 
-	int pos = luaFtol(lua_getnumber(posObj));
+	int pos = luaFtolSse(lua_getnumber(posObj));
 
 	if (pos >= 0)
 		file->seek(pos, SEEK_SET);
@@ -608,6 +611,11 @@ void Lua_V1::InputDialog() {
 		return;
 	}
 
+	if (g_grim->isRemastered()) {
+		lua_pushstring("");
+		return;
+	}
+
 	Common::String str = lua_getstring(titleObj);
 	str += ": ";
 	str += lua_getstring(messageObj);
@@ -675,7 +683,7 @@ void Lua_V1::SetTranslationMode() {
 	if (lua_isnil(paramObj)) {
 		g_grim->_sputText->_translationMode = 0;
 	} else if (lua_isnumber(paramObj)) {
-		int mode = luaFtol(lua_getnumber(paramObj));
+		int mode = luaFtolSse(lua_getnumber(paramObj));
 
 		if (mode < 0)
 			mode = 0;

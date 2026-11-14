@@ -458,9 +458,9 @@ void Lua_Remastered::Load() {
 	if (!lua_isnumber(slotObj))
 		return;
 
-	bool loadLast = !lua_isnil(lastObj) && luaFtol(lua_getnumber(lastObj)) != 0;
+	bool loadLast = !lua_isnil(lastObj) && luaFtolSse(lua_getnumber(lastObj)) != 0;
 
-	g_grim->requestRemasteredLoad(luaFtol(lua_getnumber(slotObj)), loadLast);
+	g_grim->requestRemasteredLoad(luaFtolSse(lua_getnumber(slotObj)), loadLast);
 }
 
 void Lua_Remastered::Save() {
@@ -472,7 +472,7 @@ void Lua_Remastered::Save() {
 	if (!lua_isnumber(slotObj) || !lua_isstring(muralObj) || !lua_isnumber(setObj) || !lua_isstring(titleObj))
 		return;
 
-	g_grim->requestRemasteredSave(luaFtol(lua_getnumber(slotObj)), lua_getstring(muralObj), luaFtol(lua_getnumber(setObj)),
+	g_grim->requestRemasteredSave(luaFtolSse(lua_getnumber(slotObj)), lua_getstring(muralObj), luaFtolSse(lua_getnumber(setObj)),
 			lua_getstring(titleObj));
 }
 
@@ -489,7 +489,7 @@ void Lua_Remastered::Erase() {
 	if (!lua_isnumber(slotObj))
 		return;
 
-	g_grim->requestRemasteredErase(luaFtol(lua_getnumber(slotObj)));
+	g_grim->requestRemasteredErase(luaFtolSse(lua_getnumber(slotObj)));
 }
 
 void Lua_Remastered::GetSaveStatus() {
@@ -504,7 +504,7 @@ void Lua_Remastered::FindSaveGames() {
 
 	lua_Object list = lua_createtable();
 
-	for (uint i = 0; i < _foundSaves.size(); i++) {
+	for (uint i = 0; i < _foundSaves.size() && i < 32; i++) {
 		const SaveStore::SlotInfo &info = _foundSaves[i];
 
 		lua_pushobject(list);
@@ -527,12 +527,12 @@ void Lua_Remastered::FindSaveGames() {
 
 		Common::String timeDate;
 
-		if (getSaveSlotTime(info.slot, &timeDate) && !timeDate.empty()) {
-			lua_pushobject(entry);
-			lua_pushstring("timeDateString");
-			lua_pushstring(timeDate.c_str());
-			lua_settable();
-		}
+		getSaveSlotTime(info.slot, &timeDate);
+
+		lua_pushobject(entry);
+		lua_pushstring("timeDateString");
+		lua_pushstring(timeDate.c_str());
+		lua_settable();
 
 		lua_pushobject(entry);
 		lua_pushstring("mural_info");
@@ -558,10 +558,41 @@ void Lua_Remastered::GetFindSaveGameStatus() {
 }
 
 void Lua_Remastered::SetMouseSpeedScale() {
+	lua_Object valueObj = lua_getparam(1);
+
+	if (!lua_isnumber(valueObj))
+		return;
+
+	int raw = luaFtolSse(lua_getnumber(valueObj));
+	float x = (float)((double)raw / 127.0);
+	float t = 0.0f;
+	float scale = 0.0f;
+	bool low = false;
+
+	if (x < 0.0f) {
+		x = 0.0f;
+		low = true;
+	} else if (x == x) {
+		if (x > 1.0f) {
+			x = 1.0f;
+		} else {
+			low = !(0.5f < x);
+		}
+	}
+
+	if (low) {
+		t = (float)((double)x + x);
+		scale = (float)((double)t + (1.0 - (double)t) * 0.10000000149011612);
+	} else {
+		t = (float)(((double)x - 0.5) + ((double)x - 0.5));
+		scale = (float)((1.0 - (double)t) + (double)t * 3.0);
+	}
+
+	_mouseSpeedScale = scale >= 0.0f ? scale : 0.0f;
 }
 
 void Lua_Remastered::SetKeyMappingMode() {
-	int slot = luaFtol(lua_getnumber(lua_getparam(1)));
+	int slot = luaFtolSse(lua_getnumber(lua_getparam(1)));
 
 	g_grim->getStdControl()->setKeyMappingMode(slot);
 }
@@ -571,7 +602,7 @@ void Lua_Remastered::ResetKeyMappingToDefault() {
 }
 
 void Lua_Remastered::GetRemappedKeyName() {
-	int slot = luaFtol(lua_getnumber(lua_getparam(1)));
+	int slot = luaFtolSse(lua_getnumber(lua_getparam(1)));
 
 	if (slot < 0 || slot >= StdControl::kNumRemappedKeys) {
 		warning("Lua_Remastered::GetRemappedKeyName(): slot %d out of range", slot);
@@ -583,7 +614,7 @@ void Lua_Remastered::GetRemappedKeyName() {
 }
 
 void Lua_Remastered::GetRemappedKeyHint() {
-	int slot = luaFtol(lua_getnumber(lua_getparam(1)));
+	int slot = luaFtolSse(lua_getnumber(lua_getparam(1)));
 
 	if (slot < 0 || slot >= StdControl::kNumRemappedKeys) {
 		warning("Lua_Remastered::GetRemappedKeyHint(): slot %d out of range", slot);
@@ -667,30 +698,25 @@ void Lua_Remastered::OverlayCreate() {
 	lua_Object yObj = lua_getparam(3);
 	lua_Object propsObj = lua_getparam(4);
 
-	if (!lua_isstring(nameObj)) {
-		lua_pushnumber(-1.0f);
-		return;
-	}
-
 	OverlayProps props;
-	int x = lua_isnumber(xObj) ? luaFtol(lua_getnumber(xObj)) : 0;
-	int y = lua_isnumber(yObj) ? luaFtol(lua_getnumber(yObj)) : 0;
+	int x = lua_isnumber(xObj) ? luaFtolSse(lua_getnumber(xObj)) : 0;
+	int y = lua_isnumber(yObj) ? luaFtolSse(lua_getnumber(yObj)) : 0;
 
 	if (lua_istable(propsObj)) {
 		lua_Object cacheObj = lua_getfield(propsObj, "cache");
 
 		if (lua_isnumber(cacheObj))
-			props.cache = luaFtol(lua_getnumber(cacheObj));
+			props.cache = luaFtolSse(lua_getnumber(cacheObj));
 
 		lua_Object layerObj = lua_getfield(propsObj, "layer");
 
 		if (lua_isnumber(layerObj))
-			props.layer = luaFtol(lua_getnumber(layerObj));
+			props.layer = luaFtolSse(lua_getnumber(layerObj));
 
 		lua_Object coordsObj = lua_getfield(propsObj, "coords");
 
 		if (lua_isnumber(coordsObj))
-			props.coords = luaFtol(lua_getnumber(coordsObj));
+			props.coords = luaFtolSse(lua_getnumber(coordsObj));
 
 		lua_Object clearObj = lua_getfield(propsObj, "clear_buffer");
 
@@ -700,17 +726,22 @@ void Lua_Remastered::OverlayCreate() {
 		lua_Object mirrorObj = lua_getfield(propsObj, "mirrormode");
 
 		if (lua_isnumber(mirrorObj))
-			props.mirror = luaFtol(lua_getnumber(mirrorObj));
+			props.mirror = luaFtolSse(lua_getnumber(mirrorObj));
 
 		lua_Object widthObj = lua_getfield(propsObj, "width");
 
 		if (lua_isnumber(widthObj))
-			props.width = luaFtol(lua_getnumber(widthObj));
+			props.width = luaFtolSse(lua_getnumber(widthObj));
 
 		lua_Object heightObj = lua_getfield(propsObj, "height");
 
 		if (lua_isnumber(heightObj))
-			props.height = luaFtol(lua_getnumber(heightObj));
+			props.height = luaFtolSse(lua_getnumber(heightObj));
+	}
+
+	if (!lua_isstring(nameObj)) {
+		lua_pushnumber(-1.0f);
+		return;
 	}
 
 	int handle = g_grim->getHdCanvas()->getOverlays()->create(lua_getstring(nameObj), x, y, props);
@@ -723,15 +754,15 @@ void Lua_Remastered::OverlayMove() {
 	lua_Object xObj = lua_getparam(2);
 	lua_Object yObj = lua_getparam(3);
 
-	g_grim->getHdCanvas()->getOverlays()->move(luaFtol(lua_getnumber(handleObj)), luaFtol(lua_getnumber(xObj)),
-			luaFtol(lua_getnumber(yObj)));
+	g_grim->getHdCanvas()->getOverlays()->move(luaFtolSse(lua_getnumber(handleObj)), luaFtolSse(lua_getnumber(xObj)),
+			luaFtolSse(lua_getnumber(yObj)));
 }
 
 void Lua_Remastered::OverlaySetLayer() {
 	lua_Object handleObj = lua_getparam(1);
 	lua_Object layerObj = lua_getparam(2);
 
-	g_grim->getHdCanvas()->getOverlays()->setLayer(luaFtol(lua_getnumber(handleObj)), luaFtol(lua_getnumber(layerObj)));
+	g_grim->getHdCanvas()->getOverlays()->setLayer(luaFtolSse(lua_getnumber(handleObj)), luaFtolSse(lua_getnumber(layerObj)));
 }
 
 void Lua_Remastered::OverlayDestroy() {
@@ -740,7 +771,7 @@ void Lua_Remastered::OverlayDestroy() {
 	if (lua_isnil(handleObj))
 		return;
 
-	g_grim->getHdCanvas()->getOverlays()->destroy(luaFtol(lua_getnumber(handleObj)));
+	g_grim->getHdCanvas()->getOverlays()->destroy(luaFtolSse(lua_getnumber(handleObj)));
 }
 
 void Lua_Remastered::OverlayDimensions() {
@@ -748,7 +779,7 @@ void Lua_Remastered::OverlayDimensions() {
 	int width = 0;
 	int height = 0;
 
-	g_grim->getHdCanvas()->getOverlays()->getDimensions(luaFtol(lua_getnumber(handleObj)), &width, &height);
+	g_grim->getHdCanvas()->getOverlays()->getDimensions(luaFtolSse(lua_getnumber(handleObj)), &width, &height);
 
 	lua_pushnumber((float)width);
 	lua_pushnumber((float)height);
@@ -763,7 +794,7 @@ void Lua_Remastered::OverlayFade() {
 	lua_Object typeObj = lua_getparam(2);
 	lua_Object valueObj = lua_getparam(3);
 
-	g_grim->getHdCanvas()->getOverlays()->fade(luaFtol(lua_getnumber(handleObj)), luaFtol(lua_getnumber(typeObj)), true,
+	g_grim->getHdCanvas()->getOverlays()->fade(luaFtolSse(lua_getnumber(handleObj)), luaFtolSse(lua_getnumber(typeObj)), true,
 			lua_getnumber(valueObj));
 }
 
@@ -781,10 +812,10 @@ void Lua_Remastered::OverlayShowLoadSpinner() {
 	lua_Object showObj = lua_getparam(1);
 	lua_Object xObj = lua_getparam(2);
 	lua_Object yObj = lua_getparam(3);
-	int x = lua_isnumber(xObj) ? luaFtol(lua_getnumber(xObj)) : 0;
-	int y = lua_isnumber(yObj) ? luaFtol(lua_getnumber(yObj)) : 0;
+	int x = lua_isnumber(xObj) ? luaFtolSse(lua_getnumber(xObj)) : 0;
+	int y = lua_isnumber(yObj) ? luaFtolSse(lua_getnumber(yObj)) : 0;
 
-	g_grim->getHdCanvas()->getOverlays()->showLoadSpinner(luaFtol(lua_getnumber(showObj)) != 0, x, y);
+	g_grim->getHdCanvas()->getOverlays()->showLoadSpinner(luaFtolSse(lua_getnumber(showObj)) != 0, x, y);
 }
 
 void Lua_Remastered::WidescreenCorrectionFactor() {
@@ -811,7 +842,7 @@ void Lua_Remastered::PlayCurrentCommentary() {
 void Lua_Remastered::EnableCommentary() {
 	lua_Object enableObj = lua_getparam(1);
 
-	if (lua_isnumber(enableObj) && luaFtol(lua_getnumber(enableObj)) == 0)
+	if (lua_isnumber(enableObj) && luaFtolSse(lua_getnumber(enableObj)) == 0)
 		g_grim->getCommentary()->stopImmediately();
 }
 

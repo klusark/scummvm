@@ -80,10 +80,10 @@ int SputMouse::startup() {
 	props.cache = OverlayManager::kCachePersistent;
 	props.layer = 0;
 	props.coords = kOverlayCoordsGlobal;
-	_mainHandle = overlays->create(_noImage, 0, 0, props);
+	_mainHandle = overlays->create(_noImage, 0, 0, props, true);
 	_wave = 0;
 	_waveEnd = -1;
-	_animHandle = overlays->create(_noImage, 0, 0, props);
+	_animHandle = overlays->create(_noImage, 0, 0, props, true);
 
 	return 0;
 }

@@ -81,7 +81,7 @@ public:
 
 	void reset();
 
-	int create(const Common::String &name, int x, int y, const OverlayProps &props);
+	int create(const Common::String &name, int x, int y, const OverlayProps &props, bool noImage = false);
 	void move(int handle, int x, int y);
 	void setLayer(int handle, int layer);
 	void setHidden(int handle, int hidden);

@@ -41,9 +41,10 @@ void RenderDroid::RasterModule::startup() {
 		else
 			value = (float)product;
 
-		if (i == 0)
-			memcpy(&_oneOverNFixed[2047], &value, sizeof(float));
-		else
+		if (i == 0) {
+			if (!_rd->_remastered)
+				memcpy(&_oneOverNFixed[2047], &value, sizeof(float));
+		} else
 			_oneOverNFixedF[i - 1] = value;
 	}
 }

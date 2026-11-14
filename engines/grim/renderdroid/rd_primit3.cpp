@@ -154,7 +154,7 @@ int RenderDroid::Primit3Module::noClipFace(int geometryMode, int lightingMode, i
 			if (src->addedIntensities)
 				intensity = intensity + src->addedIntensities[i];
 
-			if (intensity < 0.0)
+			if (_rd->_remastered ? !(intensity >= 0.0) : (intensity < 0.0))
 				intensity = 0.0;
 			else if (intensity > 1.0)
 				intensity = 1.0;
@@ -234,7 +234,7 @@ int RenderDroid::Primit3Module::clipFace(RdClipFrustum *clip, int geometryMode, 
 			if (src->addedIntensities)
 				intensity = intensity + src->addedIntensities[i];
 
-			if (intensity < 0.0)
+			if (_rd->_remastered ? !(intensity >= 0.0) : (intensity < 0.0))
 				intensity = 0.0;
 			else if (intensity > 1.0)
 				intensity = 1.0;
@@ -368,7 +368,13 @@ RdProcFace *RenderDroid::Primit3Module::drawPolygon(RdVector3 *verts, int numVer
 	edge1[2] = transformed[2][2] - transformed[1][2];
 	_rd->cross3(normal, edge0, edge1);
 
-	procFace->backface = (double)normal[0] * centerX + (double)normal[1] * centerY + (double)normal[2] * centerZ > 0.0;
+	if (_rd->_remastered) {
+		float facing = (float)(((double)normal[0] * centerX + (double)normal[1] * centerY) + (double)normal[2] * centerZ);
+
+		procFace->backface = facing > 0.0f;
+	} else {
+		procFace->backface = (double)normal[0] * centerX + (double)normal[1] * centerY + (double)normal[2] * centerZ > 0.0;
+	}
 	_rd->_cache.addProcFace(0, numClipped, 1);
 
 	return procFace;

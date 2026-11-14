@@ -49,6 +49,7 @@ struct SputTextEvent;
 struct StdVBuffer;
 
 int luaFtol(float value);
+int luaFtolSse(float value);
 
 class Lua_V1 : public LuaBase, public SputControlCallback {
 	friend class LegacyImporter;
@@ -482,6 +483,9 @@ private:
 	bool hasActorExtra(SputActor *actor, const char *opcode);
 	lua_Object makeVectorTable(const float *vector);
 	bool findCostumeInStack(lua_Object obj, CostumeNode *stack, CostumeNode **found);
+	int queryDialog(const char *caption, const char *text, int type);
+	bool getLightIndex(lua_Object obj, int *index);
+	void walkActorVectorRemastered();
 	bool isImage(lua_Object obj);
 	int findImage(lua_Object obj);
 	void pushImage(StdVBuffer *image);
@@ -500,6 +504,8 @@ private:
 	int _nextImageHandle;
 	int _nextObjectStateHandle;
 	float _resolutionScaling;
+	float _walkVectorMatrix[12] = {};
+	float _walkVectorYaw = 0.0f;
 	uint32 _advancedLighting;
 	int _controlEventCount;
 	int _lastInputMode;

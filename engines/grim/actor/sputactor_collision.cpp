@@ -914,16 +914,16 @@ int SputActorModule::findSlidePoint(float *otherCenter, float *prevCenter, float
 	double firstDeltaY = (double)center[1] - firstPoint[1];
 	double firstDeltaX = (double)center[0] - firstPoint[0];
 	double firstDeltaZ = (double)center[2] - firstPoint[2];
-	float secondDeltaY = (float)((double)center[1] - secondPoint[1]);
+	double secondDeltaY = (double)center[1] - secondPoint[1];
 	double secondDeltaX = (double)center[0] - secondPoint[0];
-	float secondDeltaZ = (float)((double)center[2] - secondPoint[2]);
+	double secondDeltaZ = (double)center[2] - secondPoint[2];
 	float firstSquareX = (float)(firstDeltaX * firstDeltaX);
 	float firstSquareY = (float)(firstDeltaY * firstDeltaY);
 	float firstSquareZ = (float)(firstDeltaZ * firstDeltaZ);
 	float firstDistance = (float)sqrt(((double)firstSquareX + firstSquareY) + firstSquareZ);
 	float secondSquareX = (float)(secondDeltaX * secondDeltaX);
-	float secondSquareY = (float)((double)secondDeltaY * secondDeltaY);
-	float secondSquareZ = (float)((double)secondDeltaZ * secondDeltaZ);
+	float secondSquareY = (float)(secondDeltaY * secondDeltaY);
+	float secondSquareZ = (float)(secondDeltaZ * secondDeltaZ);
 	float secondDistance = (float)sqrt(((double)secondSquareX + secondSquareY) + secondSquareZ);
 	float *chosen = firstDistance < secondDistance ? firstPoint : secondPoint;
 

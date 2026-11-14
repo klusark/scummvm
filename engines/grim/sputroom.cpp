@@ -497,7 +497,7 @@ void SputRoom::newRoomEntry(Room *room) {
 	room->colormapName[0] = 0;
 	Common::strlcpy(room->colormapName, "<none>", 32);
 	Common::strlcpy(room->name, "", 32);
-	room->structSize = (_grim->getGameFlags() & ADGF_DEMO) ? 6856 : 6920;
+	room->structSize = _grim->isRemastered() ? 161228 : ((_grim->getGameFlags() & ADGF_DEMO) ? 6856 : 6920);
 }
 
 int SputRoom::loadRoomEntry(const char *fileName, Room *room) {
@@ -653,6 +653,9 @@ int SputRoom::setupSoundPosition(RoomSound *sound) {
 
 	double distance = (double)_rd->normalize3QuickAcc(vec) - sound->radius;
 
+	if (_grim->isRemastered())
+		distance = (float)distance;
+
 	if (distance >= 0.0) {
 		uint minVol = (uint)sound->minVol;
 		uint maxVol = (uint)sound->maxVol;
@@ -675,6 +678,15 @@ int SputRoom::setupSoundPosition(RoomSound *sound) {
 	double pan = ((double)setup->camera.posMatrix[0][0] * vec[0] + (double)setup->camera.posMatrix[0][1] * vec[1] +
 			(double)setup->camera.posMatrix[0][2] * vec[2]) * room->panFactor;
 
+	if (_grim->isRemastered()) {
+		float productY = (float)((double)setup->camera.posMatrix[0][1] * vec[1]);
+		float productX = (float)((double)setup->camera.posMatrix[0][0] * vec[0]);
+		float productZ = (float)((double)setup->camera.posMatrix[0][2] * vec[2]);
+		float sum = (float)(((double)productY + productX) + productZ);
+
+		pan = (float)((double)sum * room->panFactor);
+	}
+
 	if (!(pan >= -1.0))
 		pan = -1.0;
 	else if (pan > 1.0)
@@ -691,7 +703,7 @@ int SputRoom::setupSoundPosition(RoomSound *sound) {
 }
 
 int SputRoom::loadResources(Room *room) {
-	room->structSize = (_grim->getGameFlags() & ADGF_DEMO) ? 6856 : 6920;
+	room->structSize = _grim->isRemastered() ? 161228 : ((_grim->getGameFlags() & ADGF_DEMO) ? 6856 : 6920);
 
 	g_grim->getImuse()->soundsFloodMusicBuffer();
 
@@ -1018,7 +1030,8 @@ void SputRoom::addActor(const char *roomName, SputActor *actor) {
 	if (roomName && !strcmp(roomName, actor->curSetName))
 		return;
 
-	removeActor(actor->curSetName, actor);
+	if (!_grim->isRemastered() || actor->curSetName[0])
+		removeActor(actor->curSetName, actor);
 
 	if (roomName) {
 		RoomActorNode *actorNode = findActorNode(roomName);
