@@ -879,7 +879,7 @@ int GrimEngine::chooseHardwareBackend() {
 
 int GrimEngine::grimStartup() {
 	_hardwareBackends = getHardwareBackends();
-	_useHardware = ConfMan.getBool("grim_3d_acceleration") ? 1 : 0;
+	_useHardware = (!isRemastered() && ConfMan.getBool("grim_3d_acceleration")) ? 1 : 0;
 	_remasterFixes = (!(_gameFlags & ADGF_DEMO) && (isRemastered() || ConfMan.getBool("grim_remaster_bugfixes"))) ? 1 : 0;
 
 	_stdDisplay->startup();
@@ -943,41 +943,58 @@ int GrimEngine::grimStartup() {
 	return 1;
 }
 
-void GrimEngine::initLanguage() {
-	int language = kLanguageEnglish;
-
-	if (ConfMan.hasKey("grim_language")) {
-		language = ConfMan.getInt("grim_language");
-	} else {
-		Common::Language launcherLanguage = _gameLanguage;
-
-		if (ConfMan.hasKey("language"))
-			launcherLanguage = Common::parseLanguage(ConfMan.get("language"));
-
-		switch (launcherLanguage) {
-		case Common::DE_DEU:
-			language = kLanguageGerman;
-			break;
-		case Common::ES_ESP:
-			language = kLanguageSpanish;
-			break;
-		case Common::FR_FRA:
-			language = kLanguageFrench;
-			break;
-		case Common::IT_ITA:
-			language = kLanguageItalian;
-			break;
-		case Common::PT_BRA:
-			language = kLanguagePortuguese;
-			break;
-		default:
-			language = kLanguageEnglish;
-			break;
-		}
+int GrimEngine::getLanguageIndex(Common::Language language) {
+	switch (language) {
+	case Common::EN_ANY:
+	case Common::EN_GRB:
+	case Common::EN_USA:
+		return kLanguageEnglish;
+	case Common::DE_DEU:
+		return kLanguageGerman;
+	case Common::ES_ESP:
+		return kLanguageSpanish;
+	case Common::FR_FRA:
+		return kLanguageFrench;
+	case Common::IT_ITA:
+		return kLanguageItalian;
+	case Common::PT_BRA:
+		return kLanguagePortuguese;
+	default:
+		return -1;
 	}
+}
 
-	if (language < 0 || language >= kNumLanguages) {
-		warning("GrimEngine::initLanguage(): invalid language %d, using English", language);
+Common::Language GrimEngine::getLanguageFromIndex(int index) {
+	switch (index) {
+	case kLanguageEnglish:
+		return Common::EN_ANY;
+	case kLanguageGerman:
+		return Common::DE_DEU;
+	case kLanguageSpanish:
+		return Common::ES_ESP;
+	case kLanguageFrench:
+		return Common::FR_FRA;
+	case kLanguageItalian:
+		return Common::IT_ITA;
+	case kLanguagePortuguese:
+		return Common::PT_BRA;
+	default:
+		return Common::UNK_LANG;
+	}
+}
+
+void GrimEngine::initLanguage() {
+	Common::Language launcherLanguage = _gameLanguage;
+
+	if (ConfMan.hasKey("language"))
+		launcherLanguage = Common::parseLanguage(ConfMan.get("language"));
+
+	int language = getLanguageIndex(launcherLanguage);
+
+	if (language < 0) {
+		if (launcherLanguage != Common::UNK_LANG)
+			warning("GrimEngine::initLanguage(): the language '%s' is not supported, using English", Common::getLanguageCode(launcherLanguage));
+
 		language = kLanguageEnglish;
 	}
 

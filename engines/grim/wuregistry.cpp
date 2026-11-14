@@ -23,6 +23,7 @@
 
 #include "common/config-manager.h"
 #include "common/endian.h"
+#include "common/language.h"
 #include "common/system.h"
 #include "common/textconsole.h"
 #include "common/util.h"
@@ -131,6 +132,7 @@ enum {
 	kMapFloat,
 	kMapOptionalInt,
 	kMapOptionalVolume,
+	kMapLanguage,
 	kMapLastSet
 };
 
@@ -161,7 +163,7 @@ static const WuRegistryMapping mappings[] = {
 	{ "Transcript", "transcript", kMapString },
 	{ "DirectorsCommentary", "directors_commentary", kMapOptionalInt },
 	{ "Widescreen", "widescreen", kMapOptionalInt },
-	{ "Language", "grim_language", kMapOptionalInt },
+	{ "Language", "language", kMapLanguage },
 	{ "ResolutionScaling", "resolution_scaling", kMapOptionalInt },
 	{ "MouseSpeed", "mouse_speed", kMapOptionalInt },
 	{ "AdvancedLighting", "advanced_lighting", kMapOptionalInt },
@@ -232,7 +234,7 @@ static bool isStringKind(int kind) {
 }
 
 static uint getMappedType(const WuRegistryMapping *mapping) {
-	if (mapping->kind == kMapFloat || mapping->kind == kMapOptionalInt || mapping->kind == kMapOptionalVolume)
+	if (mapping->kind == kMapFloat || mapping->kind == kMapOptionalInt || mapping->kind == kMapOptionalVolume || mapping->kind == kMapLanguage)
 		return ConfMan.hasKey(mapping->key) ? WuRegistry::kValueBinary : 0;
 
 	if (isStringKind(mapping->kind))
@@ -265,6 +267,13 @@ static bool readMappedInt(const WuRegistryMapping *mapping, int *value) {
 	case kMapBool:
 		*value = ConfMan.getBool(mapping->key) ? 1 : 0;
 		return *value != 0;
+	case kMapLanguage:
+		*value = GrimEngine::getLanguageIndex(Common::parseLanguage(ConfMan.get(mapping->key)));
+
+		if (*value < 0)
+			*value = GrimEngine::kLanguageEnglish;
+
+		return true;
 	default:
 		break;
 	}
@@ -342,6 +351,13 @@ static void writeMappedInt(const WuRegistryMapping *mapping, int value) {
 		break;
 	case kMapBool:
 		ConfMan.setBool(mapping->key, value != 0);
+		break;
+	case kMapLanguage:
+		if (GrimEngine::getLanguageFromIndex(value) == Common::UNK_LANG)
+			warning("WuRegistry: the language %d is not supported, ignored", value);
+		else
+			ConfMan.set(mapping->key, Common::getLanguageCode(GrimEngine::getLanguageFromIndex(value)));
+
 		break;
 	default:
 		writeMappedText(mapping, Common::String::format("%d", value).c_str());

@@ -176,6 +176,8 @@ public:
 	void setLanguage(int language);
 	const char *getLanguageCode() const;
 	static int getLanguageCount() { return kNumLanguages; }
+	static int getLanguageIndex(Common::Language language);
+	static Common::Language getLanguageFromIndex(int index);
 	int getRenderingMode() const;
 	void setRenderingMode(int mode);
 

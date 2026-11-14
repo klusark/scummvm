@@ -47,6 +47,15 @@ static const DebugChannelDef debugFlagList[] = {
 
 namespace Grim {
 
+static const Common::Language remasteredLanguages[] = {
+	Common::EN_ANY,
+	Common::DE_DEU,
+	Common::ES_ESP,
+	Common::FR_FRA,
+	Common::IT_ITA,
+	Common::PT_BRA
+};
+
 static const PlainGameDescriptor grimGames[] = {
 	{"grim", "Grim Fandango"},
 	{"monkey4", "Escape From Monkey Island"},
@@ -90,6 +99,13 @@ public:
 
 		if (gameID == GType_MONKEY4 && adGame.desc->language == Common::Language::ZH_TWN) {
 			game.appendGUIOptions(Common::getGameGUIOptionsDescriptionLanguage(Common::ZH_TWN));
+		}
+
+		if (gameID == GType_GRIM && (adGame.desc->flags & ADGF_REMASTERED)) {
+			game.language = Common::EN_ANY;
+
+			for (uint i = 0; i < ARRAYSIZE(remasteredLanguages); i++)
+				game.appendGUIOptions(Common::getGameGUIOptionsDescriptionLanguage(remasteredLanguages[i]));
 		}
 
 		return game;
