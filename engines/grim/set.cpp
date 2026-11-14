@@ -1014,6 +1014,10 @@ void Set::setLightEnabled(const char *light, bool enabled) {
 }
 
 void Set::setLightEnabled(int light, bool enabled) {
+	if (light < 0 || light >= _numLights) {
+		warning("Set::setLightEnabled: light %d out of range (%d lights)", light, _numLights);
+		return;
+	}
 	Light &l = _lights[light];
 	l._enabled = enabled;
 }
