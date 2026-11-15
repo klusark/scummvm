@@ -22,6 +22,7 @@
 #include "common/system.h"
 #include "common/textconsole.h"
 
+#include "engines/grim/debug.h"
 #include "engines/grim/emi/actor/actor.h"
 #include "engines/grim/emi/scene/camera.h"
 #include "engines/grim/emi/graphics/cdrawcontext.h"
@@ -302,9 +303,7 @@ void Lua_V2::UnimplementedFunctionPs2() {
 		name = "";
 	}
 
-	logMessage(kConsoleWarning, "UNIMPLEMENTED FUNCTION: %s\n", name);
-
-	lua_printstack(nullptr);
+	Debug::debugImpl(Debug::Scripts, "UNIMPLEMENTED FUNCTION: %s\n%s", name, lua_getstacktext().c_str());
 }
 
 void Lua_V2::ObsoleteFunctionPs2() {
@@ -317,9 +316,7 @@ void Lua_V2::ObsoleteFunctionPs2() {
 		name = "";
 	}
 
-	logMessage(kConsoleWarning, "OBSOLETE FUNCTION: %s\n", name);
-
-	lua_printstack(nullptr);
+	Debug::debugImpl(Debug::Scripts, "OBSOLETE FUNCTION: %s\n%s", name, lua_getstacktext().c_str());
 }
 
 uint Lua_V2::getClockUniqueUint() {

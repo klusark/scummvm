@@ -380,7 +380,7 @@ lua_Function lua_stackedfunction(int32 level) {
 	return LUA_NOOBJECT;
 }
 
-void lua_printstack(Common::WriteStream *f) {
+Common::String lua_getstacktext() {
 	int32 level = 1;
 	lua_Object func;
 	Common::String text;
@@ -420,6 +420,12 @@ void lua_printstack(Common::WriteStream *f) {
 
 		text += "\n";
 	}
+
+	return text;
+}
+
+void lua_printstack(Common::WriteStream *f) {
+	Common::String text = lua_getstacktext();
 
 	if (f)
 		f->writeString(text);

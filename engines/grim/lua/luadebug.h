@@ -8,6 +8,8 @@
 #define GRIM_LUADEBUG_H
 
 
+#include "common/str.h"
+
 #include "engines/grim/lua/lua.h"
 
 namespace Common {
@@ -24,6 +26,7 @@ typedef void (*lua_CHFunction)(lua_Function func, const char *file, int32 line);
 lua_Function lua_stackedfunction(int32 level);
 void lua_funcinfo(lua_Object func, const char **filename, int32 *linedefined);
 int32 lua_currentline(lua_Function func);
+Common::String lua_getstacktext();
 void lua_printstack(Common::WriteStream *f);
 const char *lua_getobjname(lua_Object o, const char **name);
 
