@@ -369,6 +369,7 @@ struct RdThing {
 	RdPuppet *puppet;
 	int jointsLocked;
 	int jointsFrame;
+	int jointsBuilt;
 	RdMatrix34 *jointMatrices;
 	RdVector3 *jointPyr;
 	int *abJointAmputate;
@@ -484,6 +485,7 @@ public:
 	int advanceFrame();
 	int getFrameTrue() const { return _frameTrue; }
 	bool isDemo() const { return _demo; }
+	bool gameBreakingFixesActive() const;
 	SysStruct *getHs() const { return _hs; }
 	RemasteredLookRenderer *getRemasteredLookRenderer() const { return _remasteredLookRenderer; }
 	void setRemasteredLookRenderer(RemasteredLookRenderer *remasteredLookRenderer) { _remasteredLookRenderer = remasteredLookRenderer; }

@@ -538,6 +538,9 @@ void RenderDroid::PuppetModule::buildJointMatrices(RdThing *thing, RdMatrix34 ba
 
 	_rd->_thing.accumulateMatrices(thing, model3->hNodes, base);
 	thing->jointsFrame = _rd->_frameTrue;
+
+	if (_rd->gameBreakingFixesActive())
+		thing->jointsBuilt = 1;
 }
 
 } // End of namespace Grim

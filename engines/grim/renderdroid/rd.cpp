@@ -21,6 +21,8 @@
 
 #include "common/textconsole.h"
 
+#include "engines/engine.h"
+#include "engines/enhancements.h"
 #include "engines/grim/renderdroid/rd.h"
 #include "engines/grim/std/std_3d.h"
 #include "engines/grim/std/std_3d_config.h"
@@ -52,6 +54,10 @@ RenderDroid::RenderDroid(StdMath *stdMath, StdDisplay *stdDisplay, StdConffile *
 }
 
 RenderDroid::~RenderDroid() {
+}
+
+bool RenderDroid::gameBreakingFixesActive() const {
+	return !_demo && !_remastered && g_engine->enhancementEnabled(kEnhGameBreakingBugFixes);
 }
 
 void RenderDroid::setColorInfo(const StdColorFormat &colorInfo) {

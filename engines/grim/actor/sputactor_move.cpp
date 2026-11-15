@@ -338,6 +338,10 @@ void SputActorModule::updateCostumes2(SputActor *actor, float delta) {
 	if (!actor->onScreen && !(_grim->getGameFlags() & ADGF_DEMO))
 		_rd->_puppet.buildJointMatrices(node->headThing, getOrientMatrix(actor));
 
+	// Not in the original: after a load the matrices are read before they are ever built
+	if (_rd->gameBreakingFixesActive() && actor->onScreen && !node->headThing->jointsBuilt)
+		_rd->_puppet.buildJointMatrices(node->headThing, getOrientMatrix(actor));
+
 	RdMatrix34 headMatrix;
 	RdMatrix34 inverseMatrix;
 
