@@ -26,6 +26,8 @@
 
 #ifdef USE_MPEG2
 
+#include "common/array.h"
+
 #include "audio/mixer.h"
 
 #include "graphics/pixelformat.h"
@@ -45,11 +47,11 @@ class MPEGDecoder;
 
 namespace Grim {
 
-// Plays the PS2 movies (MPEG program streams with MPEG-2 video and PCM audio), one frame per picture
+// Plays PSS movies (MPEG program streams with MPEG-2 video and PCM audio), one frame per picture
 class PssDecoder {
 public:
 	enum {
-		kMaxQueuedFrames = 4,
+		kMaxQueuedFrames = 12,
 		kAudioLeadMs = 500,
 		kMaxBufferedVideo = 8 * 1024 * 1024,
 		kInitialVideoBuffer = 256 * 1024,
@@ -58,7 +60,11 @@ public:
 		kSequenceHeaderSize = 8,
 		kClockTicksPerMs = 27000,
 		kDefaultFramePeriod = 1080000,
-		kNumFrameRates = 9
+		kNumFrameRates = 9,
+		kTicksPerSecond = 27000000,
+		kVblankTicks = 540000,
+		kRingSize = 5,
+		kAudioBufferBytes = 98304
 	};
 
 	enum {
@@ -95,6 +101,7 @@ public:
 	bool loadStream(Common::SeekableReadStream *stream, const Graphics::PixelFormat &format);
 	void start(byte volume);
 	void stop();
+	void detachAudio();
 	const Graphics::Surface *update();
 	bool isFinished();
 	uint32 getTime();
@@ -111,13 +118,22 @@ private:
 	void appendVideo(const byte *data, uint32 size);
 	uint32 findChunkEnd();
 	bool decodeNextChunk();
-	void decodeChunk(const byte *data, uint32 size);
+	void decodeChunk(const byte *data, uint32 size, uint64 availTicks);
 	void readSequenceHeader(const byte *data, uint32 size);
 	void queueFrame(int slot);
 	uint32 getFrameTime(uint32 frame) const;
+	uint64 getArrival(uint64 offset) const;
+	void simulateOutput(uint64 availTicks);
+	bool canDraw() const;
+	void drawOldest();
 	void readAudio(const byte *data, uint32 size);
 	bool readAudioHeader(const byte *data, uint32 size, uint32 &bodyOffset);
 	void queueAudio(const byte *data, uint32 size);
+
+	struct VideoPacket {
+		uint64 esEnd;
+		uint64 arrival;
+	};
 
 	static const uint32 kFramePeriods[kNumFrameRates];
 
@@ -133,6 +149,18 @@ private:
 	uint32 _videoSize;
 	uint32 _videoCapacity;
 	uint32 _videoSearchPos;
+	uint64 _videoBase;
+	Common::Array<VideoPacket> _packets;
+	uint64 _demuxTicks;
+	uint64 _audioAccepted;
+	uint64 _chunkTicks;
+
+	int _ringPending;
+	bool _ringDisplayOn;
+	bool _ringHasDrawn;
+	uint64 _ringTime;
+	uint64 _ringLastDraw;
+	uint32 _framesDrawn;
 
 	int _width;
 	int _height;

@@ -67,6 +67,7 @@ static const int kEventsMask = 3;
 static const int kPs2MinFramesBeforeSkip = 4;
 static const int kPs2LoopDelayMs = 4;
 static const uint kPs2LoadingIconMinMs = 500;
+static const float kMovieInputGain = 0.85f;
 static const int kLoadingIconVertices = 4;
 static const int kLoadingIconQuadsFlags = 0x10004;
 static const float kLoadingIconNearClip = 0.05f;
@@ -743,7 +744,7 @@ bool Movie::playMoviePs2(EmiEngine *engine, const char *name) {
 	bool skipped = false;
 	uint startMs = g_system->getMillis();
 
-	decoder.start((byte)(gain * 255.0f + 0.5f));
+	decoder.start((byte)(gain * kMovieInputGain * 255.0f + 0.5f));
 
 	while (!engine->shouldQuit() && !skipped && !decoder.isFinished()) {
 		const Graphics::Surface *frame = decoder.update();
@@ -764,7 +765,11 @@ bool Movie::playMoviePs2(EmiEngine *engine, const char *name) {
 	if (console)
 		console->logDebug("Movie ended after %u frames: clock %u ms, wall clock %u ms\n", decoder.getFramesDecoded(), decoder.getTime(), g_system->getMillis() - startMs);
 
-	decoder.stop();
+	if (skipped || engine->shouldQuit())
+		decoder.stop();
+	else
+		decoder.detachAudio();
+
 	screen.free();
 
 	return true;

@@ -57,6 +57,17 @@ PssDecoder::PssDecoder() {
 	_videoSize = 0;
 	_videoCapacity = 0;
 	_videoSearchPos = 1;
+	_videoBase = 0;
+	_demuxTicks = 0;
+	_audioAccepted = 0;
+	_chunkTicks = 0;
+
+	_ringPending = 0;
+	_ringDisplayOn = false;
+	_ringHasDrawn = false;
+	_ringTime = 0;
+	_ringLastDraw = 0;
+	_framesDrawn = 0;
 
 	_width = 0;
 	_height = 0;
@@ -138,6 +149,12 @@ void PssDecoder::stop() {
 	_audioStarted = false;
 }
 
+void PssDecoder::detachAudio() {
+	// The queue is already finished, the mixer plays it to the end and then deletes it
+	_audioStream = nullptr;
+	_audioStarted = false;
+}
+
 const Graphics::Surface *PssDecoder::update() {
 	uint32 time = getTime();
 	bool frameShown = false;
@@ -145,11 +162,22 @@ const Graphics::Surface *PssDecoder::update() {
 	for (;;) {
 		fillQueue();
 
-		if (!_numQueued || getFrameTime(_frameNumbers[_queueHead]) > time)
+		if (!_numQueued)
+			break;
+
+		// Pictures still in the ring when the decoder ends are never drawn
+		if (_frameNumbers[_queueHead] >= _framesDrawn) {
+			if (_videoFinished)
+				_numQueued = 0;
+
+			break;
+		}
+
+		if (getFrameTime(_frameNumbers[_queueHead]) > time)
 			break;
 
 		int next = (_queueHead + 1) % kMaxQueuedFrames;
-		bool nextDue = _numQueued > 1 && getFrameTime(_frameNumbers[next]) <= time;
+		bool nextDue = _numQueued > 1 && _frameNumbers[next] < _framesDrawn && getFrameTime(_frameNumbers[next]) <= time;
 
 		// When the video is late, the frames in between are decoded but not drawn
 		if (!nextDue) {
@@ -168,7 +196,7 @@ const Graphics::Surface *PssDecoder::update() {
 }
 
 bool PssDecoder::isFinished() {
-	return _videoFinished && !_numQueued && !isAudioPlaying();
+	return _videoFinished && !_numQueued;
 }
 
 uint32 PssDecoder::getTime() {
@@ -187,6 +215,49 @@ uint32 PssDecoder::getTime() {
 
 	// The system clock runs the movie until the audio starts and after it ends
 	return _clockTime + (now - _clockMillis);
+}
+
+uint64 PssDecoder::getArrival(uint64 offset) const {
+	for (uint i = 0; i < _packets.size(); i++) {
+		if (_packets[i].esEnd > offset)
+			return _packets[i].arrival;
+	}
+
+	return _demuxTicks;
+}
+
+bool PssDecoder::canDraw() const {
+	return !_ringHasDrawn || _ringTime >= _ringLastDraw + kVblankTicks;
+}
+
+void PssDecoder::drawOldest() {
+	// A draw ends at the next vblank and the next one can start one vblank later
+	_ringTime = (_ringTime / kVblankTicks + 1) * kVblankTicks;
+	_ringPending--;
+	_framesDrawn++;
+	_ringLastDraw = _ringTime;
+	_ringHasDrawn = true;
+}
+
+void PssDecoder::simulateOutput(uint64 availTicks) {
+	while (_ringPending == kRingSize) {
+		if (!canDraw())
+			_ringTime = _ringLastDraw + kVblankTicks;
+
+		drawOldest();
+	}
+
+	if (availTicks > _ringTime)
+		_ringTime = availTicks;
+
+	_ringPending++;
+
+	// The drawing starts when the ring is full
+	if (_ringPending == kRingSize)
+		_ringDisplayOn = true;
+
+	if (_ringDisplayOn && canDraw())
+		drawOldest();
 }
 
 uint32 PssDecoder::getFramesDecoded() const {
@@ -343,6 +414,12 @@ void PssDecoder::appendVideo(const byte *data, uint32 size) {
 
 	memcpy(_videoData + _videoSize, data, size);
 	_videoSize += size;
+
+	VideoPacket packet;
+
+	packet.esEnd = _videoBase + _videoSize;
+	packet.arrival = _demuxTicks;
+	_packets.push_back(packet);
 }
 
 uint32 PssDecoder::findChunkEnd() {
@@ -380,7 +457,7 @@ bool PssDecoder::decodeNextChunk() {
 				// libmpeg2 holds back the last reference picture until the sequence ends
 				byte endCode[4] = { 0, 0, 1, kCodeSequenceEnd };
 
-				decodeChunk(endCode, sizeof(endCode));
+				decodeChunk(endCode, sizeof(endCode), _demuxTicks);
 
 				return true;
 			}
@@ -393,16 +470,23 @@ bool PssDecoder::decodeNextChunk() {
 		end = _videoSize;
 	}
 
-	decodeChunk(_videoData, end);
+	// The picture before this chunk is complete when the 4th byte of the start code has arrived
+	decodeChunk(_videoData, end, getArrival(_videoBase + 3));
 
 	memmove(_videoData, _videoData + end, _videoSize - end);
 	_videoSize -= end;
+	_videoBase += end;
 	_videoSearchPos = 1;
+
+	while (_packets.size() && _packets[0].esEnd <= _videoBase)
+		_packets.remove_at(0);
 
 	return true;
 }
 
-void PssDecoder::decodeChunk(const byte *data, uint32 size) {
+void PssDecoder::decodeChunk(const byte *data, uint32 size, uint64 availTicks) {
+	_chunkTicks = availTicks;
+
 	if (size >= 4 && !data[0] && !data[1] && data[2] == 1) {
 		byte code = data[3];
 
@@ -460,6 +544,8 @@ void PssDecoder::readSequenceHeader(const byte *data, uint32 size) {
 void PssDecoder::queueFrame(int slot) {
 	_frameNumbers[slot] = _nextFrameNumber++;
 	_numQueued++;
+
+	simulateOutput(_chunkTicks);
 }
 
 uint32 PssDecoder::getFrameTime(uint32 frame) const {
@@ -485,6 +571,16 @@ void PssDecoder::readAudio(const byte *data, uint32 size) {
 
 	if (!_audioStream)
 		return;
+
+	// The stream is read as fast as the audio buffers drain, which they do at the audio rate
+	_audioAccepted += size - bodyOffset;
+
+	if (_audioAccepted > kAudioBufferBytes) {
+		uint64 due = (_audioAccepted - kAudioBufferBytes) * kTicksPerSecond / ((uint64)_audioRate * _audioChannels * 2);
+
+		if (due > _demuxTicks)
+			_demuxTicks = due;
+	}
 
 	queueAudio(data + bodyOffset, size - bodyOffset);
 }
@@ -531,7 +627,7 @@ bool PssDecoder::readAudioHeader(const byte *data, uint32 size, uint32 &bodyOffs
 	_audioBlockFill = 0;
 	_audioStream = Audio::makeQueuingAudioStream(_audioRate, _audioChannels == 2);
 
-	g_system->getMixer()->playStream(Audio::Mixer::kSpeechSoundType, &_audioHandle, _audioStream, -1, _volume, 0, DisposeAfterUse::YES);
+	g_system->getMixer()->playStream(Audio::Mixer::kPlainSoundType, &_audioHandle, _audioStream, -1, _volume, 0, DisposeAfterUse::YES);
 	_audioStarted = true;
 
 	return true;
