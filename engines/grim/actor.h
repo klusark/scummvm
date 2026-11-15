@@ -576,6 +576,7 @@ private:
 	void collisionHandlerCallback(Actor *other) const;
 	void updateWalk();
 	void addShadowPlane(const char *n, Set *scene, int shadowId);
+	bool hasActiveShadowSlot(const char *func) const;
 	bool shouldDrawShadow(int shadowId);
 	void stopTalking();
 	bool stopMumbleChore();

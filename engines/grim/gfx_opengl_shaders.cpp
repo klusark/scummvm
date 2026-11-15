@@ -1840,6 +1840,10 @@ void GfxOpenGLS::dimScreen() {
 }
 
 void GfxOpenGLS::dimRegion(int xin, int yReal, int w, int h, float level) {
+	// (EMI has no shader for it)
+	if (!_dimRegionProgram)
+		return;
+
 	xin = (int)(xin * _scaleW);
 	yReal = (int)(yReal * _scaleH);
 	w = (int)(w * _scaleW);
@@ -1882,6 +1886,9 @@ void GfxOpenGLS::dimRegion(int xin, int yReal, int w, int h, float level) {
 }
 
 void GfxOpenGLS::irisAroundRegion(int x1, int y1, int x2, int y2) {
+	if (!_irisProgram)
+		return;
+
 	_irisProgram->use();
 	_irisProgram->setUniform("color", Math::Vector3d(0.0f, 0.0f, 0.0f));
 	_irisProgram->setUniform("scaleWH", Math::Vector2d(1.f / _gameWidth, 1.f / _gameHeight));

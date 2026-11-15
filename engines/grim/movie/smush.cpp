@@ -143,7 +143,8 @@ bool SmushPlayer::loadFile(const Common::String &filename) {
 	if (!success) {
 #if defined (USE_THEORADEC)
 		Common::String baseName(filename);
-		baseName.erase(baseName.size() - 4);
+		if (baseName.size() >= 4)
+			baseName.erase(baseName.size() - 4);
 		baseName += ".ogv";
 
 		Common::Path theoraFilename(Common::Path("MoviesHD").appendComponent(baseName));

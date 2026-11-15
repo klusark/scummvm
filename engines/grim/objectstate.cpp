@@ -45,12 +45,18 @@ ObjectState::~ObjectState() {
 }
 
 const Common::String &ObjectState::getBitmapFilename() const {
+	static const Common::String noBitmap;
+	if (!_bitmap)
+		return noBitmap;
 	return _bitmap->getFilename();
 }
 
 void ObjectState::setActiveImage(int val) {
 	if (val) {
-		assert(_bitmap);
+		if (!_bitmap) {
+			warning("ObjectState::setActiveImage: object state has no bitmap");
+			return;
+		}
 		_bitmap->setActiveImage(val);
 		if (_zbitmap && val <= _zbitmap->getNumImages()) {
 			_zbitmap->setActiveImage(val);
@@ -64,7 +70,8 @@ void ObjectState::draw() {
 	if (!_visibility)
 		return;
 
-	assert(_bitmap);
+	if (!_bitmap)
+		return;
 	_bitmap->draw();
 	// The only OBJSTATE_UNDERLAY which has a zbuffer is the bonewagon in set bv. Original doesn't draw that zbuffer,
 	// so we don't either, otherwise this bug will appear: https://github.com/residualvm/residualvm/issues/143

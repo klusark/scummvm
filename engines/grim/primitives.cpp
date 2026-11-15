@@ -130,8 +130,23 @@ void PrimitiveObject::setPos(int x, int y) {
 	}
 }
 
+void PrimitiveObject::move(int dx, int dy) {
+	_p1.x += dx;
+	_p1.y += dy;
+	_p2.x += dx;
+	_p2.y += dy;
+	_p3.x += dx;
+	_p3.y += dy;
+	_p4.x += dx;
+	_p4.y += dy;
+}
+
 void PrimitiveObject::setEndpoint(int x, int y) {
-	assert(_type == LineType);
+	// The original resizes a rectangle too
+	if (_type != LineType && _type != RectangleType) {
+		warning("PrimitiveObject::setEndpoint: not a line or a rectangle (type %d)", _type);
+		return;
+	}
 
 	_p2.x = x;
 	_p2.y = y;

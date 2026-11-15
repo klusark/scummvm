@@ -999,6 +999,10 @@ void Set::setLightIntensity(const char *light, float intensity) {
 }
 
 void Set::setLightIntensity(int light, float intensity) {
+	if (light < 0 || light >= _numLights) {
+		warning("Set::setLightIntensity: light %d out of range", light);
+		return;
+	}
 	Light &l = _lights[light];
 	l.setIntensity(intensity);
 }
@@ -1014,6 +1018,10 @@ void Set::setLightEnabled(const char *light, bool enabled) {
 }
 
 void Set::setLightEnabled(int light, bool enabled) {
+	if (light < 0 || light >= _numLights) {
+		warning("Set::setLightEnabled: light %d out of range", light);
+		return;
+	}
 	Light &l = _lights[light];
 	l._enabled = enabled;
 }
@@ -1029,6 +1037,10 @@ void Set::setLightPosition(const char *light, const Math::Vector3d &pos) {
 }
 
 void Set::setLightPosition(int light, const Math::Vector3d &pos) {
+	if (light < 0 || light >= _numLights) {
+		warning("Set::setLightPosition: light %d out of range", light);
+		return;
+	}
 	Light &l = _lights[light];
 	l._pos = pos;
 }

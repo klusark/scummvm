@@ -782,6 +782,11 @@ void EMISound::pushStateToStack() {
 
 void EMISound::popStateFromStack() {
 	Common::StackLock lock(_mutex);
+	if (_stateStack.empty()) {
+		warning("EMISound::popStateFromStack: the state stack is empty");
+		return;
+	}
+
 	if (_musicTrack) {
 		_musicTrack->fadeOut();
 		_playingTracks.push_back(_musicTrack);

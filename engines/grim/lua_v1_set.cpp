@@ -307,12 +307,13 @@ void Lua_V1::GetCameraLookVector() {
 		return;
 	}
 
-	Set::Setup *setup;
+	Set::Setup *setup = scene->getCurrSetup();
 	lua_Object setupObj = lua_getparam(1);
 	if (lua_isnumber(setupObj)) {
-		setup = scene->getSetup((int)lua_getnumber(setupObj));
-	} else {
-		setup = scene->getCurrSetup();
+		// (a setup out of range uses the current one: reading past the setups could crash)
+		int num = (int)lua_getnumber(setupObj);
+		if (num >= 0 && num < scene->getNumSetups())
+			setup = scene->getSetup(num);
 	}
 
 	Math::Vector3d lookVector = setup->_pos - setup->_interest;

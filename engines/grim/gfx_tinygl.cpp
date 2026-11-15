@@ -1169,11 +1169,14 @@ void GfxTinyGL::prepareMovieFrame(Graphics::Surface *frame) {
 }
 
 void GfxTinyGL::drawMovieFrame(int offsetX, int offsetY) {
+	if (!_smushImage)
+		return;
 	tglBlitFast(_smushImage, offsetX, offsetY);
 }
 
 void GfxTinyGL::releaseMovieFrame() {
 	tglDeleteBlitImage(_smushImage);
+	_smushImage = nullptr;
 }
 
 void GfxTinyGL::loadEmergFont() {

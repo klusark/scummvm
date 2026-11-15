@@ -1345,7 +1345,7 @@ void GrimEngine::restoreGRIM() {
 	if (_savedState->saveMinorVersion() > 4) {
 		_movieSetup = _savedState->readString();
 	} else {
-		_movieSetup = _currSet->getCurrSetup()->_name;
+		_movieSetup = _currSet ? _currSet->getCurrSetup()->_name : "";
 	}
 
 	_savedState->endSection();
@@ -1670,7 +1670,7 @@ void GrimEngine::drawMovieSubtitle() {
 }
 
 void GrimEngine::setMovieSetup() {
-	_movieSetup = _currSet->getCurrSetup()->_name;
+	_movieSetup = _currSet ? _currSet->getCurrSetup()->_name : "";
 }
 
 void GrimEngine::setMode(EngineMode mode) {

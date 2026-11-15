@@ -144,13 +144,17 @@ int TextObject::getBitmapWidth() const {
 }
 
 int TextObject::getBitmapHeight() const {
+	if (!_font)
+		return 0;
 	return MAX(_numberLines, 1) * _font->getKernedHeight();
 }
 
 int TextObject::getTextCharPosition(int pos) {
 	int width = 0;
+	if (!_font)
+		return width;
 	Common::String msg = LuaBase::instance()->parseMsgText(_textID.c_str(), nullptr);
-	for (int i = 0; (msg[i] != '\0') && (i < pos); ++i) {
+	for (int i = 0; (i < (int)msg.size()) && (i < pos); ++i) {
 		width += _font->getCharKernedWidth(msg[i]);
 	}
 	return width;
@@ -326,6 +330,16 @@ static Common::String dbcsConvert(const Common::DBCSString &ds) {
 }
 
 void TextObject::setupText() {
+	if (!_font) {
+		warning("TextObject::setupText: text object \"%s\" has no font", _textID.c_str());
+		delete[] _lines;
+		_lines = nullptr;
+		_numberLines = 0;
+		_maxLineWidth = 0;
+		_elapsedTime = 0;
+		return;
+	}
+
 	Common::String msg = LuaBase::instance()->parseMsgText(_textID.c_str(), nullptr);
 
 	if (g_grim->_isUtf8)

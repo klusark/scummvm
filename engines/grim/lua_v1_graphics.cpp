@@ -42,6 +42,10 @@ void Lua_V1::GetImage() {
 	}
 	const char *bitmapName = lua_getstring(nameObj);
 	Bitmap *b = Bitmap::create(bitmapName);
+	if (!b) {
+		lua_pushnil();
+		return;
+	}
 	lua_pushusertag(b->getId(), MKTAG('V','B','U','F'));
 }
 
@@ -291,14 +295,14 @@ void Lua_V1::ChangePrimitive() {
 	lua_pushstring("yoffset");
 	lua_Object yObj = lua_gettable();
 	if (lua_isnumber(xObj) || lua_isnumber(yObj)) {
-		//int x = 0;
-		//int y = 0;
+		int x = 0;
+		int y = 0;
 		if (lua_isnumber(xObj))
-			/*x = (int)*/lua_getnumber(xObj);
+			x = (int)lua_getnumber(xObj);
 		if (lua_isnumber(yObj))
-			/*y = (int)*/lua_getnumber(yObj);
-		// TODO pmodify->setOffets(x, y);
-		assert(0);
+			y = (int)lua_getnumber(yObj);
+		// The original moves the primitive by the offset
+		pmodify->move(x, y);
 	}
 
 	lua_pushobject(tableObj);

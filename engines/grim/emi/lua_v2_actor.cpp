@@ -546,6 +546,11 @@ void Lua_V2::PutActorInSet() {
 		return;
 
 	Actor *actor = getactor(actorObj);
+	if (!actor) {
+		// (an actor that was unloaded)
+		lua_pushnil();
+		return;
+	}
 
 	if (!lua_isstring(setObj) && !lua_isnil(setObj)) {
 		lua_pushnil();

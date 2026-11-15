@@ -546,6 +546,19 @@ void Lua_V2::ImSetVoiceVol() {
 	Debug::debug(Debug::Scripts, "Lua_V2::ImSetVoiceVol: implement opcode, wants volume %d", convertEmiVolumeToMixer(volume));
 }
 
+// Grim's group volumes are iMuse's, which EMI does not have. The original returns nil.
+void Lua_V2::ImGetMusicVol() {
+	lua_pushnil();
+}
+
+void Lua_V2::ImGetSfxVol() {
+	lua_pushnil();
+}
+
+void Lua_V2::ImGetVoiceVol() {
+	lua_pushnil();
+}
+
 void Lua_V2::ImSetVoiceEffect() {
 	// This only seems to be used in the demo.
 	lua_Object strObj = lua_getparam(1);

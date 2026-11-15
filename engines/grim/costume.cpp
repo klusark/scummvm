@@ -114,13 +114,17 @@ void Costume::load(Common::SeekableReadStream *data) {
 	ts.expectString("section tags");
 	int numTags;
 	ts.scanString(" numtags %d", 1, &numTags);
-	tag32 *tags = new tag32[numTags];
+	if (numTags < 0)
+		error("Costume::load: %s: bad tag count %d", _fname.c_str(), numTags);
+	tag32 *tags = new tag32[numTags]{};
 	for (int i = 0; i < numTags; i++) {
 		unsigned char t[4];
 		int which;
 
 		// Obtain a tag ID from the file
 		ts.scanString(" %d '%c%c%c%c'", 5, &which, &t[0], &t[1], &t[2], &t[3]);
+		if (which < 0 || which >= numTags)
+			error("Costume::load: %s: tag id %d out of range", _fname.c_str(), which);
 		// Force characters to upper case
 		for (int j = 0; j < 4; j++)
 			t[j] = toupper(t[j]);
@@ -130,6 +134,8 @@ void Costume::load(Common::SeekableReadStream *data) {
 
 	ts.expectString("section components");
 	ts.scanString(" numcomponents %d", 1, &_numComponents);
+	if (_numComponents < 0)
+		error("Costume::load: %s: bad component count %d", _fname.c_str(), _numComponents);
 	_components = new Component *[_numComponents]{};
 	for (int i = 0; i < _numComponents; i++) {
 		int id, tagID, hash, parentID, namePos;
@@ -139,6 +145,8 @@ void Costume::load(Common::SeekableReadStream *data) {
 		if (sscanf(line, " %d %d %d %d %n", &id, &tagID, &hash, &parentID, &namePos) < 4)
 			error("Bad component specification line: `%s'", line);
 		ts.nextLine();
+		if (id < 0 || id >= _numComponents || _components[id] || tagID < 0 || tagID >= numTags || parentID >= _numComponents || parentID < -1)
+			error("Costume::load: %s: bad component line `%s'", _fname.c_str(), line);
 
 		// A Parent ID of "-1" indicates that the component should
 		// use the properties of the previous costume as a base
@@ -149,9 +157,9 @@ void Costume::load(Common::SeekableReadStream *data) {
 				// that component so it knows what to do
 				if (i == 0)
 					parentID = -2;
-				prevComponent = _prevCostume->_components[0];
+				prevComponent = _prevCostume->_numComponents > 0 ? _prevCostume->_components[0] : nullptr;
 				// Make sure that the component is valid
-				if (!prevComponent->isComponentType('M','M','D','L'))
+				if (prevComponent && !prevComponent->isComponentType('M','M','D','L'))
 					prevComponent = nullptr;
 			} else if (id > 0) {
 				// Use the MainModelComponent of this costume as prevComponent,
@@ -161,7 +169,9 @@ void Costume::load(Common::SeekableReadStream *data) {
 		}
 		// Actually load the appropriate component
 		_components[id] = loadComponent(tags[tagID], parentID < 0 ? nullptr : _components[parentID], parentID, line + namePos, prevComponent);
-		_components[id]->setCostume(this);
+		// A component of an unknown type is left out (loadComponent warns about it)
+		if (_components[id])
+			_components[id]->setCostume(this);
 	}
 
 	delete[] tags;
@@ -174,11 +184,15 @@ void Costume::load(Common::SeekableReadStream *data) {
 
 	ts.expectString("section chores");
 	ts.scanString(" numchores %d", 1, &_numChores);
-	_chores = new Chore *[_numChores];
+	if (_numChores < 0)
+		error("Costume::load: %s: bad chore count %d", _fname.c_str(), _numChores);
+	_chores = new Chore *[_numChores]{};
 	for (int i = 0; i < _numChores; i++) {
 		int id, length, tracks;
 		char name[32];
 		ts.scanString(" %d %d %d %32s", 4, &id, &length, &tracks, name);
+		if (id < 0 || id >= _numChores || _chores[id] || tracks < 0)
+			error("Costume::load: %s: bad chore %d", _fname.c_str(), id);
 		_chores[id] = new Chore(name, i, this, length, tracks);
 		Debug::debug(Debug::Chores, "Loaded chore: %s\n", name);
 	}
@@ -187,6 +201,8 @@ void Costume::load(Common::SeekableReadStream *data) {
 	for (int i = 0; i < _numChores; i++) {
 		int which;
 		ts.scanString("chore %d", 1, &which);
+		if (which < 0 || which >= _numChores || !_chores[which])
+			error("Costume::load: %s: keys of chore %d, which does not exist", _fname.c_str(), which);
 		_chores[which]->load(ts);
 	}
 
@@ -478,6 +494,12 @@ int Costume::getHeadJoint() const {
 
 void Costume::setHead(int joint1, int joint2, int joint3, float maxRoll, float maxPitch, float maxYaw) {
 	Head *head = static_cast<Head *>(_head);
+	Model *model = getModel();
+	int numNodes = model ? model->getNumNodes() : 0;
+	if (joint1 < -1 || joint2 < -1 || joint3 < -1 || joint1 >= numNodes || joint2 >= numNodes || joint3 >= numNodes) {
+		warning("Costume::setHead: joints %d, %d, %d out of range (the model has %d nodes)", joint1, joint2, joint3, numNodes);
+		joint1 = joint2 = joint3 = -1;
+	}
 	head->setJoints(joint1, joint2, joint3);
 	head->loadJoints(getModelNodes());
 	head->setMaxAngles(maxPitch, maxYaw, maxRoll);

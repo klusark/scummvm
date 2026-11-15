@@ -97,6 +97,9 @@ protected:
 	DECLARE_LUA_OPCODE(ImSetMusicVol) override;
 	DECLARE_LUA_OPCODE(ImSetSfxVol) override;
 	DECLARE_LUA_OPCODE(ImSetVoiceVol) override;
+	DECLARE_LUA_OPCODE(ImGetMusicVol) override;
+	DECLARE_LUA_OPCODE(ImGetSfxVol) override;
+	DECLARE_LUA_OPCODE(ImGetVoiceVol) override;
 	DECLARE_LUA_OPCODE(ImSetVoiceEffect) override;
 	DECLARE_LUA_OPCODE(ToggleOverworld);
 	DECLARE_LUA_OPCODE(ScreenshotForSavegame);

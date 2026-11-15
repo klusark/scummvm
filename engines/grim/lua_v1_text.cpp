@@ -121,6 +121,8 @@ void Lua_V1::GetTextObjectDimensions() {
 
 	if (lua_isuserdata(textObj) && lua_tag(textObj) == MKTAG('T', 'E', 'X', 'T')) {
 		TextObject *textObject = gettextobject(textObj);
+		if (!textObject)
+			return;
 		lua_pushnumber(textObject->getBitmapWidth());
 		lua_pushnumber(textObject->getBitmapHeight());
 	}
@@ -137,6 +139,8 @@ void Lua_V1::GetTextCharPosition() {
 	lua_Object textObj = lua_getparam(1);
 	if (lua_isuserdata(textObj) && lua_tag(textObj) == MKTAG('T', 'E', 'X', 'T')) {
 		TextObject *textObject = gettextobject(textObj);
+		if (!textObject)
+			return;
 		int pos = (int)lua_getnumber(lua_getparam(2));
 		lua_pushnumber(textObject->getTextCharPosition(pos));
 	}

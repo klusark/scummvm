@@ -1849,14 +1849,28 @@ void Actor::drawCostume(Costume *costume) {
 	g_driver->finishActorDraw();
 }
 
+bool Actor::hasActiveShadowSlot(const char *func) const {
+	if (_activeShadowSlot < 0 || _activeShadowSlot >= MAX_SHADOWS) {
+		Debug::warning(Debug::Actors, "Actor::%s: actor \"%s\" has no active shadow", func, getName().c_str());
+		return false;
+	}
+	return true;
+}
+
 void Actor::setShadowPlane(const char *n) {
-	assert(_activeShadowSlot != -1);
+	if (!hasActiveShadowSlot("setShadowPlane"))
+		return;
 
 	_shadowArray[_activeShadowSlot].name = n;
 }
 
 void Actor::addShadowPlane(const char *n, Set *scene, int shadowId) {
-	assert(shadowId != -1);
+	if (shadowId < 0 || shadowId >= MAX_SHADOWS) {
+		Debug::warning(Debug::Actors, "Actor::addShadowPlane: actor \"%s\" has no shadow %d", getName().c_str(), shadowId);
+		return;
+	}
+	if (!scene)
+		return;
 
 	// This needs to be an exact match, because with a substring search a search for sector
 	// "shadow1" would return sector "shadow10" in set st, causing shadows not to be cast
@@ -1907,13 +1921,18 @@ void Actor::addShadowPlane(const char *n) {
 }
 
 void Actor::setActiveShadow(int shadowId) {
-	assert(shadowId >= 0 && shadowId < MAX_SHADOWS);
+	if (shadowId < 0 || shadowId >= MAX_SHADOWS) {
+		Debug::warning(Debug::Actors, "Actor::setActiveShadow: shadow %d out of range", shadowId);
+		return;
+	}
 
 	_activeShadowSlot = shadowId;
 	_shadowArray[_activeShadowSlot].active = true;
 }
 
 void Actor::setShadowValid(int valid) {
+	if (!hasActiveShadowSlot("setShadowValid"))
+		return;
 	if (valid == -1)
 		_shadowArray[_activeShadowSlot].dontNegate = true;
 	else
@@ -1921,19 +1940,24 @@ void Actor::setShadowValid(int valid) {
 }
 
 void Actor::setActivateShadow(int shadowId, bool state) {
-	assert(shadowId >= 0 && shadowId < MAX_SHADOWS);
+	if (shadowId < 0 || shadowId >= MAX_SHADOWS) {
+		Debug::warning(Debug::Actors, "Actor::setActivateShadow: shadow %d out of range", shadowId);
+		return;
+	}
 
 	_shadowArray[shadowId].active = state;
 }
 
 void Actor::setShadowPoint(const Math::Vector3d &p) {
-	assert(_activeShadowSlot != -1);
+	if (!hasActiveShadowSlot("setShadowPoint"))
+		return;
 
 	_shadowArray[_activeShadowSlot].pos = p;
 }
 
 void Actor::setShadowColor(const Color &color) {
-	assert(_activeShadowSlot != -1);
+	if (!hasActiveShadowSlot("setShadowColor"))
+		return;
 
 	_shadowArray[_activeShadowSlot].color = color;
 }
@@ -2122,7 +2146,13 @@ void Actor::getBBoxInfo(Math::Vector3d &bboxPos, Math::Vector3d &bboxSize) const
 		bboxPos = *model->_center;
 		bboxSize = *model->_boxData2 - *model->_boxData;
 	} else {
-		Model *model = getCurrentCostume()->getModel();
+		Costume *costume = getCurrentCostume();
+		Model *model = costume ? costume->getModel() : nullptr;
+		if (!model) {
+			bboxPos = Math::Vector3d(0, 0, 0);
+			bboxSize = Math::Vector3d(0, 0, 0);
+			return;
+		}
 		bboxPos = model->_bboxPos;
 		bboxSize = model->_bboxSize;
 	}
@@ -2141,8 +2171,12 @@ bool Actor::getSphereInfo(float &size, Math::Vector3d &p) const {
 		// pre-scale factor of 0.8 was guessed by comparing with the original game
 		size = model->_radius * _collisionScale * 0.8f;
 	} else {
-		Model *model = getCurrentCostume()->getModel();
-		assert(model);
+		Costume *costume = getCurrentCostume();
+		Model *model = costume ? costume->getModel() : nullptr;
+		if (!model) {
+			Debug::warning(Debug::Actors, "Actor::getSphereInfo: actor \"%s\" has no costume with a model", getName().c_str());
+			return false;
+		}
 
 		p = _pos + model->_insertOffset + model->_center;
 		size = model->_radius * _collisionScale;
@@ -2334,15 +2368,16 @@ const Math::Matrix4 Actor::getFinalMatrix() const {
 	Math::Matrix4 m;
 
 	// Add the rotation and translation from the parent actor, if this actor is attached
-	if (isAttached()) {
-		Actor *attachedActor = Actor::getPool().getObject(_attachedActor);
+	Actor *attachedActor = isAttached() ? Actor::getPool().getObject(_attachedActor) : nullptr;
+	if (attachedActor) {
 		m = attachedActor->getFinalMatrix();
 
 		// If this actor is attached to a joint, add that rotation
 		EMICostume *cost = static_cast<EMICostume *>(attachedActor->getCurrentCostume());
 		if (cost && cost->_emiSkel && cost->_emiSkel->_obj) {
 			Joint *j = cost->_emiSkel->_obj->getJointNamed(_attachedJoint);
-			m = m * j->_finalMatrix;
+			if (j)
+				m = m * j->_finalMatrix;
 		}
 	}
 
@@ -2433,7 +2468,8 @@ int Actor::getSortOrder() const {
 int Actor::getEffectiveSortOrder() const {
 	if (_useParentSortOrder && _attachedActor != 0) {
 		Actor *attachedActor = Actor::getPool().getObject(_attachedActor);
-		return attachedActor->getEffectiveSortOrder();
+		if (attachedActor)
+			return attachedActor->getEffectiveSortOrder();
 	}
 	return _hasSectorSortOrder ? _sectorSortOrder : getSortOrder();
 }
@@ -2501,7 +2537,7 @@ Joint *Actor::getAttachedJoint(Actor *parent) const {
 	if (!cost || !cost->_emiSkel || !cost->_emiSkel->_obj)
 		return nullptr;
 
-	assert(cost->_emiSkel->_obj->hasJoint(_attachedJoint));
+	// (getJointNamed() warns and returns null when there is no such joint)
 	return cost->_emiSkel->_obj->getJointNamed(_attachedJoint);
 }
 
@@ -2568,7 +2604,8 @@ void Actor::detach() {
 	// doesn't respect the parent actor's sort order). This seems weird,
 	// but matches the behavior of the original engine.
 	Actor *attachedActor = Actor::getPool().getObject(_attachedActor);
-	_sortOrder = attachedActor->getEffectiveSortOrder();
+	if (attachedActor)
+		_sortOrder = attachedActor->getEffectiveSortOrder();
 	_useParentSortOrder = false;
 
 	// Position and rotate the actor in relation to the world coords

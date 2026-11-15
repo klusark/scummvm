@@ -51,6 +51,8 @@ void Chore::load(TextSplitter &ts) {
 	for (int i = 0; i < _numTracks; i++) {
 		int compID, numKeys;
 		ts.scanString(" %d %d", 2, &compID, &numKeys);
+		if (numKeys < 0)
+			error("Chore::load: chore %s: bad key count %d", _name, numKeys);
 		_tracks[i].compID = compID;
 		_tracks[i].numKeys = numKeys;
 		_tracks[i].keys = new TrackKey[numKeys];
@@ -89,8 +91,9 @@ void Chore::playLooping(uint msecs) {
 Component *Chore::getComponentForTrack(int i) const {
 	if (_tracks[i].compID == -1)
 		return _tracks[i].component;
-	else
-		return _owner->_components[_tracks[i].compID];
+	if (_tracks[i].compID < 0 || _tracks[i].compID >= _owner->_numComponents)
+		return nullptr;
+	return _owner->_components[_tracks[i].compID];
 }
 
 void Chore::stop(uint msecs) {

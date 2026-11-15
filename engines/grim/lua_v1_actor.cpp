@@ -67,6 +67,10 @@ void Lua_V1::SetSelectedActor() {
 void Lua_V1::GetCameraActor() {
 	// TODO verify what is going on with selected actor
 	Actor *actor = g_grim->getSelectedActor();
+	if (!actor) {
+		lua_pushnil();
+		return;
+	}
 	lua_pushusertag(actor->getId(), MKTAG('A','C','T','R'));
 }
 
@@ -645,6 +649,11 @@ void Lua_V1::GetActorNodeLocation() {
 		return;
 
 	int nodeId = (int)lua_getnumber(nodeObj);
+	Model *model = actor->getCurrentCostume()->getModel();
+	if (!model || nodeId < 0 || nodeId >= model->getNumNodes()) {
+		warning("GetActorNodeLocation: node %d out of range", nodeId);
+		return;
+	}
 
 	ModelNode *allNodes = actor->getCurrentCostume()->getModelNodes();
 	ModelNode *node = allNodes + nodeId;
@@ -1412,12 +1421,13 @@ void Lua_V1::GetVisibleThings() {
 	} else if (lua_isuserdata(actorObj) && lua_tag(actorObj) == MKTAG('A','C','T','R')) {
 		actor = getactor(actorObj);
 	}
-	assert(actor);
+	if (!actor)
+		return;
 
 	lua_Object result = lua_createtable();
 
 	// TODO verify code below
-	if (actor->isInSet(g_grim->getCurrSet()->getName())) {
+	if (g_grim->getCurrSet() && actor->isInSet(g_grim->getCurrSet()->getName())) {
 		for (Actor *a : g_grim->getActiveActors()) {
 			// Consider the active actor visible
 			if (actor == a || actor->getYawTo(a) < 90) {
