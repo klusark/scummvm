@@ -136,7 +136,9 @@ jobs:
       - name: Build ScummVM bundle
         run: |
           cd scummvm
-          make -j "$NUM_CPUS" bundle
+          # bundle target races with the link when run in parallel: build first like the buildbot
+          make -j "$NUM_CPUS" scummvm-static
+          make bundle
           ls -l ScummVM.app/Contents/Frameworks
           codesign --verify --deep --verbose=2 ScummVM.app
       - name: Run with OpenGL ES (ANGLE) and with OpenGL
