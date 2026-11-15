@@ -19,9 +19,6 @@
  *
  */
 
-#include <math.h>
-#include <string.h>
-
 #include "common/endian.h"
 #include "common/random.h"
 #include "common/stream.h"

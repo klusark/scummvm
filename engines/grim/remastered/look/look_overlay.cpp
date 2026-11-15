@@ -25,8 +25,6 @@
 #include "engines/grim/remastered/look/look_consts.h"
 #include "engines/grim/remastered/look/look_overlay.h"
 
-#include <string.h>
-
 namespace Grim {
 
 static const LookSampler overlayImageSampler = { kLookWrapClamp, 0, 3, 0 };

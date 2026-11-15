@@ -19,8 +19,6 @@
  *
  */
 
-#include <math.h>
-
 #include "common/textconsole.h"
 #include "common/util.h"
 

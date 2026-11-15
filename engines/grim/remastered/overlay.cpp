@@ -31,9 +31,6 @@
 #include "engines/grim/remastered/hdcanvas.h"
 #include "engines/grim/remastered/overlay.h"
 
-#include <math.h>
-#include <string.h>
-
 namespace Grim {
 
 enum {

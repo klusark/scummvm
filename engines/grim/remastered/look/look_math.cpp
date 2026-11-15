@@ -23,9 +23,6 @@
 
 #include "engines/grim/remastered/look/look_math.h"
 
-#include <math.h>
-#include <string.h>
-
 namespace Grim {
 
 void RemasteredLookMath::expand34(const float *matrix12, float *out16) {

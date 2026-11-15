@@ -19,8 +19,6 @@
  *
  */
 
-#include <math.h>
-
 #include "common/textconsole.h"
 
 #include "engines/grim/emi/nodes/cnode.h"

@@ -21,8 +21,6 @@
 
 #include "engines/grim/remastered/look/look_scene.h"
 
-#include <string.h>
-
 namespace Grim {
 
 LookCamera::LookCamera() : viewDistance(0.0f) {

@@ -23,8 +23,6 @@
 
 #include "engines/grim/remastered/look/look_types.h"
 
-#include <string.h>
-
 namespace Grim {
 
 LookConstBlock::LookConstBlock() : layout(nullptr) {

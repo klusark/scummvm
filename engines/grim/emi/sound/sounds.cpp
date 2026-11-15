@@ -19,8 +19,6 @@
  *
  */
 
-#include <math.h>
-
 #include "common/algorithm.h"
 #include "common/array.h"
 #include "common/str.h"

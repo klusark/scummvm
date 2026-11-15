@@ -19,8 +19,6 @@
  *
  */
 
-#include <math.h>
-
 #include "common/scummsys.h"
 
 #include "engines/grim/emi/math/cmatrix.h"

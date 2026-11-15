@@ -1,6 +1,8 @@
 #define FORBIDDEN_SYMBOL_EXCEPTION_setjmp
 #define FORBIDDEN_SYMBOL_EXCEPTION_longjmp
 
+#include <setjmp.h>
+
 #include "engines/grim/lua/ltask.h"
 #include "engines/grim/lua/lapi.h"
 #include "engines/grim/lua/lauxlib.h"

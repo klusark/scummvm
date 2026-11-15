@@ -25,9 +25,6 @@
 #include "engines/grim/remastered/look/look_lightprobe.h"
 #include "engines/grim/remastered/look/look_math.h"
 
-#include <math.h>
-#include <string.h>
-
 namespace Grim {
 
 static const float faceDirections[6][3] = {

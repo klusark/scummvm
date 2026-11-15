@@ -35,9 +35,6 @@
 #include "engines/grim/std/std_display.h"
 #include "engines/grim/wuregistry.h"
 
-#include <math.h>
-#include <string.h>
-
 namespace Grim {
 
 RemasteredLookRenderer::ExtraLightSpec::ExtraLightSpec() : type(0), shadingBias(0.0f), shadingLimit(0.0f), innerRadius(0.0f),

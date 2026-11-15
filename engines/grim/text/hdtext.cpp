@@ -27,10 +27,6 @@
 #include "common/textconsole.h"
 #include "common/util.h"
 
-#include <math.h>
-#include <stdio.h>
-#include <string.h>
-
 #include "graphics/fonts/ttf_glyphs.h"
 
 #include "engines/grim/remastered/hdcanvas.h"

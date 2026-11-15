@@ -1,6 +1,3 @@
-#define FORBIDDEN_SYMBOL_EXCEPTION_setjmp
-#define FORBIDDEN_SYMBOL_EXCEPTION_longjmp
-
 #include "common/array.h"
 #include "common/endian.h"
 #include "common/hashmap.h"

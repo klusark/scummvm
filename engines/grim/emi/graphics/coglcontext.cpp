@@ -19,8 +19,6 @@
  *
  */
 
-#include <math.h>
-
 #include "common/scummsys.h"
 
 #if defined(USE_OPENGL_GAME)

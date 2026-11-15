@@ -42,8 +42,6 @@
 #include "engines/grim/remastered/look/look_programs.h"
 #include "engines/grim/remastered/look/s3tc.h"
 
-#include <string.h>
-
 namespace Grim {
 
 static const int depthFuncTable[6] = { GL_ALWAYS, GL_LESS, GL_LEQUAL, GL_EQUAL, GL_GEQUAL, GL_GREATER };

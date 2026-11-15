@@ -26,8 +26,6 @@
 #include "engines/grim/remastered/look/look_math.h"
 #include "engines/grim/remastered/look/look_pipeline.h"
 
-#include <string.h>
-
 namespace Grim {
 
 enum {

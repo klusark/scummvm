@@ -19,8 +19,6 @@
  *
  */
 
-#include <math.h>
-
 #include "common/textconsole.h"
 
 #include "engines/grim/chore/cos.h"

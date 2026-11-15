@@ -25,8 +25,6 @@
 #include "engines/grim/remastered/look/materialpath.h"
 #include "engines/grim/remastered/look/mcb.h"
 
-#include <string.h>
-
 namespace Grim {
 
 RemasteredLookTextureCache::Entry::Entry() : palette(nullptr), width(0), height(0), bpp(0), keyFlag(false), keyValue(0), zImage(false) {

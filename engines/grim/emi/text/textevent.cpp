@@ -19,9 +19,6 @@
  *
  */
 
-#include <limits.h>
-#include <math.h>
-
 #include "common/textconsole.h"
 
 #include "engines/grim/emi/actor/actor.h"

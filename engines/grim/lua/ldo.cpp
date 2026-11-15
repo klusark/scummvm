@@ -15,6 +15,8 @@
 #pragma warning(disable:4611)
 #endif
 
+#include <setjmp.h>
+
 #include "engines/grim/lua/ldo.h"
 #include "engines/grim/lua/lfunc.h"
 #include "engines/grim/lua/lgc.h"
@@ -354,7 +356,7 @@ int32 luaD_protectedrun(int32 results) {
 	jmp_buf myErrorJmp;
 	int32 status;
 	struct C_Lua_Stack oldCLS = lua_state->Cstack;
-	jmp_buf *oldErr = lua_state->errorJmp;
+	jmp_buf *oldErr = (jmp_buf *)lua_state->errorJmp;
 	lua_state->errorJmp = &myErrorJmp;
 	lua_state->preventBreakCounter++;
 	lua_Task *tmpTask = lua_state->task;
@@ -383,7 +385,7 @@ static int32 protectedparser(ZIO *z, int32 bin) {
 	int32 status;
 	TProtoFunc *tf;
 	jmp_buf myErrorJmp;
-	jmp_buf *oldErr = lua_state->errorJmp;
+	jmp_buf *oldErr = (jmp_buf *)lua_state->errorJmp;
 	lua_state->errorJmp = &myErrorJmp;
 	if (setjmp(myErrorJmp) == 0) {
 		tf = bin ? luaU_undump1(z) : luaY_parser(z);

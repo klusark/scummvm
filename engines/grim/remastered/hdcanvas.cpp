@@ -36,9 +36,6 @@
 #include "engines/grim/remastered/overlay.h"
 #include "engines/grim/std/std_display.h"
 
-#include <math.h>
-#include <string.h>
-
 namespace Grim {
 
 HdCanvas::Item::Item() : kind(kItemBitmap), pixels(nullptr), srcWidth(0), srcHeight(0), layer(0), bitmapX(0), bitmapY(0),

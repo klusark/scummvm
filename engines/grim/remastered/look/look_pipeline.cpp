@@ -28,9 +28,6 @@
 #include "engines/grim/remastered/look/look_overlay.h"
 #include "engines/grim/remastered/look/look_pipeline.h"
 
-#include <math.h>
-#include <string.h>
-
 namespace Grim {
 
 static const LookSampler pointSampler = { kLookWrapClamp, 0, 0, 0 };

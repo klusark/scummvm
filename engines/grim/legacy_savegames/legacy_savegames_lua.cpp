@@ -19,9 +19,6 @@
  *
  */
 
-#define FORBIDDEN_SYMBOL_EXCEPTION_setjmp
-#define FORBIDDEN_SYMBOL_EXCEPTION_longjmp
-
 #include "common/array.h"
 #include "common/stream.h"
 #include "common/textconsole.h"

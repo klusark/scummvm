@@ -27,8 +27,6 @@
 #include "engines/grim/remastered/look/look_renderer.h"
 #include "engines/grim/renderdroid/rd.h"
 
-#include <string.h>
-
 namespace Grim {
 
 void RenderDroid::Model3Module::clearFrameCounters() {

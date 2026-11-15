@@ -24,8 +24,6 @@
 #include "engines/grim/remastered/look/look_glsl.h"
 #include "engines/grim/remastered/look/look_programs.h"
 
-#include <string.h>
-
 namespace Grim {
 
 bool RemasteredLookGlsl::isIdentifierChar(char c) {

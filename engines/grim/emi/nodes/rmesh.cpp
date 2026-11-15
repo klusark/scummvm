@@ -19,8 +19,6 @@
  *
  */
 
-#include <math.h>
-
 #include "common/endian.h"
 #include "common/list.h"
 #include "common/textconsole.h"
