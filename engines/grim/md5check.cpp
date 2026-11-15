@@ -341,25 +341,32 @@ const char *emi_voiceMon[] = {
 
 const char *emiPS2_artAll[] = {
 	"7bed6dd54ea6509b708e93017c14df8d", // english
+	"8196a746fea4e2a2bb6e50a9c8576efa", // italian
 };
 const char *emiPS2_artJam[] = {
 	"199c713bbfc22ae941502ffd60ea794d", // english
+	"9aaefe5a29062ac0b6948262f26134aa", // italian
 };
 const char *emiPS2_artLuc[] = {
 	"7add9758294c2118621e900940e66838", // english
+	"f812e8ada5a25b98de170cf943f3a860", // italian
 };
 const char *emiPS2_artMel[] = {
 	"514f1a684022831c178a18d13a16b6ad", // english PAL?
 	"c4f51395440049942fae39bf6155e82c", // english NTSC
+	"86cc8a73387cf0ebeb33d33ee514ed20", // italian
 };
 const char *emiPS2_artMon[] = {
 	"db945bd9d5fa990447bbabf6a1e00e5b", // english
+	"49f56529fe09ff516e22d5fbf8e28ded", // italian
 };
 const char *emiPS2_lip[] = {
 	"57eceeae6b82028243ede6c97c334c57", // english
+	"9b64f65a9473d11e34055137c4d978d1", // italian
 };
 const char *emiPS2_local[] = {
 	"da26ad3a739f2fa341988901ce8dfa49", // english
+	"2112c2177cba9c09fe739d3030412faf", // italian
 };
 /*
 const char *emiPS2_music1[] = {
@@ -374,18 +381,23 @@ const char *emiPS2_sfx[] = {
 };
 const char *emiPS2_voiceAll[] = {
 	"194a1e545a348df0fe488012bc703338", // english
+	"94f2338b4941047a73b7d38d0c63c56e", // italian
 };
 const char *emiPS2_voiceJam[] = {
 	"686b45178a4b2fdb5bee2097739feea9", // english
+	"07ff70744205de239328f8f035bf464b", // italian
 };
 const char *emiPS2_voiceLuc[] = {
 	"c5e8e0ce9986385b6c1f31b68768be47", // english
+	"ab627fffafaa6281e3cf71de1ce6b627", // italian
 };
 const char *emiPS2_voiceMel[] = {
 	"54663fc82520f1f02d7f3d9b29894540", // english
+	"801a2a666335214054c7a53dd3872f1d", // italian
 };
 const char *emiPS2_voiceMon[] = {
 	"b4a938b9c116e9370e992c8edfb00c35", // english
+	"858ae319dac6c1002eef1fc1587c5ce1", // italian
 };
 
 // EMI demo (CD demo does not include i9n.lab)
