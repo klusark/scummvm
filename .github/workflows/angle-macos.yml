@@ -1,0 +1,194 @@
+name: ANGLE macOS test
+# Builds ANGLE and a minimal static ScummVM bundle on macOS, then runs it
+# with OpenGL ES through ANGLE and with native OpenGL to compare.
+on:
+  workflow_dispatch:
+    inputs:
+      dockerized_bb_repository:
+        description: 'Repository holding the ANGLE build package'
+        default: 'klusark/dockerized-bb'
+      dockerized_bb_ref:
+        description: 'Branch of that repository'
+        default: 'ccr-c92a835c-80ltoj'
+  push:
+    paths:
+      - '.github/workflows/angle-macos.yml'
+permissions:
+  contents: read
+env:
+  DOCKERIZED_BB_REPOSITORY: ${{ inputs.dockerized_bb_repository || 'klusark/dockerized-bb' }}
+  DOCKERIZED_BB_REF: ${{ inputs.dockerized_bb_ref || 'ccr-c92a835c-80ltoj' }}
+  SDL2_VERSION: 2.32.10
+jobs:
+  macos:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            platform: macos-15
+            arch: arm64
+            # Same minimum as the buildbot arm64 toolchain
+            deploymentTarget: '14.0'
+          - name: macOS x86_64
+            platform: macos-15-intel
+            arch: x86_64
+            # ANGLE needs at least macOS 10.15
+            deploymentTarget: '10.15'
+    env:
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deploymentTarget }}
+      DEPS: ${{ github.workspace }}/deps
+    defaults:
+      run:
+        # Must be explicit for proper pipefail support
+        shell: bash
+    steps:
+      - name: Checkout ScummVM
+        uses: actions/checkout@v4
+        with:
+          path: scummvm
+      - name: Checkout ANGLE build package
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DOCKERIZED_BB_REPOSITORY }}
+          ref: ${{ env.DOCKERIZED_BB_REF }}
+          path: dockerized-bb
+          sparse-checkout: toolchains/common
+      - name: Set up build tools
+        run: |
+          # The dockerized-bb helpers expect some GNU tools
+          mkdir -p "$RUNNER_TEMP/shims"
+          if ! command -v sha256sum >/dev/null; then
+            printf '#!/bin/sh\nexec shasum -a 256 "$@"\n' > "$RUNNER_TEMP/shims/sha256sum"
+          fi
+          printf '#!/bin/sh\nexec sysctl -n hw.ncpu\n' > "$RUNNER_TEMP/shims/nproc"
+          chmod +x "$RUNNER_TEMP"/shims/*
+          echo "$RUNNER_TEMP/shims" >> "$GITHUB_PATH"
+          command -v wget >/dev/null || brew install wget
+          # gni-to-cmake.py needs ply
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install ply
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          echo "NUM_CPUS=$(sysctl -n hw.ncpu)" >> "$GITHUB_ENV"
+          mkdir -p "$DEPS"
+      - name: Cache ANGLE
+        id: cache-angle
+        uses: actions/cache@v4
+        with:
+          path: deps-angle
+          key: angle-${{ matrix.arch }}-${{ matrix.deploymentTarget }}-${{ hashFiles('dockerized-bb/toolchains/common/packages/angle/**') }}
+      - name: Build ANGLE
+        if: steps.cache-angle.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p angle-build
+          cd angle-build
+          PREFIX="$GITHUB_WORKSPACE/deps-angle" \
+            "$GITHUB_WORKSPACE/dockerized-bb/toolchains/common/packages/angle/build.sh" Mac \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }} \
+            -DUSE_METAL=ON
+      - name: Check ANGLE libraries
+        run: |
+          ls -l deps-angle/lib
+          for lib in deps-angle/lib/libEGL.dylib deps-angle/lib/libGLESv2.dylib; do
+            otool -L "$lib"
+            otool -l "$lib" | grep -A3 -E 'LC_BUILD_VERSION|LC_VERSION_MIN' || true
+          done
+      - name: Build SDL2
+        run: |
+          curl -sSfL -o SDL2.tar.gz "https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-${SDL2_VERSION}.tar.gz"
+          tar xzf SDL2.tar.gz
+          cmake -S "SDL2-${SDL2_VERSION}" -B sdl2-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$DEPS" \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF
+          cmake --build sdl2-build -j "$NUM_CPUS"
+          cmake --install sdl2-build
+          # ANGLE is only used if SDL has EGL support
+          grep -E 'SDL_VIDEO_OPENGL_(EGL|ES2)' "$DEPS/include/SDL2/SDL_config.h"
+          grep -q '#define SDL_VIDEO_OPENGL_EGL 1' "$DEPS/include/SDL2/SDL_config.h"
+      - name: Configure ScummVM
+        run: |
+          cd scummvm
+          # Only SDL2 is available as a static library: disable all optional libraries
+          ./configure \
+            --with-sdl-prefix="$DEPS" \
+            --enable-static --with-staticlib-prefix="$DEPS" \
+            --with-angle-prefix="$GITHUB_WORKSPACE/deps-angle/lib" \
+            --disable-all-engines --enable-engine=grim \
+            --disable-ogg --disable-vorbis --disable-tremor --disable-flac --disable-mad \
+            --disable-fribidi --disable-mpeg2 --disable-mikmod --disable-openmpt --disable-mpcdec \
+            --disable-a52 --disable-jpeg --disable-png --disable-gif --disable-theoradec \
+            --disable-vpx --disable-faad --disable-fluidsynth --disable-fluidlite --disable-sonivox \
+            --disable-readline --disable-freetype2 --disable-sdlnet --disable-libcurl \
+            --disable-discord --disable-retrowave --disable-sparkle --disable-osx-dock-plugin \
+            --disable-updates --disable-tts
+      - name: Check OpenGL configuration
+        run: |
+          cd scummvm
+          grep -E 'USE_OPENGL|USE_GLES_MODE' config.h
+          # macOS used to force desktop OpenGL only: runtime detection is needed for ANGLE
+          ! grep -q '#define USE_GLES_MODE' config.h
+          grep '^ANGLEPATH' config.mk
+      - name: Build ScummVM bundle
+        run: |
+          cd scummvm
+          make -j "$NUM_CPUS" bundle
+          ls -l ScummVM.app/Contents/Frameworks
+          codesign --verify --deep --verbose=2 ScummVM.app
+      - name: Run with OpenGL ES (ANGLE) and with OpenGL
+        run: |
+          mkdir -p results
+          for impl in gles2 gl; do
+            printf '[scummvm]\ngfx_mode=opengl\nopengl_implementation=%s\n' "$impl" > "results/$impl.ini"
+            scummvm/ScummVM.app/Contents/MacOS/scummvm \
+              --config="$PWD/results/$impl.ini" \
+              --logfile="$PWD/results/log-$impl.txt" -d5 \
+              > "results/stdout-$impl.txt" 2>&1 &
+            pid=$!
+            sleep 30
+            screencapture -x "results/screenshot-$impl.png" || echo "screencapture failed"
+            if kill -0 "$pid" 2>/dev/null; then
+              kill "$pid"
+              echo "$impl: still running after 30s" >> results/status.txt
+            else
+              wait "$pid" && rc=0 || rc=$?
+              echo "$impl: exited early with code $rc" >> results/status.txt
+            fi
+          done
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo "## ${{ matrix.name }}"
+            echo '```'
+            cat results/status.txt 2>/dev/null || true
+            for impl in gles2 gl; do
+              echo "--- $impl"
+              grep -hE 'context initialized|OpenGL (version|vendor|renderer)|falling back|WARNING|ERROR' \
+                "results/log-$impl.txt" 2>/dev/null || echo "(no log)"
+            done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$GITHUB_STEP_SUMMARY"
+      - name: Check ScummVM used ANGLE
+        run: |
+          grep -q 'OpenGL: GLES2 context initialized' results/log-gles2.txt
+          grep -q 'OpenGL renderer: ANGLE' results/log-gles2.txt
+          grep -q 'OpenGL: GL context initialized' results/log-gl.txt
+      - name: Package bundle
+        if: always()
+        run: |
+          # ditto keeps symlinks and code signatures
+          if [ -d scummvm/ScummVM.app ]; then
+            ditto -c -k --keepParent scummvm/ScummVM.app "results/ScummVM-${{ matrix.arch }}.zip"
+          fi
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: angle-macos-${{ matrix.arch }}
+          path: results
