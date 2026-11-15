@@ -43,6 +43,7 @@ private:
 	void followPath(float deltaTime);
 	void updateWalk(float deltaTime);
 	bool alignToPuck(Puck_v2 *puck);
+	float getTurnRate();
 
 	static void getOuttaTheBox(float *point, const float *box, const float *transform);
 	static bool testCollision(EmiEngine *engine, float startX, float startY, float startZ, float endX, float endY, float endZ, float originX, float originY, float originZ, const float *box, const float *transform);

@@ -47,6 +47,8 @@ static const int kVirtualKeyBackspace = 0x08;
 static const int kVirtualKeyControl = 0x11;
 static const int kVirtualKeyPause = 0x13;
 static const int kVirtualKeyF = 0x46;
+static const int kVirtualKeyM = 0x4D;
+static const int kMovementSyncFrames = 5;
 
 void EmiEngine::pumpEvents() {
 	Common::EventManager *eventManager = g_system->getEventManager();
@@ -92,10 +94,16 @@ void EmiEngine::pumpEvents() {
 			_joystick->setDeviceButton(mapPadButton(event.joystick.button), false);
 			break;
 		case Common::EVENT_CUSTOM_ENGINE_ACTION_START:
-			_joystick->setDeviceButton((int)event.customType, true);
+			if (event.customType == kActionToggleMovement)
+				injectMovementToggleKey();
+			else
+				_joystick->setDeviceButton((int)event.customType, true);
+
 			break;
 		case Common::EVENT_CUSTOM_ENGINE_ACTION_END:
-			_joystick->setDeviceButton((int)event.customType, false);
+			if (event.customType != kActionToggleMovement)
+				_joystick->setDeviceButton((int)event.customType, false);
+
 			break;
 		default:
 			break;
@@ -201,6 +209,51 @@ void EmiEngine::handleDebugKeys(int virtualKey) {
 	}
 }
 
+void EmiEngine::injectMovementToggleKey() {
+	// A recorded demo keeps the movement it was recorded with
+	if (_demoReplay && _demoReplay->_mode == DemoReplay::kModePlayback)
+		return;
+
+	bool pressControl = !_controlHeld;
+	int now = (int)g_system->getMillis();
+
+	_movementSyncWasCameraRelative = _lua->isCameraRelativePs2();
+	_movementSyncFrames = kMovementSyncFrames;
+
+	// The script looks for CTRL + M
+	if (pressControl)
+		_keyGenerator->keyDown(kVirtualKeyControl, 0, now);
+
+	_keyGenerator->keyDown(kVirtualKeyM, 0, now);
+	_keyGenerator->keyUp(kVirtualKeyM, 0, now);
+
+	if (pressControl)
+		_keyGenerator->keyUp(kVirtualKeyControl, 0, now);
+}
+
+void EmiEngine::syncMovementOption() {
+	if (_movementSyncFrames == 0)
+		return;
+
+	if (_demoReplay && _demoReplay->_mode == DemoReplay::kModePlayback) {
+		_movementSyncFrames = 0;
+
+		return;
+	}
+
+	bool cameraRelative = _lua->isCameraRelativePs2();
+
+	if (cameraRelative != _movementSyncWasCameraRelative) {
+		ConfMan.setBool("emi_ps2_tank_controls", !cameraRelative);
+		ConfMan.flushToDisk();
+		_movementSyncFrames = 0;
+
+		return;
+	}
+
+	_movementSyncFrames--;
+}
+
 void EmiEngine::handleActivation(bool active) {
 	if (active) {
 		if (_keyGenerator) {
@@ -250,10 +303,12 @@ Common::Array<Common::Keymap *> EmiEngine::initKeymapsEmi(const char *target) {
 
 	engineKeyMap->setPartialMatchAllowed(false);
 
-	if (Common::parsePlatform(ConfMan.get("platform", target)) == Common::kPlatformPS2)
+	if (Common::parsePlatform(ConfMan.get("platform", target)) == Common::kPlatformPS2) {
 		addPadActionsPs2(engineKeyMap);
-	else
+		addPadAction(engineKeyMap, "MOVEMODE", _("Toggle camera/character-relative movement"), kActionToggleMovement, "F9");
+	} else {
 		addKeyActionsPc(engineKeyMap);
+	}
 
 	act = new Common::Action("GMM", _("Global Main Menu"));
 	act->setEvent(Common::EVENT_MAINMENU);

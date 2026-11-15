@@ -150,6 +150,7 @@ int EmiEngine::updateManual(CDrawContext *drawContext, bool draw, int manualMs) 
 		}
 
 		_lua->update(frameTime);
+		syncMovementOption();
 
 		if (!isPs2)
 			updateSounds(false);

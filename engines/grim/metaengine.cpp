@@ -175,6 +175,17 @@ static const ADExtraGuiOptionsMap gameGuiOptions[] = {
 			0
 		}
 	},
+	{
+		GAMEOPTION_EMI_PS2_TANK_CONTROLS,
+		{
+			_s("Tank controls"),
+			_s("Make the movement relative to the facing direction of the character, as in the PC version: left and right turn the character, up moves it forward."),
+			"emi_ps2_tank_controls",
+			false,
+			0,
+			0
+		}
+	},
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
 

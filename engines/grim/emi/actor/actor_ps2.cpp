@@ -26,6 +26,7 @@
 #include "engines/grim/emi/core/lconsoleservices.h"
 #include "engines/grim/emi/costume/choreinstance.h"
 #include "engines/grim/emi/emiengine.h"
+#include "engines/grim/emi/lua_v2_opcodes/lua_v2.h"
 #include "engines/grim/emi/math/singlemath.h"
 #include "engines/grim/emi/nodes/rmesh.h"
 #include "engines/grim/emi/nodes/rprimitiveinstance.h"
@@ -36,6 +37,7 @@ namespace Grim {
 
 static const float kCollisionFloatMax = 3.4028235e+38f;
 static const int kCollisionAnyPlane = -1;
+static const float kTankTurnRate = 140.0f;
 
 ActorPs2::ActorPs2(EmiEngine *engine, const char *newActorName) : Actor(engine, newActorName) {
 }
@@ -153,7 +155,7 @@ void ActorPs2::updateWalk(float deltaTime) {
 	if (turnDirection != 0 && (_mode & 1) == 0) {
 		TruncFloat turn = TruncFloat(deltaTime) * TruncFloat(_extra->_timeScale);
 
-		turn = turn * TruncFloat(_extra->_turnRate);
+		turn = turn * TruncFloat(getTurnRate());
 		turn = turn * TruncFloat::fromInt(turnDirection);
 		puck->rotateTrunc(-turn);
 	}
@@ -169,6 +171,9 @@ void ActorPs2::updateWalk(float deltaTime) {
 
 	_extra->_aligned = alignToPuck(puck);
 
+	if (_extra->_aligned && _extra->_turnDir == 0)
+		_extra->_tankTurn = false;
+
 	if (_extra->_turnDir == 0 && !_extra->_aligned) {
 		if (TruncFloat(_extra->_alignOff) > TruncFloat(180.0f))
 			_extra->_turnDir = 1;
@@ -180,6 +185,18 @@ void ActorPs2::updateWalk(float deltaTime) {
 		puck->computeLocalPositionFromWorld();
 
 	setLocalPosition(puck->_pos);
+}
+
+float ActorPs2::getTurnRate() {
+	// The slow turn only belongs to the character-relative movement, so the camera-relative one drops it
+	if (_extra->_tankTurn && _engine->getLua()->isCameraRelativePs2())
+		_extra->_tankTurn = false;
+
+	// A lower rate set by the scripts wins
+	if (_extra->_tankTurn && _extra->_turnRate > kTankTurnRate)
+		return kTankTurnRate;
+
+	return _extra->_turnRate;
 }
 
 bool ActorPs2::alignToPuck(Puck_v2 *puck) {
@@ -218,7 +235,7 @@ bool ActorPs2::alignToPuck(Puck_v2 *puck) {
 	TruncFloat turnStep = full;
 
 	if (!_extra->_snapTurn) {
-		turnStep = TruncFloat(_extra->_turnRate) * TruncFloat(_extra->_timeScale);
+		turnStep = TruncFloat(getTurnRate()) * TruncFloat(_extra->_timeScale);
 		turnStep = turnStep * TruncFloat(_engine->getFrameTime());
 	}
 

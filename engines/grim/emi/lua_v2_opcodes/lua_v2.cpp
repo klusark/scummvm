@@ -995,7 +995,11 @@ int Lua_V2::boot(int saveGameResume, const char *bootParam) {
 	else
 		lua_pushnil();
 
-	return lua_call("BOOT") == 0;
+	int result = lua_call("BOOT");
+
+	applyTankControlsPs2();
+
+	return result == 0;
 }
 
 void Lua_V2::update(float seconds) {

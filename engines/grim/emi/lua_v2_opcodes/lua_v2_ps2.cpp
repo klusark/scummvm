@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "common/system.h"
 #include "common/textconsole.h"
 
@@ -317,6 +318,55 @@ void Lua_V2::ObsoleteFunctionPs2() {
 	}
 
 	Debug::debugImpl(Debug::Scripts, "OBSOLETE FUNCTION: %s\n%s", name, lua_getstacktext().c_str());
+}
+
+bool Lua_V2::isTankControlsPs2() {
+	if (_engine->getGamePlatform() != Common::kPlatformPS2 || !ConfMan.getBool("emi_ps2_tank_controls"))
+		return false;
+
+	// A recorded demo keeps the movement it was recorded with
+	DemoReplay *replay = _engine->getDemoReplay();
+
+	return !replay || replay->_mode != DemoReplay::kModePlayback;
+}
+
+void Lua_V2::applyTankControlsPs2() {
+	if (isTankControlsPs2())
+		forceTankControlsPs2();
+}
+
+bool Lua_V2::isCameraRelativePs2() {
+	lua_beginblock();
+
+	bool cameraRelative = !lua_isnil(lua_getglobal("MarioControl"));
+
+	lua_endblock();
+
+	return cameraRelative;
+}
+
+void Lua_V2::forceTankControlsPs2() {
+	lua_beginblock();
+
+	lua_Object prefs = lua_getglobal("system_prefs");
+
+	if (lua_istable(prefs)) {
+		lua_Object cfg = getTableField(prefs, "cfg");
+
+		if (lua_istable(cfg)) {
+			// system_prefs.OFF
+			lua_pushobject(cfg);
+			lua_pushstring("camera_mode");
+			lua_pushnumber(0.0f);
+			lua_settable();
+		}
+	}
+
+	// The script global is FALSE (nil) for the character-relative movement
+	lua_pushnil();
+	lua_setglobal("MarioControl");
+
+	lua_endblock();
 }
 
 uint Lua_V2::getClockUniqueUint() {

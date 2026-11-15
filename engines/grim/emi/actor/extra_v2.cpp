@@ -54,6 +54,7 @@ Extra_v2::Extra_v2(EmiEngine *engine) : _engine(engine) {
 
 	_walking = false;
 	_turnDir = 0;
+	_tankTurn = false;
 	_resting = false;
 	_aligned = false;
 	_snapTurn = false;

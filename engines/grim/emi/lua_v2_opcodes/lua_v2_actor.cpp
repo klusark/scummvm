@@ -2142,6 +2142,9 @@ void Lua_V2::TurnActor() {
 
 	actor->_mode &= ~1U;
 	actor->turn(lua_getnumber(directionObj));
+
+	if (actor->_extra && isTankControlsPs2())
+		actor->_extra->_tankTurn = true;
 }
 
 void Lua_V2::GetActorRot() {

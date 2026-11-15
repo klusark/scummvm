@@ -283,6 +283,10 @@ private:
 		kPadRightStick = 15
 	};
 
+	enum {
+		kActionToggleMovement = 100
+	};
+
 	void mountEmiPatchArchives();
 	bool initialize();
 	void playAspyrLogo(CDrawContext *drawContext);
@@ -293,6 +297,8 @@ private:
 	void handleKeyPress(const Common::KeyState &key, bool repeat);
 	void handleKeyRelease(const Common::KeyState &key);
 	void handleDebugKeys(int virtualKey);
+	void injectMovementToggleKey();
+	void syncMovementOption();
 	void handleActivation(bool active);
 	int mapPadButton(int button);
 	static void addPadAction(Common::Keymap *keymap, const char *id, const Common::U32String &label, int padButton, const char *input);
@@ -406,6 +412,8 @@ private:
 	int _soundRestartFrames = 0;
 	int _setChangeFrames = 0;
 	bool _spuClearArmed = false;
+	int _movementSyncFrames = 0;
+	bool _movementSyncWasCameraRelative = false;
 
 	// Registry
 	Common::String _registrySyncedSnapshot;

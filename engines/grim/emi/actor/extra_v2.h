@@ -62,6 +62,7 @@ public:
 	bool _resting;
 	float _walkRate;
 	float _turnRate;
+	bool _tankTurn;
 	bool _aligned;
 	bool _snapTurn;
 	float _offsetYaw;

@@ -713,8 +713,10 @@ void EmiEngine::loadGame(CDrawContext *drawContext) {
 		readSaveData(&skippedSize, sizeof(skippedSize));
 		_saveFile->seek(skippedSize, 1);
 
-		if (getMemoryCardId() >= kMemoryCardFirstId && restoreGameData(readSaveData))
+		if (getMemoryCardId() >= kMemoryCardFirstId && restoreGameData(readSaveData)) {
+			_lua->applyTankControlsPs2();
 			_libJustLoaded = 1;
+		}
 	} else if (_saveFile) {
 		int tableSize = 0;
 		char text[kSavedTextBufferSize + 1];

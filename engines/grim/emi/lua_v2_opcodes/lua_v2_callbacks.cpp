@@ -165,6 +165,10 @@ bool Lua_V2::callPrefsInit() {
 
 	lua_endblock();
 
+	// The init resets the movement mode to the default one
+	if (called)
+		applyTankControlsPs2();
+
 	return called;
 }
 

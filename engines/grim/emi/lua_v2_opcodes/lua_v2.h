@@ -71,6 +71,8 @@ public:
 	int doPauseCallback() override;
 	int doCharacterCallback(int character) override;
 	bool callPrefsInit();
+	void applyTankControlsPs2();
+	bool isCameraRelativePs2();
 	using Lua_V1::saveGameCallback;
 	void saveGameCallback(SaveRestoreAccess *writer);
 	void getVersion(LString &version);
@@ -425,6 +427,8 @@ private:
 
 	void makeSystemTable();
 	void makeControlsTable(int ref);
+	bool isTankControlsPs2();
+	void forceTankControlsPs2();
 	void applyTextTable(lua_Object table, TextEvent *event);
 	bool joinTextStrings(lua_Object table, CjkString *result);
 	void readSayLineTable(lua_Object table, int *volume, int *pan, int *x, int *y);
