@@ -23,6 +23,7 @@
 #include "common/textconsole.h"
 
 #include "engines/grim/emi/graphics/background.h"
+#include "engines/grim/emi/graphics/tiledscene.h"
 #include "engines/grim/emi/emiengine.h"
 #include "engines/grim/emi/core/lconsoleservices.h"
 #include "engines/grim/emi/resources/lresourcehandle.h"
@@ -40,8 +41,7 @@ void Lua_V2::Exit() {
 	if (lua_isnumber(codeObj))
 		code = luaFtol(lua_getnumber(codeObj));
 
-	if (_engine->isDemo())
-		logConsole(kConsoleDebug, "The scripts called exit with code %d. Shutting down.\n", code);
+	logMessage(kConsoleDebug, "Exit called from scripts with code %d!  Shutting down.\n", code);
 
 	_engine->requestShutdown(code);
 }
@@ -54,8 +54,7 @@ void Lua_V2::FunctionName() {
 	lua_Object functionObj = lua_getparam(1);
 
 	if (!lua_isfunction(functionObj)) {
-		if (_engine->isDemo())
-			logConsole(kConsoleStatus, "FunctionName: the argument must be a function.\n");
+		logMessage(kConsoleStatus, "FunctionName: Parameter must be a function.\n");
 
 		return;
 	}
@@ -82,67 +81,34 @@ void Lua_V2::PrintMessage() {
 	lua_Object messageObj = lua_getparam(1);
 
 	if (!lua_isnil(messageObj) && lua_isstring(messageObj)) {
-		LString message = lua_getstring(messageObj);
-		LConsoleServices *console = _engine->getConsoleServices();
-
-		message += "\n";
-
-		if (console)
-			console->logStatus("%s", message.c_str());
-		else
-			warning("%s", message.c_str());
-	} else if (_engine->isDemo()) {
-		if (!lua_isnil(messageObj))
-			logConsole(kConsoleDebug, "PrintMessage: takes only a single string argument.\n");
-		else if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logStatus("(nil)");
+		logMessage(kConsoleStatus, "%s\n", lua_getstring(messageObj));
+	} else if (!lua_isnil(messageObj)) {
+		logMessage(kConsoleStatus, "MessagePrint takes only a single string argument!");
+	} else {
+		logMessage(kConsoleStatus, "(nil)");
 	}
 }
 
 void Lua_V2::PrintError() {
 	lua_Object messageObj = lua_getparam(1);
-	LConsoleServices *console = _engine->getConsoleServices();
 
-	if (lua_isnil(messageObj)) {
-		if (console)
-			console->logError("(nil)");
-		else
-			warning("(nil)");
-	} else if (lua_isstring(messageObj)) {
-		LString message = lua_getstring(messageObj);
-
-		message += "\n";
-
-		if (message.contains('%'))
-			warning("Lua_V2::PrintError(): the message contains a %% character");
-
-		if (console)
-			console->logError("%s", message.c_str());
-		else
-			warning("%s", message.c_str());
-	} else if (_engine->isDemo()) {
-		logConsole(kConsoleDebug, "PrintError: takes only a single string argument.\n");
-	}
+	if (lua_isnil(messageObj))
+		logMessage(kConsoleError, "(nil)");
+	else if (lua_isstring(messageObj))
+		logMessage(kConsoleError, "%s\n", lua_getstring(messageObj));
+	else
+		logMessage(kConsoleError, "ErrorPrint takes only a single string argument!");
 }
 
 void Lua_V2::PrintWarning() {
 	lua_Object messageObj = lua_getparam(1);
 
 	if (!lua_isnil(messageObj) && lua_isstring(messageObj)) {
-		LString message = lua_getstring(messageObj);
-		LConsoleServices *console = _engine->getConsoleServices();
-
-		message += "\n";
-
-		if (console)
-			console->logWarning("%s", message.c_str());
-		else
-			warning("%s", message.c_str());
-	} else if (_engine->isDemo()) {
-		if (!lua_isnil(messageObj))
-			logConsole(kConsoleDebug, "PrintWarning: takes only a single string argument.\n");
-		else if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logWarning("(nil)");
+		logMessage(kConsoleWarning, "%s\n", lua_getstring(messageObj));
+	} else if (!lua_isnil(messageObj)) {
+		logMessage(kConsoleWarning, "WarningPrint takes only a single string argument!");
+	} else {
+		logMessage(kConsoleWarning, "(nil)");
 	}
 }
 
@@ -150,20 +116,11 @@ void Lua_V2::PrintDebug() {
 	lua_Object messageObj = lua_getparam(1);
 
 	if (!lua_isnil(messageObj) && lua_isstring(messageObj)) {
-		LString message = lua_getstring(messageObj);
-		LConsoleServices *console = _engine->getConsoleServices();
-
-		message += "\n";
-
-		if (console)
-			console->logDebug("%s", message.c_str());
-		else
-			warning("%s", message.c_str());
-	} else if (_engine->isDemo()) {
-		if (!lua_isnil(messageObj))
-			logConsole(kConsoleDebug, "PrintDebug: takes only a single string argument.\n");
-		else if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logDebug("(nil)");
+		logMessage(kConsoleDebug, "%s\n", lua_getstring(messageObj));
+	} else if (!lua_isnil(messageObj)) {
+		logMessage(kConsoleDebug, "DebugPrint takes only a single string argument!");
+	} else {
+		logMessage(kConsoleDebug, "(nil)");
 	}
 }
 
@@ -173,7 +130,7 @@ void Lua_V2::MakeCurrentSet() {
 	if (lua_isstring(roomObj)) {
 		// The demo logs the set name and leaves the loaded sounds alone
 		if (_engine->isDemo()) {
-			logConsole(kConsoleStatus, "Making the current set %s.\n", lua_getstring(roomObj));
+			logMessage(kConsoleStatus, "Making the current set %s.\n", lua_getstring(roomObj));
 		} else {
 			for (uint i = 0; i < _lockedSounds.size(); i++)
 				_engine->getSounds()->stopSound(_lockedSounds[i]);
@@ -183,9 +140,7 @@ void Lua_V2::MakeCurrentSet() {
 
 		Room_v2::loadRoom(_engine, lua_getstring(roomObj));
 	} else {
-		if (_engine->isDemo())
-			logConsole(kConsoleWarning, "MakeCurrentSet: the argument must be a set name.\n");
-
+		logMessage(kConsoleWarning, "Must pass a string to MakeCurrentSet!\n");
 		Room_v2::loadRoom(_engine, nullptr);
 	}
 }
@@ -223,11 +178,15 @@ void Lua_V2::UnLockSet() {
 	if (roomHandle.lock() && roomHandle._typed) {
 		Room_v2 *room = roomHandle._typed;
 
-		room->_lockCount--;
-		_engine->getResourceManager()->unlockResource(room);
+		if (_engine->getGamePlatform() == Common::kPlatformPS2 && room->_lockCount <= 0) {
+			logMessage(kConsoleError, "Attempted to unlock a non-locked resource (%s) !\n", roomName.c_str());
+		} else {
+			room->_lockCount--;
+			_engine->getResourceManager()->unlockResource(room);
 
-		if (room->_lockCount == 0 && room->_purgeOnFree)
-			_engine->getResourceManager()->purgeResource(room, true);
+			if (room->_lockCount == 0 && room->_purgeOnFree)
+				_engine->getResourceManager()->purgeResource(room, true);
+		}
 
 		for (uint i = 0; !_engine->isDemo() && i < _lockedRooms.size(); i++) {
 			if (_lockedRooms[i] == roomName) {
@@ -236,8 +195,8 @@ void Lua_V2::UnLockSet() {
 				break;
 			}
 		}
-	} else if (_engine->isDemo()) {
-		logConsole(kConsoleWarning, "UnLockSet: the set %s does not exist.\n", roomName.c_str());
+	} else {
+		logMessage(kConsoleWarning, "Attempted to unlock non-existent set %s!\n", roomName.c_str());
 	}
 
 	roomHandle.unlock();
@@ -248,6 +207,12 @@ void Lua_V2::LockBackground() {
 
 	if (!lua_isstring(backgroundObj))
 		return;
+
+	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		lockBackgroundWithScene(lua_getstring(backgroundObj), true);
+
+		return;
+	}
 
 	LString backgroundName = "BG";
 
@@ -272,6 +237,12 @@ void Lua_V2::UnLockBackground() {
 	if (!lua_isstring(backgroundObj))
 		return;
 
+	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		unlockBackgroundWithScene(lua_getstring(backgroundObj), true);
+
+		return;
+	}
+
 	LString backgroundName = "BG";
 
 	backgroundName += lua_getstring(backgroundObj);
@@ -295,18 +266,102 @@ void Lua_V2::UnLockBackground() {
 			}
 		}
 	} else if (_engine->isDemo()) {
-		logConsole(kConsoleWarning, "UnLockBackground: the background %s does not exist.\n", backgroundName.c_str());
+		logMessage(kConsoleWarning, "UnLockBackground: the background %s does not exist.\n", backgroundName.c_str());
 	}
 
 	backgroundHandle.unlock();
+}
+
+void Lua_V2::lockBackgroundWithScene(const LString &name, bool recordName) {
+	LString backgroundName = "BG";
+
+	backgroundName += name;
+
+	LResourceHandle<Background> backgroundHandle(_engine, backgroundName);
+
+	if (backgroundHandle.lock() && backgroundHandle._typed) {
+		backgroundHandle._typed->_lockCount++;
+		_engine->getResourceManager()->lockResource(backgroundHandle._typed);
+
+		if (recordName)
+			_lockedBackgrounds.push_back(name);
+	}
+
+	backgroundHandle.unlock();
+
+	LString sceneName = "TS";
+
+	sceneName += name;
+
+	LResourceHandle<TiledScene> sceneHandle(_engine, sceneName);
+
+	if (sceneHandle.lock() && sceneHandle._typed) {
+		sceneHandle._typed->_lockCount++;
+		_engine->getResourceManager()->lockResource(sceneHandle._typed);
+	}
+
+	sceneHandle.unlock();
+}
+
+void Lua_V2::unlockBackgroundWithScene(const LString &name, bool forgetName) {
+	LString backgroundName = "BG";
+
+	backgroundName += name;
+
+	LResourceHandle<Background> backgroundHandle(_engine, backgroundName);
+
+	if (backgroundHandle.lock() && backgroundHandle._typed) {
+		Background *background = backgroundHandle._typed;
+
+		if (background->_lockCount <= 0) {
+			logMessage(kConsoleError, "Attempted to unlock a non-locked resource (%s) !\n", backgroundName.c_str());
+		} else {
+			background->_lockCount--;
+			_engine->getResourceManager()->unlockResource(background);
+
+			if (background->_lockCount == 0 && background->_purgeOnFree)
+				_engine->getResourceManager()->purgeResource(background, true);
+		}
+
+		for (uint i = 0; forgetName && i < _lockedBackgrounds.size(); i++) {
+			if (_lockedBackgrounds[i] == name) {
+				_lockedBackgrounds.remove_at(i);
+
+				break;
+			}
+		}
+	}
+
+	backgroundHandle.unlock();
+
+	LString sceneName = "TS";
+
+	sceneName += name;
+
+	LResourceHandle<TiledScene> sceneHandle(_engine, sceneName);
+
+	if (sceneHandle.lock() && sceneHandle._typed) {
+		TiledScene *scene = sceneHandle._typed;
+
+		if (scene->_lockCount <= 0) {
+			logMessage(kConsoleError, "Attempted to unlock a non-locked resource (%s) !\n", sceneName.c_str());
+		} else {
+			scene->_lockCount--;
+			_engine->getResourceManager()->unlockResource(scene);
+
+			if (scene->_lockCount == 0 && scene->_purgeOnFree)
+				_engine->getResourceManager()->purgeResource(scene, true);
+		}
+	}
+
+	sceneHandle.unlock();
 }
 
 void Lua_V2::MakeCurrentSetup() {
 	Room_v2 *currentRoom = Room_v2::getCurrentRoom(_engine);
 
 	if (!currentRoom) {
-		if (_engine->isDemo())
-			logConsole(kConsoleStatus, "MakeCurrentSetup: there is no current set.\n");
+		logMessage(kConsoleStatus, "MakeCurrentSetup: No current Set!\n");
 
 		return;
 	}
@@ -315,11 +370,11 @@ void Lua_V2::MakeCurrentSetup() {
 
 	if (lua_isnumber(setupObj)) {
 		currentRoom->setSetup(luaFtol(lua_getnumber(setupObj)));
-	} else if (_engine->isDemo()) {
-		logConsole(kConsoleStatus, "MakeCurrentSetup: the setup parameter is not valid.\n");
-	} else if (lua_isstring(setupObj)) {
+	} else if (!_engine->isDemo() && lua_isstring(setupObj)) {
 		// The disasm passes the address of the string as the setup index
 		warning("Lua_V2::MakeCurrentSetup(): a setup name is not a valid setup index");
+	} else {
+		logMessage(kConsoleStatus, "MakeCurrentSetup: Invalid params!\n");
 	}
 }
 
@@ -327,8 +382,7 @@ void Lua_V2::GetCurrentSetup() {
 	lua_Object roomObj = lua_getparam(1);
 
 	if (!lua_isstring(roomObj)) {
-		if (_engine->isDemo())
-			logConsole(kConsoleDebug, "GetCurrentSetup: the argument must be a set name.\n");
+		logMessage(kConsoleDebug, "Bad set string for GetCurrentSetup!");
 
 		return;
 	}
@@ -352,8 +406,10 @@ void Lua_V2::GetCurrentSetup() {
 	LString roomName = lua_getstring(roomObj);
 	LResourceHandle<Room_v2> roomHandle(_engine, roomName);
 
-	if (roomHandle.lock() && roomHandle._typed)
+	if (roomHandle.lock() && roomHandle._typed) {
+		logMessage(kConsoleDebug, "GetCurrentSetup: requested setup for a room that isn't the current one. Was this intentional?\n");
 		lua_pushnumber((float)roomHandle._typed->_currentSetup);
+	}
 
 	roomHandle.unlock();
 }
@@ -362,8 +418,7 @@ void Lua_V2::NextSetup() {
 	Room_v2 *currentRoom = Room_v2::getCurrentRoom(_engine);
 
 	if (!currentRoom) {
-		if (_engine->isDemo())
-			logConsole(kConsoleStatus, "NextSetup: there is no current set.\n");
+		logMessage(kConsoleStatus, "No current Set!\n");
 
 		return;
 	}
@@ -382,8 +437,7 @@ void Lua_V2::PreviousSetup() {
 	Room_v2 *currentRoom = Room_v2::getCurrentRoom(_engine);
 
 	if (!currentRoom) {
-		if (_engine->isDemo())
-			logConsole(kConsoleStatus, "PreviousSetup: there is no current set.\n");
+		logMessage(kConsoleStatus, "No current Set!\n");
 
 		return;
 	}

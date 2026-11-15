@@ -30,6 +30,7 @@
 
 namespace Grim {
 
+static const int kFileNameBufferSize = 512;
 static const uint kLipHeaderSize = 8;
 static const int kLipMaxEntries = (LipData::kBufferSize - kLipHeaderSize) / sizeof(LipEntry) - 1;
 static const int kLipRestCode = 95;
@@ -63,6 +64,11 @@ int LipData::readFile(EmiEngine *engine, const char *name, LipData **lipData) {
 	if (dot != LString::npos)
 		path.erase(dot);
 
+	bool isPs2 = engine->getGamePlatform() == Common::kPlatformPS2;
+
+	if (isPs2)
+		engine->_lipFileName = path;
+
 	path += ".lip";
 
 	LFile *file = engine->getFileServices()->open(path.c_str(), "rb");
@@ -84,9 +90,39 @@ int LipData::readFile(EmiEngine *engine, const char *name, LipData **lipData) {
 		engine->getFileServices()->close(file, true);
 	}
 
+	if (isPs2 && !result)
+		engine->_lipFileName.clear();
+
 	*lipData = (LipData *)engine->_lipBuffer;
 
 	return result;
+}
+
+void LipData::saveFileName(EmiEngine *engine, SaveRestoreAccess *accessFunc) {
+	int length = (int)engine->_lipFileName.size() + 1;
+
+	accessFunc(&length, sizeof(length));
+	accessFunc((void *)engine->_lipFileName.c_str(), length);
+}
+
+int LipData::restoreFileName(EmiEngine *engine, SaveRestoreAccess *accessFunc) {
+	char buffer[kFileNameBufferSize + 1];
+	int length = 0;
+
+	accessFunc(&length, sizeof(length));
+
+	if (length < 0 || length > kFileNameBufferSize) {
+		warning("LipData::restoreFileName(): invalid name length %d", length);
+
+		return 0;
+	}
+
+	accessFunc(buffer, length);
+	buffer[length] = 0;
+
+	LipData *lipData = nullptr;
+
+	return readFile(engine, buffer, &lipData);
 }
 
 int LipData::codeToMouthShape(EmiEngine *engine, int code) {

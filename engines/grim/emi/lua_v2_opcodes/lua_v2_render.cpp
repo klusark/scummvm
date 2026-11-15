@@ -42,7 +42,7 @@ CLightNode *Lua_V2::getLightArg(int paramNumber, const char *opcodeName) {
 	Room_v2 *currentRoom = Room_v2::getCurrentRoom(_engine);
 
 	if (!currentRoom) {
-		warning("%s: no current room!", opcodeName);
+		logMessage(kConsoleWarning, "%s: no current room!\n", opcodeName);
 
 		return nullptr;
 	}
@@ -50,7 +50,7 @@ CLightNode *Lua_V2::getLightArg(int paramNumber, const char *opcodeName) {
 	lua_Object nameObj = lua_getparam(paramNumber);
 
 	if (!lua_isstring(nameObj)) {
-		warning("%s: light name argument must be a string.", opcodeName);
+		logMessage(kConsoleWarning, "%s: light name argument must be a string.\n", opcodeName);
 
 		return nullptr;
 	}
@@ -58,7 +58,7 @@ CLightNode *Lua_V2::getLightArg(int paramNumber, const char *opcodeName) {
 	CLightNode *light = currentRoom->findLight(lua_getstring(nameObj));
 
 	if (!light)
-		warning("%s: Invalid light name.", opcodeName);
+		logMessage(kConsoleWarning, "%s: Invalid light name.\n", opcodeName);
 
 	return light;
 }
@@ -86,7 +86,7 @@ void Lua_V2::SetLightPosition() {
 	CLightNode *light = getLightArg(1, "SetLightPosition");
 
 	if (!light) {
-		logDemo(kConsoleDebug, "SetLightPosition: invalid light.\n");
+		logMessage(kConsoleDebug, "SetLightPosition: first param must be a light.\n");
 
 		return;
 	}
@@ -96,7 +96,7 @@ void Lua_V2::SetLightPosition() {
 	lua_Object zObj = lua_getparam(4);
 
 	if (!lua_isnumber(xObj) || !lua_isnumber(yObj) || !lua_isnumber(zObj)) {
-		logDemo(kConsoleDebug, "SetLightPosition: the position must be three numbers.\n");
+		logMessage(kConsoleDebug, "SetLightPosition: must provide x,y, and z coordinates.\n");
 
 		return;
 	}
@@ -180,7 +180,9 @@ void Lua_V2::RenderModeUser() {
 			_engine->getSounds()->resumeAll();
 
 		_engine->setMode(_engine->getSavedMode());
+		logMessage(kConsoleStatus, "RENDERMODE USER nil - Set mode to %d\n", _engine->getMode());
 	} else if (!lua_isnil(modeObj) && mode != EmiEngine::kModeOverworld) {
+		logMessage(kConsoleStatus, "RENDERMODE USER TRUE - Set mode to %d\n", mode);
 		_engine->setSavedMode(mode);
 		Movie::pauseCurrent(_engine);
 
@@ -189,6 +191,8 @@ void Lua_V2::RenderModeUser() {
 
 		_engine->setMode(EmiEngine::kModeOverworld);
 		toggleStatsOverlay(true);
+	} else {
+		logMessage(kConsoleStatus, "RENDERMODE USER %s - NO ACTION\n", lua_isnil(modeObj) ? "nil" : "TRUE");
 	}
 }
 
@@ -240,12 +244,9 @@ void Lua_V2::UndimRegion() {
 		bool found = Grim::DimRegion::undimRegion(_engine, luaFtol(lua_getnumber(regionObj)));
 
 		if (!found)
-			logDemo(kConsoleWarning, "UndimRegion: the dim region was not found.\n");
+			logMessage(kConsoleWarning, "UndimRegion() - could not find the given dimregion id");
 	} else {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logError("UndimRegion() - argument is not a dimregion id");
-		else
-			warning("UndimRegion() - argument is not a dimregion id");
+		logMessage(kConsoleError, "UndimRegion() - argument is not a dimregion id");
 
 		lua_pushnil();
 	}
@@ -255,7 +256,7 @@ void Lua_V2::SetSpeechMode() {
 	lua_Object modeObj = lua_getparam(1);
 
 	if (!lua_isnumber(modeObj)) {
-		logDemo(kConsoleDebug, "SetSpeechMode: invalid parameter.\n");
+		logMessage(kConsoleDebug, "SetSpeechMode: argument must be a number!\n");
 
 		return;
 	}
@@ -266,11 +267,13 @@ void Lua_V2::SetSpeechMode() {
 		Actor::setSpeechMode(_engine, mode);
 
 		if (mode == 1)
-			logDemo(kConsoleDebug, "SetSpeechMode: the mode is set to Voice Only.\n");
+			logMessage(kConsoleDebug, "SetSpeechMode: mode set to Text Only.\n");
 		else if (mode == 2)
-			logDemo(kConsoleDebug, "SetSpeechMode: the mode is set to Text Only.\n");
+			logMessage(kConsoleDebug, "SetSpeechMode: mode set to Voice Only.\n");
 		else
-			logDemo(kConsoleDebug, "SetSpeechMode: the mode is set to Voice and Text.\n");
+			logMessage(kConsoleDebug, "SetSpeechMode: mode set to Voice and Text.\n");
+	} else {
+		logMessage(kConsoleDebug, "SetSpeechMode: invalid mode argument.\n");
 	}
 }
 

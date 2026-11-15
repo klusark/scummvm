@@ -182,10 +182,27 @@ static void math_max() {
 	lua_pushnumber(dmax);
 }
 
+static lua_RandomFunction randomFunction = nullptr;
+static lua_SeedFunction seedFunction = nullptr;
+
+void lua_SetRandomFunctions(lua_RandomFunction random, lua_SeedFunction seed) {
+	randomFunction = random;
+	seedFunction = seed;
+}
+
 static void math_random() {
 	float r;
 
-	if (luaIsRemastered)
+	if (randomFunction) {
+		int32 remainder = randomFunction() % 0x7FFFFFFF;
+		int shift = 0;
+
+		// The conversion to float truncates instead of rounding
+		while ((remainder >> shift) >= (1 << 24))
+			shift++;
+
+		r = (float)((remainder >> shift) << shift) / 2147483648.0f;
+	} else if (luaIsRemastered)
 		r = (float)((double)(rand() % 0x7FFF) / 32767.0);
 	else if (luaIsEmi)
 		r = (float)((double)(rand() % 0x7FFF) * (1.0 / 32767.0));
@@ -221,6 +238,14 @@ static void math_randomseed() {
 			warning("math_randomseed(): the seed is out of the limits of an integer");
 			srand(0);
 		}
+	} else if (seedFunction) {
+		float seed = luaL_check_number(1);
+		int32 value = 0;
+
+		if (seed > 0.0f)
+			value = seed >= 2147483648.0f ? 0x7FFFFFFF : (int32)seed;
+
+		seedFunction((uint32)value);
 	} else {
 		srand((unsigned int)luaL_check_number(1));
 	}

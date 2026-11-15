@@ -57,8 +57,8 @@ public:
 	int addLayer(const char *layerName, int layerSortOrder, int layerFrame, int layerId);
 	void removeLayer(Layer *layer);
 	void removeLayerById(int layerId);
-	bool save(SaveRestoreAccess *access);
-	bool restore(SaveRestoreAccess *access);
+	bool save(SaveRestoreAccess *accessFunc);
+	bool restore(SaveRestoreAccess *accessFunc);
 
 	char _name[kNameSize];
 	Camera _camera;

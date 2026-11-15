@@ -24,6 +24,7 @@
 
 #include "engines/grim/emi/nodes/cnode.h"
 #include "engines/grim/emi/files/lfile.h"
+#include "engines/grim/emi/math/singlemath.h"
 
 namespace Grim {
 
@@ -44,6 +45,18 @@ public:
 	float *closestPointOnConstraintLine(float *out, const float *point);
 	bool forward(float distance, int allowLeft, int allowRight);
 	bool constrain(const float *vector);
+
+	void updateWorldPs2();
+	void rotatePs2(TruncFloat angle);
+	TruncFloat getYawToPointPs2(const float *target);
+	TruncFloat pointAtPs2(const float *target, TruncFloat maxAngle);
+	bool forwardPs2(TruncFloat distance);
+	bool constrainPs2(const float *vector);
+	void closestPointOnConstraintLinePs2(float *out, const float *point);
+	bool finishMovePs2(const float *target);
+	bool setPlanePs2(WalkPlane_v2 *plane, const float *point);
+	bool tryNeighborPlanesPs2();
+	void clampToPlanePs2(const float *target);
 
 	float _reflectionAngle;
 	float _startStep;

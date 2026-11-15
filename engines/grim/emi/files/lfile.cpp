@@ -53,7 +53,7 @@ static Common::WriteStream *openWriteStream(const char *path) {
 	LString normalized = normalizePath(path);
 
 	Common::DumpFile *file = new Common::DumpFile();
-	if (!file->open(Common::Path(normalized, '/'))) {
+	if (!file->open(Common::Path(normalized, '/'), true)) {
 		delete file;
 		return nullptr;
 	}

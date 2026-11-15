@@ -52,8 +52,8 @@ public:
 	bool tightenPath();
 	bool canWalkStraight(const float *from, const float *to);
 	int getSize();
-	void save(SaveRestoreAccess *access);
-	void restore(SaveRestoreAccess *access);
+	void save(SaveRestoreAccess *accessFunc);
+	void restore(SaveRestoreAccess *accessFunc);
 	wpVertex *addVertex(const float *position);
 	void removeVertex(wpVertex *vertex);
 	WalkPlane_v2 *planeAt(const float *point, int typeMask);

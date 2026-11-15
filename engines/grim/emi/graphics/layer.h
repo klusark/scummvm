@@ -47,7 +47,7 @@ public:
 	int draw(CDrawContext *context);
 
 	static void set16BitFix(EmiEngine *engine, bool enable);
-	static void saveRestoreNextId(EmiEngine *engine, SaveRestoreAccess *access);
+	static void saveRestoreNextId(EmiEngine *engine, SaveRestoreAccess *accessFunc);
 
 	int _id;
 	int _sortOrder;

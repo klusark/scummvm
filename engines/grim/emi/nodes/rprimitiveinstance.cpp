@@ -67,17 +67,17 @@ int RPrimitiveInstance::getSaveSize() {
 	return kSaveAlphaEntrySize * (int)_matAlpha.size() + kSaveBaseSize;
 }
 
-bool RPrimitiveInstance::saveState(SaveRestoreAccess *access) {
+bool RPrimitiveInstance::saveState(SaveRestoreAccess *accessFunc) {
 	byte visibleByte = _visible ? 1 : 0;
 
-	access(&visibleByte, sizeof(visibleByte));
-	access(&_globalAlphaMode, sizeof(_globalAlphaMode));
-	access(&_globalAlpha, sizeof(_globalAlpha));
-	access(&_matAlphaMode, sizeof(_matAlphaMode));
+	accessFunc(&visibleByte, sizeof(visibleByte));
+	accessFunc(&_globalAlphaMode, sizeof(_globalAlphaMode));
+	accessFunc(&_globalAlpha, sizeof(_globalAlpha));
+	accessFunc(&_matAlphaMode, sizeof(_matAlphaMode));
 
 	uint32 numEntries = _matAlpha.size();
 
-	access(&numEntries, sizeof(numEntries));
+	accessFunc(&numEntries, sizeof(numEntries));
 
 	Common::Array<int> keys;
 
@@ -90,32 +90,32 @@ bool RPrimitiveInstance::saveState(SaveRestoreAccess *access) {
 		int key = keys[i];
 		float value = _matAlpha[key];
 
-		access(&key, sizeof(key));
-		access(&value, sizeof(value));
+		accessFunc(&key, sizeof(key));
+		accessFunc(&value, sizeof(value));
 	}
 
 	return true;
 }
 
-bool RPrimitiveInstance::restoreState(SaveRestoreAccess *access) {
+bool RPrimitiveInstance::restoreState(SaveRestoreAccess *accessFunc) {
 	byte visibleByte = 0;
 
-	access(&visibleByte, sizeof(visibleByte));
+	accessFunc(&visibleByte, sizeof(visibleByte));
 	_visible = visibleByte != 0;
-	access(&_globalAlphaMode, sizeof(_globalAlphaMode));
-	access(&_globalAlpha, sizeof(_globalAlpha));
-	access(&_matAlphaMode, sizeof(_matAlphaMode));
+	accessFunc(&_globalAlphaMode, sizeof(_globalAlphaMode));
+	accessFunc(&_globalAlpha, sizeof(_globalAlpha));
+	accessFunc(&_matAlphaMode, sizeof(_matAlphaMode));
 
 	int numEntries = 0;
 
-	access(&numEntries, sizeof(numEntries));
+	accessFunc(&numEntries, sizeof(numEntries));
 
 	for (int i = 0; i < numEntries; i++) {
 		int key = 0;
 		float value = 0.0f;
 
-		access(&key, sizeof(key));
-		access(&value, sizeof(value));
+		accessFunc(&key, sizeof(key));
+		accessFunc(&value, sizeof(value));
 		_matAlpha[key] = value;
 	}
 

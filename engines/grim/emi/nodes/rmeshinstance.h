@@ -43,8 +43,8 @@ public:
 	void output(RNode *node, Camera *camera) override;
 	void update(RNode *node, Camera *camera) override;
 	int getSaveSize() override;
-	bool saveState(SaveRestoreAccess *access) override;
-	bool restoreState(SaveRestoreAccess *access) override;
+	bool saveState(SaveRestoreAccess *accessFunc) override;
+	bool restoreState(SaveRestoreAccess *accessFunc) override;
 
 	void setMaterialTextureIndex(int materialIndex, int textureIndex);
 

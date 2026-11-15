@@ -691,7 +691,6 @@ static const LuaFuncIdList luaFuncIdLists[kNumLists] = {
 };
 
 enum {
-	kListEmiPs2,
 	kListEmiInternal,
 	kListEmiState,
 	kListEmiIo,
@@ -756,14 +755,7 @@ static const char *const luaFuncIdNamesPrimitivesEmi[] = {
 	"Draw3DLine", "DrawLine", "DrawPolygon", "DrawRectangle", "ChangePrimitive", "KillPrimitive", "PurgePrimitiveQueue"
 };
 
-static const char *const luaFuncIdNamesPs2Emi[] = {
-	"SetReplayMode", "GetReplayMode", "GetNextDemoNum", "NotifyGameState", "DeleteSavedGame", "CopySavedGame", "JustSaved", "GetMemoryCardId", "GetUniqueUint", "FormatMemoryCard",
-	"SetActorTessellation", "IsActorChoring", "ApplyForceFeedback", "EnableSoakText", "SetStereoAudio", "pspu", "dsnd", "KillMusicAndWait", "OverWorldToScreen", "SetVScanOffsets",
-	"MemDump", "AllocDump", "LuaMemDump", "GLReport"
-};
-
 static const LuaFuncIdList luaFuncIdListsEmi[kNumListsEmi] = {
-	{ "ps2", luaFuncIdNamesPs2Emi, ARRAYSIZE(luaFuncIdNamesPs2Emi), 24, true },
 	{ "int_funcs", luaFuncIdNamesInternalEmi, ARRAYSIZE(luaFuncIdNamesInternalEmi), 39, false },
 	{ "stateFuncs", luaFuncIdNamesState, ARRAYSIZE(luaFuncIdNamesState), 1, false },
 	{ "iolib", luaFuncIdNamesIoEmi, ARRAYSIZE(luaFuncIdNamesIoEmi), 9, false },
@@ -772,6 +764,49 @@ static const LuaFuncIdList luaFuncIdListsEmi[kNumListsEmi] = {
 	{ "mathlib", luaFuncIdNamesMath, ARRAYSIZE(luaFuncIdNamesMath), 21, false },
 	{ "wrappermathlib", luaFuncIdNamesMathPow, ARRAYSIZE(luaFuncIdNamesMathPow), 1, false },
 	{ "main", luaFuncIdNamesMainEmi, ARRAYSIZE(luaFuncIdNamesMainEmi), 274, true },
+	{ "extra", luaFuncIdNamesExtraEmi, ARRAYSIZE(luaFuncIdNamesExtraEmi), 3, true },
+	{ "tmFuncs", luaFuncIdNamesFallback, ARRAYSIZE(luaFuncIdNamesFallback), 3, false },
+	{ "primitives", luaFuncIdNamesPrimitivesEmi, ARRAYSIZE(luaFuncIdNamesPrimitivesEmi), 7, true }
+};
+
+static const char *const luaFuncIdNamesMainEmiPs2[] = {
+	"InputDialog", "GetCurrentScript", "SetReplayMode", "GetReplayMode", "GetNextDemoNum", "NotifyGameState", "exit", "FunctionName", "GetDiskFreeSpace", "SetActiveCD",
+	"GetActiveCD", "AreWeInternational", "NukeAllScriptLocks", "PurgeAllResources", "LoadBundle", "Load", "Save", "DeleteSavedGame", "CopySavedGame", "SubmitSaveGameData",
+	"GetSaveGameData", "JustLoaded", "JustSaved", "MakeScreenTextures", "ThumbnailFromFile", "ScreenshotForSavegame", "ClearSpecialtyTexture", "GetMemoryCardId", "GetUniqueUint", "FormatMemoryCard",
+	"LoadActor", "UnloadActor", "GetActorTimeScale", "SetActorTimeScale", "SetActorWalkDominate", "SetSelectedActor", "SetActorWalkChore", "SetActorTurnChores", "SetActorRestChore", "SetActorMumblechore",
+	"SetActorTalkChore", "SetActorWalkRate", "GetActorWalkRate", "SetActorTurnRate", "GetActorTurnRate", "GetActorPos", "GetActorWorldPos", "GetActorPuckVector", "GetActorYawToPoint", "PutActorInSet",
+	"PutActorAt", "PutActorInOverworld", "RemoveActorFromOverworld", "ClearOverworld", "ToggleOverworld", "WalkActorVector", "WalkActorForward", "ActorStopMoving", "WalkActorTo", "WalkActorToAvoiding",
+	"ActorLookAt", "IsActorLooking", "SetActorLookRate", "GetActorLookRate", "SetActorFOV", "GetActorFOV", "GetVisibleThings", "SetActorLighting", "SetActorHead", "SetActorHeadLimits",
+	"SetActorVisibility", "SetActorFollowBoxes", "ActorActivateShadow", "ShutUpActor", "EnableActorPuck", "SetActorGlobalAlpha", "SetActorLocalAlpha", "SetActorTessellation", "SetActorCollisionMode", "SetActorCollisionScale",
+	"SetActorSortOrder", "GetActorSortOrder", "AttachActor", "DetachActor", "IsActorInSector", "GetActorSector", "GetPointSector", "TurnActor", "GetActorRot", "SetActorRot",
+	"SetActorPitch", "SetActorRoll", "IsActorTurning", "PointActorAt", "TurnActorTo", "PlayActorChore", "PlayActorChoreLooping", "IsActorMoving", "IsActorResting", "GetActorChores",
+	"IsActorChoring", "StopActorChores", "IsChoreValid", "IsChorePlaying", "IsChoreLooping", "SetChoreLooping", "PlayChore", "FadeInChore", "FadeOutChore", "StopChore",
+	"PauseChore", "AdvanceChore", "CompleteChore", "LockChore", "UnlockChore", "LockChoreSet", "UnlockChoreSet", "EnableControl", "DisableControl", "GetControlState",
+	"ApplyForceFeedback", "PrintMessage", "PrintError", "PrintWarning", "PrintDebug", "EnableSoakText", "MakeCurrentSet", "LockSet", "UnLockSet", "LockBackground",
+	"UnLockBackground", "MakeCurrentSetup", "GetCurrentSetup", "NextSetup", "PreviousSetup", "StartMovie", "StopMovie", "PauseMovie", "EscapeMovie", "IsMoviePlaying",
+	"PlaySound", "StopSound", "StopAllSounds", "LoadSound", "FreeSound", "PlayLoadedSound", "IsSoundPlaying", "GetGroupVolume", "SetGroupVolume", "GetSoundVolume",
+	"SetSoundVolume", "EnableAudioGroup", "EnableVoiceFX", "SetStereoAudio", "SetAudioMixAhead", "PlaySoundFrom", "PlayLoadedSoundFrom", "SetReverb", "UpdateSoundPosition", "pspu",
+	"dsnd", "ImSetState", "ImStateHasLooped", "ImStateHasEnded", "ImPushState", "ImPopState", "ImFlushStack", "ImGetMillisecondPosition", "KillMusicAndWait", "IsSectorActive",
+	"MakeSectorActive", "GetSectorOppositeEdge", "GetSectorName", "WorldToScreen", "OverWorldToScreen", "GetCameraPosition", "SetCameraPosition", "CameraLookAt", "GetCameraLookVector", "GetCameraYaw",
+	"GetCameraPitch", "GetCameraRoll", "PerSecond", "SnapToPlane", "GetAngleBetweenVectors", "GetAngleBetweenActors", "TurnLightOn", "IsLightOn", "SetLightPosition", "SetAmbientLight",
+	"RenderModeUser", "DimScreen", "DimRegion", "UndimAll", "UndimRegion", "SetVScanOffsets", "NewLayer", "FreeLayer", "GetLayerSortOrder", "SetLayerSortOrder",
+	"GetLayerFrame", "SetLayerFrame", "AdvanceLayerFrame", "MakeTextObject", "KillTextObject", "ChangeTextObject", "GetTextObjectDimensions", "ExpireText", "PurgeText", "PushText",
+	"PopText", "SetTextSpeed", "GetTextSpeed", "SetSpeechMode", "GetSpeechMode", "SetSayLineDefaults", "SetActorTalkColor", "GetActorTalkColor", "SayLine", "IsMessageGoing",
+	"SetTranslationMode", "GetTranslationMode", "LocalizeString", "GetFontDimensions", "GetTextCharPosition", "SetOffscreenTextPos", "MakeColor", "GetColorComponents", "ToggleDrawFPS", "ToggleDebugDraw",
+	"ToggleDrawCameras", "ToggleDrawLights", "ToggleDrawSectors", "ToggleDrawBBoxes", "ToggleDrawPerformance", "ToggleDrawActorStats", "MemDump", "AllocDump", "LuaMemDump", "ReportAllResources",
+	"ReportLRUResources", "GLReport", "YawCamera", "PitchCamera", "RollCamera", "GetCameraFOV", "SetCameraFOV", "SetActorReflection", "GetCPUSpeed", "EngineDisplay",
+	"SetGamma", "ImSelectSet", "ImGetSfxVol", "ImGetVoiceVol", "ImGetMusicVol"
+};
+
+static const LuaFuncIdList luaFuncIdListsEmiPs2[kNumListsEmi] = {
+	{ "int_funcs", luaFuncIdNamesInternalEmi, ARRAYSIZE(luaFuncIdNamesInternalEmi), 39, false },
+	{ "stateFuncs", luaFuncIdNamesState, ARRAYSIZE(luaFuncIdNamesState), 1, false },
+	{ "iolib", luaFuncIdNamesIoEmi, ARRAYSIZE(luaFuncIdNamesIoEmi), 9, false },
+	{ "iolibtag", luaFuncIdNamesIoTag, ARRAYSIZE(luaFuncIdNamesIoTag), 5, false },
+	{ "strlib", luaFuncIdNamesString, ARRAYSIZE(luaFuncIdNamesString), 9, false },
+	{ "mathlib", luaFuncIdNamesMath, ARRAYSIZE(luaFuncIdNamesMath), 21, false },
+	{ "wrappermathlib", luaFuncIdNamesMathPow, ARRAYSIZE(luaFuncIdNamesMathPow), 1, false },
+	{ "main", luaFuncIdNamesMainEmiPs2, ARRAYSIZE(luaFuncIdNamesMainEmiPs2), 255, true },
 	{ "extra", luaFuncIdNamesExtraEmi, ARRAYSIZE(luaFuncIdNamesExtraEmi), 3, true },
 	{ "tmFuncs", luaFuncIdNamesFallback, ARRAYSIZE(luaFuncIdNamesFallback), 3, false },
 	{ "primitives", luaFuncIdNamesPrimitivesEmi, ARRAYSIZE(luaFuncIdNamesPrimitivesEmi), 7, true }
@@ -816,7 +851,6 @@ static const char *const luaFuncIdNamesMainEmiDemo[] = {
 };
 
 static const LuaFuncIdList luaFuncIdListsEmiDemo[kNumListsEmi] = {
-	{ "ps2", luaFuncIdNamesPs2Emi, ARRAYSIZE(luaFuncIdNamesPs2Emi), 24, true },
 	{ "int_funcs", luaFuncIdNamesInternalEmiDemo, ARRAYSIZE(luaFuncIdNamesInternalEmiDemo), 38, false },
 	{ "stateFuncs", luaFuncIdNamesState, ARRAYSIZE(luaFuncIdNamesState), 1, false },
 	{ "iolib", luaFuncIdNamesIoEmi, ARRAYSIZE(luaFuncIdNamesIoEmi), 9, false },
@@ -1026,6 +1060,7 @@ struct LuaFuncIdEntry {
 };
 
 static bool isEmiDemoIdLists = false;
+static bool isEmiPs2IdLists = false;
 static bool isRemasteredIdLists = false;
 
 static const LuaFuncIdList *lists = luaFuncIdLists;
@@ -1179,6 +1214,12 @@ static void buildFuncIdLists() {
 		activeListCount = kNumListsEmi;
 		aliases = luaFuncIdAliasesEmiDemo;
 		numAliases = ARRAYSIZE(luaFuncIdAliasesEmiDemo);
+	} else if (luaIsEmi && isEmiPs2IdLists) {
+		// Names that share a function register the same C function, so no aliases are needed
+		lists = luaFuncIdListsEmiPs2;
+		activeListCount = kNumListsEmi;
+		aliases = nullptr;
+		numAliases = 0;
 	} else if (luaIsEmi) {
 		lists = luaFuncIdListsEmi;
 		activeListCount = kNumListsEmi;
@@ -1417,6 +1458,11 @@ void lua_FuncIDsInvalidate() {
 
 void lua_FuncIDsSetEmiDemo(bool isDemo) {
 	isEmiDemoIdLists = isDemo;
+	lua_FuncIDsInvalidate();
+}
+
+void lua_FuncIDsSetEmiPs2(bool isPs2) {
+	isEmiPs2IdLists = isPs2;
 	lua_FuncIDsInvalidate();
 }
 

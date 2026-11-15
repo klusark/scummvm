@@ -33,6 +33,7 @@ MODULE_OBJS := \
 	emi/actor/actor_update.o \
 	emi/actor/actor_walk.o \
 	emi/actor/extra_v2.o \
+	emi/actor/puck_ps2.o \
 	emi/actor/puck_v2.o \
 	emi/actor/shadow_v2.o \
 	emi/animation/achannel.o \
@@ -44,6 +45,7 @@ MODULE_OBJS := \
 	emi/core/cpathingfileservices.o \
 	emi/core/lconsoleservices.o \
 	emi/core/lformatparser.o \
+	emi/core/linearrandom.o \
 	emi/core/lmemoryservices.o \
 	emi/core/lstring.o \
 	emi/core/ltimeservices.o \
@@ -113,6 +115,7 @@ MODULE_OBJS := \
 	emi/images/ctgafile.o \
 	emi/images/labitmap.o \
 	emi/images/lbitmap.o \
+	emi/input/demoreplay.o \
 	emi/input/eventgenerator.o \
 	emi/input/eventhandler.o \
 	emi/input/inputrecorder.o \
@@ -143,6 +146,7 @@ MODULE_OBJS := \
 	emi/math/cquaternion.o \
 	emi/math/frect.o \
 	emi/math/irect.o \
+	emi/math/singlemath.o \
 	emi/movie/movie.o \
 	emi/movie/pss/pssdecoder.o \
 	emi/nodes/cnode.o \
@@ -169,6 +173,7 @@ MODULE_OBJS := \
 	emi/scene/overworld.o \
 	emi/scene/room_v2.o \
 	emi/scene/setup.o \
+	emi/scene/walkplane_ps2.o \
 	emi/scene/walkplane_v2.o \
 	emi/scene/walkplanecollection.o \
 	emi/sound/audiosystem.o \

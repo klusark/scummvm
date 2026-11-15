@@ -33,6 +33,7 @@
 
 #include "engines/grim/emi/graphics/cdrawcontext.h"
 #include "engines/grim/emi/emiengine.h"
+#include "engines/grim/emi/input/demoreplay.h"
 #include "engines/grim/emi/input/eventgenerator.h"
 #include "engines/grim/emi/input/inputrecorder.h"
 #include "engines/grim/emi/input/joystick.h"
@@ -55,7 +56,7 @@ void EmiEngine::pumpEvents() {
 		switch (event.type) {
 		case Common::EVENT_QUIT:
 		case Common::EVENT_RETURN_TO_LAUNCHER:
-			if (!(isDemo() && _mode == kModeMovie) && !callExitHook()) {
+			if (!(isDemo() && _mode == kModeMovie) && !(_demoReplay && _demoReplay->_mode == DemoReplay::kModePlayback) && !callExitHook()) {
 				eventManager->resetQuit();
 				eventManager->resetReturnToLauncher();
 			}

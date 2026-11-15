@@ -57,6 +57,17 @@ public:
 
 	CQuaternion getWorldOrientation();
 	void updateWorldTransform();
+	void updateWorldTransformPs2();
+	bool usesSingleMath() const;
+	void computeParentRelativeMatrixPs2(float *matrix);
+	void computeLocalMatrixFromWorldPs2();
+	void updateLocalQuaternionPs2();
+	CQuaternion getWorldOrientationPs2();
+	void localToWorldPs2(const CVector *point, CVector *out);
+	void worldToLocalPs2(const float *worldX, const float *worldY, const float *worldZ, float *localX, float *localY, float *localZ);
+	void worldToLocalPs2(const CVector *point, CVector *out);
+	void localToWorldDirectionPs2(const CVector *direction, CVector *out);
+	void lookAtPs2(const CVector &target);
 	void localToWorld(CVector *point);
 	CVector *localToWorld(const CVector *point, CVector *out);
 	float *worldToLocal(const float *worldX, const float *worldY, const float *worldZ, float *localX, float *localY, float *localZ);

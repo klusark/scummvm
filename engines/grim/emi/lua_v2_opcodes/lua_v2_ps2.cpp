@@ -28,7 +28,7 @@
 #include "engines/grim/emi/costume/choreinstance.h"
 #include "engines/grim/emi/math/cvector.h"
 #include "engines/grim/emi/emiengine.h"
-#include "engines/grim/emi/input/inputrecorder.h"
+#include "engines/grim/emi/input/demoreplay.h"
 #include "engines/grim/emi/core/lconsoleservices.h"
 #include "engines/grim/emi/lua_v2_opcodes/lua_v2.h"
 #include "engines/grim/emi/nodes/rnode.h"
@@ -46,28 +46,30 @@ static const float kPs2HalfScreenHeight = 240.0f;
 
 void Lua_V2::SetReplayMode() {
 	lua_Object modeObj = lua_getparam(1);
+	lua_Object nameObj = lua_getparam(2);
 
 	if (!lua_isnumber(modeObj))
 		return;
 
 	int mode = luaFtol(lua_getnumber(modeObj));
+	const char *name = nullptr;
 
-	if (mode != 0) {
-		warning("Lua_V2::SetReplayMode(): input replay mode %d is not supported", mode);
+	if (lua_isstring(nameObj))
+		name = lua_getstring(nameObj);
 
-		return;
-	}
-
-	_engine->getSounds()->killMusicAndWait(false);
+	_engine->setReplayRequest(mode, name);
 }
 
 void Lua_V2::GetReplayMode() {
-	if (_engine->getInputRecorder())
-		lua_pushnumber((float)_engine->getInputRecorder()->_mode);
+	if (_engine->getDemoReplay())
+		lua_pushnumber((float)_engine->getDemoReplay()->_mode);
 }
 
 void Lua_V2::GetNextDemoNum() {
-	// The demo list is not ported, so the counter stays at -1
+	int demoNumber = _engine->getNextDemoNum();
+
+	if (demoNumber >= 0)
+		lua_pushnumber((float)demoNumber);
 }
 
 void Lua_V2::NotifyGameState() {
@@ -118,8 +120,7 @@ void Lua_V2::SetActorTessellation() {
 	lua_Object modeObj = lua_getparam(2);
 
 	if (!isActor(actorObj)) {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logDebug("SetActorTessellation: Invalid parameter.\n");
+		logMessage(kConsoleDebug, "SetActorTessellation: Invalid parameter.\n");
 
 		return;
 	}
@@ -127,8 +128,7 @@ void Lua_V2::SetActorTessellation() {
 	Actor *actor = Actor::actorDeref(_engine, lua_getuserdata(actorObj));
 
 	if (!actor) {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logDebug("SetActorTessellation: Invalid Actor handle.\n");
+		logMessage(kConsoleDebug, "SetActorTessellation: Invalid Actor handle.\n");
 
 		return;
 	}
@@ -141,8 +141,8 @@ void Lua_V2::SetActorTessellation() {
 			actor->_drawFlags |= RNode::kTessellation;
 		else
 			actor->_drawFlags &= ~(uint)RNode::kTessellation;
-	} else if (_engine->getConsoleServices()) {
-		_engine->getConsoleServices()->logDebug("SetActorTessellation: Invalid parameter.\n");
+	} else {
+		logMessage(kConsoleDebug, "SetActorTessellation: Invalid parameter.\n");
 	}
 }
 
@@ -155,9 +155,7 @@ void Lua_V2::IsActorChoring() {
 		actor = Actor::actorDeref(_engine, lua_getuserdata(actorObj));
 
 	if (!actor) {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logDebug("GetActorChores: Invalid actor handle.\n");
-
+		logMessage(kConsoleDebug, "GetActorChores: Invalid actor handle.\n");
 		lua_pushnil();
 
 		return;
@@ -191,8 +189,7 @@ void Lua_V2::ApplyForceFeedback() {
 	lua_Object controllerObj = lua_getparam(1);
 
 	if (!lua_isnumber(controllerObj)) {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logDebug("GetControlState: Invalid control (non-numerical).\n");
+		logMessage(kConsoleDebug, "GetControlState: Invalid control (non-numerical).\n");
 
 		return;
 	}
@@ -219,8 +216,7 @@ void Lua_V2::pspu() {
 }
 
 void Lua_V2::dsnd() {
-	if (_engine->getConsoleServices())
-		_engine->getConsoleServices()->logDebug("Debug LECAudio:  0->off, 1->Level 1, 2->Level 2 (streams), 3->Level 3\n");
+	logMessage(kConsoleDebug, "Debug LECAudio:  0->off, 1->Level 1, 2->Level 2 (streams), 3->Level 3\n");
 
 	// The IOP debug level is not ported
 }
@@ -240,8 +236,7 @@ void Lua_V2::OverWorldToScreen() {
 	camera._farClip = kOverworldFarClip;
 
 	if (!lua_isnumber(xObj) || !lua_isnumber(yObj) || !lua_isnumber(zObj)) {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logDebug("OverworldWorldToScreen: Parameters must be x, y, z coords.\n");
+		logMessage(kConsoleDebug, "OverworldWorldToScreen: Parameters must be x, y, z coords.\n");
 
 		return;
 	}
@@ -285,13 +280,16 @@ void Lua_V2::SetVScanOffsets() {
 	lua_Object yObj = lua_getparam(2);
 
 	if (!lua_isnumber(xObj) || !lua_isnumber(yObj)) {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logWarning("SetVScanOffsets() - invalid params");
+		logMessage(kConsoleWarning, "SetVScanOffsets() - invalid params");
 
 		return;
 	}
 
 	// This is the TV display offset; there is nothing to move here
+}
+
+void Lua_V2::ToggleDrawFPS() {
+	toggleStatsOverlay(false);
 }
 
 void Lua_V2::UnimplementedFunctionPs2() {
@@ -304,24 +302,22 @@ void Lua_V2::UnimplementedFunctionPs2() {
 		name = "";
 	}
 
-	if (_engine->getConsoleServices())
-		_engine->getConsoleServices()->logWarning("UNIMPLEMENTED FUNCTION: %s\n", name);
+	logMessage(kConsoleWarning, "UNIMPLEMENTED FUNCTION: %s\n", name);
 
 	lua_printstack(nullptr);
 }
 
-void Lua_V2::obsoleteFunctionPs2() {
+void Lua_V2::ObsoleteFunctionPs2() {
 	const char *name;
 
 	lua_getobjname(lua_stackedfunction(0), &name);
 
 	if (!name) {
-		warning("Lua_V2::obsoleteFunctionPs2(): function without name");
+		warning("Lua_V2::ObsoleteFunctionPs2(): function without name");
 		name = "";
 	}
 
-	if (_engine->getConsoleServices())
-		_engine->getConsoleServices()->logWarning("OBSOLETE FUNCTION: %s\n", name);
+	logMessage(kConsoleWarning, "OBSOLETE FUNCTION: %s\n", name);
 
 	lua_printstack(nullptr);
 }

@@ -39,8 +39,7 @@ void Lua_V2::StartMovie() {
 
 	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
 		if (!lua_isstring(nameObj)) {
-			if (_engine->getConsoleServices())
-				_engine->getConsoleServices()->logStatus("StartMovie: Argument must be a string.");
+			logMessage(kConsoleStatus, "StartMovie: Argument must be a string.");
 
 			lua_pushnil();
 
@@ -65,8 +64,7 @@ void Lua_V2::StartMovie() {
 		const char *movieName = lua_getstring(nameObj);
 		bool isStarted = _engine->playMovie(movieName, true, false, true, 1);
 
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logStatus("StartMovie: %s %s\n", movieName, isStarted ? "OK" : "FAIL");
+		logMessage(kConsoleStatus, "StartMovie: %s %s\n", movieName, isStarted ? "OK" : "FAIL");
 
 		if (isStarted)
 			lua_pushnumber(1.0f);
@@ -108,22 +106,10 @@ void Lua_V2::StartMovie() {
 }
 
 void Lua_V2::StopMovie() {
-	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
-		obsoleteFunctionPs2();
-
-		return;
-	}
-
 	Movie::stopMovie(_engine);
 }
 
 void Lua_V2::PauseMovie() {
-	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
-		obsoleteFunctionPs2();
-
-		return;
-	}
-
 	lua_Object pauseObj = lua_getparam(1);
 
 	if (lua_isnil(pauseObj))
@@ -133,22 +119,10 @@ void Lua_V2::PauseMovie() {
 }
 
 void Lua_V2::EscapeMovie() {
-	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
-		obsoleteFunctionPs2();
-
-		return;
-	}
-
 	Movie::skipCurrent(_engine);
 }
 
 void Lua_V2::IsMoviePlaying() {
-	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
-		obsoleteFunctionPs2();
-
-		return;
-	}
-
 	if (_engine->getMode() == EmiEngine::kModeMovie)
 		lua_pushnumber(1.0f);
 	else

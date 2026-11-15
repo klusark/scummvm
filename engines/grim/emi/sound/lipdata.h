@@ -24,6 +24,8 @@
 
 #include "common/scummsys.h"
 
+#include "engines/grim/lua/lua.h"
+
 namespace Grim {
 
 struct LipEntry {
@@ -47,6 +49,8 @@ struct LipData {
 
 	static void initMouthTable(EmiEngine *engine);
 	static int readFile(EmiEngine *engine, const char *name, LipData **lipData);
+	static void saveFileName(EmiEngine *engine, SaveRestoreAccess *accessFunc);
+	static int restoreFileName(EmiEngine *engine, SaveRestoreAccess *accessFunc);
 	static int codeToMouthShape(EmiEngine *engine, int code);
 	static int compareMouthEntries(const void *first, const void *second);
 	static void sortMouthTable(EmiEngine *engine);

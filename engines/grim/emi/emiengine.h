@@ -28,6 +28,7 @@
 #include "common/str.h"
 
 #include "engines/grim/emi/actor/actor.h"
+#include "engines/grim/emi/core/linearrandom.h"
 #include "engines/grim/emi/math/cvector.h"
 #include "engines/grim/emi/math/irect.h"
 #include "engines/grim/emi/files/lfile.h"
@@ -57,6 +58,7 @@ class CTextFont;
 class CTexture;
 class CTinyGLContext;
 class CWeightMap;
+class DemoReplay;
 struct DisplayMode;
 class DimRegion;
 class EmiRegistry;
@@ -121,6 +123,7 @@ public:
 	CDrawContext *getDrawContext();
 	Overworld *getOverworld();
 	InputRecorder *getInputRecorder();
+	DemoReplay *getDemoReplay();
 	Lua_V2 *getLua();
 	KeyGenerator *getKeyGenerator();
 	Polyglot_v2 *getPolyglot();
@@ -142,6 +145,11 @@ public:
 	void setBundleServices(CBundleServices *services);
 	void createInputRecorder(int mode);
 	void destroyInputRecorder();
+	void setReplayRequest(int mode, const char *name);
+	void countDemos();
+	int getNextDemoNum();
+	static int32 nextRandom();
+	static void seedRandom(uint32 seed);
 	void destroyOverworld();
 	void setDrawContext(CDrawContext *drawContext);
 
@@ -190,7 +198,7 @@ public:
 
 	static Common::Array<Common::Keymap *> initKeymapsEmi(const char *target);
 	static bool readSaveStrings(Common::SeekableReadStream *stream, Common::Array<Common::String> &strings);
-	static Graphics::Surface *readSaveThumbnail(Common::SeekableReadStream *stream, bool fullTexture = false);
+	static Graphics::Surface *readSaveThumbnail(Common::SeekableReadStream *stream, bool isPs2 = false);
 	static Common::String getSaveDescription(const Common::Array<Common::String> &strings, int slot);
 	static bool isLegacySaveFile(const Common::String &fileName);
 	static Common::String getSavePrefix(Common::Platform platform, Common::Language language);
@@ -227,6 +235,7 @@ private:
 	friend class ChoreInstance;
 	friend class CLightNode;
 	friend class COGLContext;
+	friend class DemoReplay;
 	friend class CTextFont;
 	friend class CTinyGLContext;
 	friend class CWeightMap;
@@ -294,6 +303,9 @@ private:
 	void dumpFrame();
 	void applyPendingGameSettings(int manualMs);
 	void applyPendingMusicState();
+	bool createDemoReplay(int replayMode, const char *name);
+	void destroyDemoReplay();
+	void applyReplayRequest();
 
 	CDrawContext *createDrawContext();
 	static bool openDrawContext(CDrawContext *drawContext, DisplayMode *mode);
@@ -305,7 +317,12 @@ private:
 	static void scaleToThumbnail(LABitmap *source, LABitmap *destination);
 	LABitmap *getScreenBitmap();
 	Common::String getSaveFileName(const char *path);
-	bool readSavedText(char *buffer, int bufferSize);
+	static bool readSavedText(SaveRestoreAccess *accessFunc, char *buffer, int bufferSize);
+	static void writeSavedText(SaveRestoreAccess *accessFunc, const LString &text);
+	void saveGameData(SaveRestoreAccess *accessFunc);
+	void clearGameState();
+	bool restoreGameData(SaveRestoreAccess *accessFunc);
+	bool restoreGameDataFromRam(const byte *data, uint size);
 	static bool writeMemoryCardId(uint id);
 
 	void updateSounds(bool force);
@@ -374,6 +391,14 @@ private:
 	int _pendingMusicState;
 	bool _gameSettingsPending;
 	int _controlSkipFrames;
+
+	DemoReplay *_demoReplay = nullptr;
+	int _replayRequest = -1;
+	LString _replayRequestName;
+	int _replayMusicFrames = 0;
+	int _demoIndex = -1;
+	int _demoCount = 0;
+	LinearRandom _random;
 
 	int _libJustSaved = 0;
 	int _soundRestartFrames = 0;
@@ -458,6 +483,7 @@ private:
 
 	// Lip data
 	byte _lipBuffer[LipData::kBufferSize];
+	LString _lipFileName;
 	LipData::MouthEntry _lipMouthTable[LipData::kMouthTableSize];
 
 	// Profiler

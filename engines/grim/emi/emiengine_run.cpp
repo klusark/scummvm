@@ -202,13 +202,22 @@ bool EmiEngine::initialize() {
 	_grimeConsole = new CGrimeConsole(this);
 	_grimeConsole->setDebugLog(true);
 
+	// PS2 opens the bundles before it starts the modules, they load the loading loop and the fonts
+	bool bundlesFirst = getGamePlatform() == Common::kPlatformPS2;
+
+	if (bundlesFirst && !CBundleServices::init(this, getGameLanguage() != Common::EN_ANY)) {
+		showMessage("/NO_FILES/Could not find files!", "/ERROR/Error!");
+
+		return false;
+	}
+
 	if (!startupModules(drawContext))
 		return false;
 
 	if (_showFps)
 		_lua->_statsOverlayFlags |= Lua_V2::kStatsOverlayFlag;
 
-	if (!CBundleServices::init(this, getGameLanguage() != Common::EN_ANY)) {
+	if (!bundlesFirst && !CBundleServices::init(this, getGameLanguage() != Common::EN_ANY)) {
 		showMessage("/NO_FILES/Could not find files!", "/ERROR/Error!");
 
 		return false;
@@ -369,6 +378,7 @@ void EmiEngine::shutdown() {
 	if (_grimeConsole)
 		_grimeConsole->setDebugLog(false);
 
+	destroyDemoReplay();
 	destroyInputRecorder();
 
 	delete _drawContext;
@@ -386,6 +396,11 @@ void EmiEngine::shutdown() {
 	_firstFrame = true;
 	_lastStamp = 0.0;
 	_controlSkipFrames = 0;
+	_replayRequest = -1;
+	_replayRequestName.clear();
+	_replayMusicFrames = 0;
+	_demoIndex = -1;
+	_demoCount = 0;
 }
 
 } // End of namespace Grim

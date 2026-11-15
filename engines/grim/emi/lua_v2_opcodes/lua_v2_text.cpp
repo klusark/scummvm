@@ -39,6 +39,11 @@ static const int kColorTag = MKTAG('R', 'L', 'O', 'C');
 static const int kTextTag = MKTAG('T', 'X', 'E', 'T');
 static const int kLocalizedBufferSize = 640;
 static const float kHalf = 0.5f;
+static const float kPs2ScreenWidth = 640.0f;
+static const float kPs2ScreenHeight = 448.0f;
+static const float kPs2HalfScreenWidth = 320.0f;
+static const float kPs2HalfScreenHeight = 224.0f;
+static const float kPs2DefaultOffscreenY = 0.875f;
 static const float kMillisecondsToSeconds = 0.001f;
 
 int Lua_V2::truncateToInt(double value) {
@@ -266,7 +271,7 @@ void Lua_V2::SetTextSpeed() {
 	if (lua_isnumber(speedObj))
 		Actor::setActorTextRate(_engine, luaFtol(lua_getnumber(speedObj)));
 	else
-		logDemo(kConsoleDebug, "SetTextSpeed: the speed must be a number.\n");
+		logMessage(kConsoleDebug, "SetTextSpeed: argument must be a number.\n");
 }
 
 void Lua_V2::GetTextSpeed() {
@@ -277,7 +282,7 @@ void Lua_V2::IsMessageGoing() {
 	lua_Object actorObj = lua_getparam(1);
 
 	if (actorObj && !isActor(actorObj) && !lua_isnil(actorObj)) {
-		logDemo(kConsoleDebug, "IsMessageGoing: the argument must be an actor or nil.\n");
+		logMessage(kConsoleDebug, "IsMessageGoing: Parameter, if given, must be an actor.\n");
 
 		return;
 	}
@@ -317,7 +322,7 @@ void Lua_V2::SetSayLineDefaults() {
 	if (tableObj && lua_istable(tableObj))
 		applyTextTable(tableObj, _engine->_defaultTextEvent);
 	else
-		logDemo(kConsoleDebug, "SetSayLineDefaults: the argument must be a table.\n");
+		logMessage(kConsoleDebug, "Parameter to SetSayLineDefaults must be a format table.\n");
 }
 
 void Lua_V2::SetActorTalkColor() {
@@ -325,7 +330,7 @@ void Lua_V2::SetActorTalkColor() {
 	lua_Object colorObj = lua_getparam(2);
 
 	if (!isActor(actorObj)) {
-		logDemo(kConsoleDebug, "SetActorTalkColor: the first argument must be an actor.\n");
+		logMessage(kConsoleDebug, "SetActorTalkColor: First arg must be an actor!\n");
 
 		return;
 	}
@@ -333,12 +338,7 @@ void Lua_V2::SetActorTalkColor() {
 	Actor *actor = Actor::actorDeref(_engine, lua_getuserdata(actorObj));
 
 	if (!actor) {
-		LConsoleServices *console = _engine->getConsoleServices();
-
-		if (console)
-			console->logError("SetActorTalkColor: Actor is invalid.\n");
-		else
-			warning("SetActorTalkColor: Actor is invalid.");
+		logMessage(kConsoleError, "SetActorTalkColor: Actor is invalid.\n");
 
 		return;
 	}
@@ -349,14 +349,14 @@ void Lua_V2::SetActorTalkColor() {
 	if (lua_isuserdata(colorObj) && lua_tag(colorObj) == kColorTag)
 		actor->_extra->_talkColor = Color((uint)lua_getuserdata(colorObj));
 	else
-		logDemo(kConsoleDebug, "SetActorTalkColor: the second argument must be a color.\n");
+		logMessage(kConsoleDebug, "SetActorTalkColor: Actor must be followed by color!\n");
 }
 
 void Lua_V2::GetActorTalkColor() {
 	lua_Object actorObj = lua_getparam(1);
 
 	if (!isActor(actorObj)) {
-		logDemo(kConsoleDebug, "GetActorTalkColor: the argument must be an actor.\n");
+		logMessage(kConsoleDebug, "GetActorTalkColor: First arg must be an actor!\n");
 		lua_pushnil();
 
 		return;
@@ -365,12 +365,7 @@ void Lua_V2::GetActorTalkColor() {
 	Actor *actor = Actor::actorDeref(_engine, lua_getuserdata(actorObj));
 
 	if (!actor) {
-		LConsoleServices *console = _engine->getConsoleServices();
-
-		if (console)
-			console->logError("GetActorTalkColor: Actor is invalid.\n");
-		else
-			warning("GetActorTalkColor: Actor is invalid.");
+		logMessage(kConsoleError, "GetActorTalkColor: Actor is invalid.\n");
 
 		return;
 	}
@@ -401,7 +396,7 @@ void Lua_V2::SayLine() {
 	lua_Object lineObj = lua_getparam(1);
 
 	if (!isActor(lineObj) && !lua_isstring(lineObj) && !lua_istable(lineObj)) {
-		logDemo(kConsoleDebug, "SayLine: the first argument must be an actor, a string or a table.\n");
+		logMessage(kConsoleDebug, "Invalid argument to SayLine!\n");
 
 		return;
 	}
@@ -415,16 +410,13 @@ void Lua_V2::SayLine() {
 	}
 
 	if (!actor) {
-		logDemo(kConsoleDebug, "SayLine: there is no actor to speak.\n");
+		logMessage(kConsoleDebug, "SayLine: Invalid actor!\n");
 
 		return;
 	}
 
-	if (lua_isnil(lineObj)) {
-		logDemo(kConsoleDebug, "SayLine: there is no line to say.\n");
-
+	if (lua_isnil(lineObj))
 		return;
-	}
 
 	while (lua_isstring(lineObj) || lua_isnumber(lineObj) || lua_istable(lineObj)) {
 		if (lua_istable(lineObj))
@@ -442,6 +434,8 @@ void Lua_V2::SayLine() {
 			return;
 		}
 	}
+
+	logMessage(kConsoleDebug, "SayLine: invalid parameter %d.\n", index);
 }
 
 void Lua_V2::MakeTextObject() {
@@ -462,7 +456,7 @@ void Lua_V2::MakeTextObject() {
 		}
 	} else {
 		if (!lua_isstring(textObj)) {
-			logDemo(kConsoleDebug, "MakeTextObject: invalid parameter.\n");
+			logMessage(kConsoleDebug, "MakeTextObject: Invalid parameter.\n");
 
 			return;
 		}
@@ -500,7 +494,7 @@ void Lua_V2::ChangeTextObject() {
 	int index = 2;
 
 	if (!lua_isuserdata(textObj) || lua_tag(textObj) != kTextTag) {
-		logDemo(kConsoleDebug, "ChangeTextObject: the first argument must be a text object.\n");
+		logMessage(kConsoleDebug, "First arg to ChangeTextObject should be a text object!\n");
 
 		return;
 	}
@@ -508,12 +502,7 @@ void Lua_V2::ChangeTextObject() {
 	TextEvent *event = TextEvent::getEvent(_engine, lua_getuserdata(textObj));
 
 	if (!event) {
-		LConsoleServices *console = _engine->getConsoleServices();
-
-		if (console)
-			console->logError("ChangeTextObject: text object is invalid");
-		else
-			warning("ChangeTextObject: text object is invalid");
+		logMessage(kConsoleError, "ChangeTextObject: text object is invalid");
 
 		return;
 	}
@@ -555,7 +544,7 @@ void Lua_V2::GetTextObjectDimensions() {
 	lua_Object textObj = lua_getparam(1);
 
 	if (!lua_isuserdata(textObj) || lua_tag(textObj) != kTextTag) {
-		logDemo(kConsoleDebug, "GetTextObjectDimensions: the first argument must be a text object.\n");
+		logMessage(kConsoleDebug, "First arg to GetTextObjectDimensions should be a text object!\n");
 
 		return;
 	}
@@ -563,12 +552,14 @@ void Lua_V2::GetTextObjectDimensions() {
 	TextEvent *event = TextEvent::getEvent(_engine, lua_getuserdata(textObj));
 
 	if (!event) {
-		LConsoleServices *console = _engine->getConsoleServices();
+		logMessage(kConsoleError, "GetTextObjectDimensions: text object is invalid");
 
-		if (console)
-			console->logError("GetTextObjectDimensions: text object is invalid");
-		else
-			warning("GetTextObjectDimensions: text object is invalid");
+		return;
+	}
+
+	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		lua_pushnumber((float)event->getWidth() / kPs2HalfScreenWidth);
+		lua_pushnumber((float)event->getHeight() / kPs2HalfScreenHeight);
 
 		return;
 	}
@@ -587,7 +578,7 @@ void Lua_V2::BlastText() {
 	char tag[TextEvent::kTagBufferSize];
 
 	if (!lua_isstring(textObj)) {
-		logDemo(kConsoleDebug, "BlastText: the first argument must be a string.\n");
+		logMessage(kConsoleDebug, "BlastText: the first argument must be a string.\n");
 
 		return;
 	}
@@ -734,13 +725,13 @@ void Lua_V2::SetTranslationMode() {
 	if (lua_isnil(modeObj)) {
 		_engine->_textMode = 0;
 
-		logDemo(kConsoleDebug, "SetTranslationMode: showing localized text.\n");
+		logMessage(kConsoleDebug, "Showing localized text.\n");
 
 		return;
 	}
 
 	if (!lua_isnumber(modeObj)) {
-		logDemo(kConsoleDebug, "SetTranslationMode: invalid translation type.\n");
+		logMessage(kConsoleDebug, "Invalid translation type!\n");
 
 		return;
 	}
@@ -755,11 +746,11 @@ void Lua_V2::SetTranslationMode() {
 		_engine->_textMode = mode;
 
 	if (_engine->_textMode == 0)
-		logDemo(kConsoleDebug, "SetTranslationMode: showing localized text.\n");
+		logMessage(kConsoleDebug, "Showing localized text.\n");
 	else if (_engine->_textMode == 1)
-		logDemo(kConsoleDebug, "SetTranslationMode: showing domestic text.\n");
+		logMessage(kConsoleDebug, "Showing domestic text.\n");
 	else
-		logDemo(kConsoleDebug, "SetTranslationMode: showing domestic text with markers.\n");
+		logMessage(kConsoleDebug, "Showing domestic text with markers.\n");
 }
 
 void Lua_V2::GetTranslationMode() {
@@ -777,7 +768,7 @@ void Lua_V2::LocalizeString() {
 	memset(tag, 0, sizeof(tag));
 
 	if (!lua_isstring(textObj)) {
-		logDemo(kConsoleDebug, "LocalizeString: the argument must be a string.\n");
+		logMessage(kConsoleDebug, "LocalizeString: Takes a string argument!\n");
 
 		return;
 	}
@@ -839,7 +830,7 @@ void Lua_V2::GetTextCharPosition() {
 	lua_Object countObj = lua_getparam(2);
 
 	if (!lua_isuserdata(textObj) || lua_tag(textObj) != kTextTag) {
-		logDemo(kConsoleDebug, "GetTextCharPosition: the first argument must be a text object.\n");
+		logMessage(kConsoleDebug, "First arg to GetTextCharPosition should be a text object!\n");
 
 		return;
 	}
@@ -847,12 +838,7 @@ void Lua_V2::GetTextCharPosition() {
 	TextEvent *event = TextEvent::getEvent(_engine, lua_getuserdata(textObj));
 
 	if (!event) {
-		LConsoleServices *console = _engine->getConsoleServices();
-
-		if (console)
-			console->logError("GetTextCharPosition: text object is invalid");
-		else
-			warning("GetTextCharPosition: text object is invalid");
+		logMessage(kConsoleError, "GetTextCharPosition: text object is invalid");
 
 		return;
 	}
@@ -871,6 +857,12 @@ void Lua_V2::GetTextCharPosition() {
 		}
 	}
 
+	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		lua_pushnumber((float)width / kPs2HalfScreenWidth);
+
+		return;
+	}
+
 	int screenWidth = _engine->_textScreenRect[2];
 
 	lua_pushnumber((float)((double)width / (double)(screenWidth / 2)));
@@ -881,6 +873,22 @@ void Lua_V2::SetOffscreenTextPos() {
 	lua_Object yObj = lua_getparam(2);
 	float x;
 	double y;
+
+	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		float ps2X = 0.0f;
+		float ps2Y = kPs2DefaultOffscreenY;
+
+		if (lua_isnumber(xObj))
+			ps2X = lua_getnumber(xObj);
+
+		if (lua_isnumber(yObj))
+			ps2Y = lua_getnumber(yObj);
+
+		_engine->_offscreenTextRect.x = luaFtol(kPs2HalfScreenWidth + (kPs2ScreenWidth * ps2X) / 2.0f);
+		_engine->_offscreenTextRect.y = luaFtol(kPs2HalfScreenHeight + (kPs2ScreenHeight * -ps2Y) / 2.0f);
+
+		return;
+	}
 
 	if (lua_isnumber(xObj))
 		x = lua_getnumber(xObj);

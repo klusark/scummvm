@@ -22,9 +22,11 @@
 #include "common/textconsole.h"
 #include "common/util.h"
 
+#include "engines/grim/grim.h"
 #include "engines/grim/emi/nodes/cnode.h"
 #include "engines/grim/emi/nodes/cnoderef.h"
 #include "engines/grim/emi/core/lmemoryservices.h"
+#include "engines/grim/emi/math/singlemath.h"
 
 namespace Grim {
 
@@ -112,6 +114,9 @@ void CNode::updateLocalState() {
 }
 
 CQuaternion CNode::getWorldOrientation() {
+	if (usesSingleMath())
+		return getWorldOrientationPs2();
+
 	CQuaternion orientation;
 
 	if ((_nodeFlags & kWorldValid) == 0)
@@ -142,6 +147,12 @@ void CNode::setLocalTransform(const CVector &position, const CQuaternion &rotati
 }
 
 void CNode::localToWorld(CVector *point) {
+	if (usesSingleMath()) {
+		localToWorldPs2(point, point);
+
+		return;
+	}
+
 	if ((_nodeFlags & kWorldValid) == 0)
 		updateWorldTransform();
 
@@ -158,6 +169,12 @@ void CNode::localToWorld(CVector *point) {
 }
 
 CVector *CNode::localToWorld(const CVector *point, CVector *out) {
+	if (usesSingleMath()) {
+		localToWorldPs2(point, out);
+
+		return out;
+	}
+
 	if ((_nodeFlags & kWorldValid) == 0)
 		updateWorldTransform();
 
@@ -175,6 +192,12 @@ CVector *CNode::localToWorld(const CVector *point, CVector *out) {
 }
 
 float *CNode::worldToLocal(const float *worldX, const float *worldY, const float *worldZ, float *localX, float *localY, float *localZ) {
+	if (usesSingleMath()) {
+		worldToLocalPs2(worldX, worldY, worldZ, localX, localY, localZ);
+
+		return localX;
+	}
+
 	if ((_nodeFlags & kWorldValid) == 0)
 		updateWorldTransform();
 
@@ -198,6 +221,12 @@ float *CNode::worldToLocal(const float *worldX, const float *worldY, const float
 }
 
 CVector *CNode::worldToLocal(CVector *point) {
+	if (usesSingleMath()) {
+		worldToLocalPs2(point, point);
+
+		return point;
+	}
+
 	if ((_nodeFlags & kWorldValid) == 0)
 		updateWorldTransform();
 
@@ -220,6 +249,12 @@ CVector *CNode::worldToLocal(CVector *point) {
 }
 
 CVector *CNode::worldToLocal(const CVector *point, CVector *out) {
+	if (usesSingleMath()) {
+		worldToLocalPs2(point, out);
+
+		return out;
+	}
+
 	if ((_nodeFlags & kWorldValid) == 0)
 		updateWorldTransform();
 
@@ -240,6 +275,12 @@ CVector *CNode::worldToLocal(const CVector *point, CVector *out) {
 }
 
 CVector *CNode::localToWorldDirection(const CVector *direction, CVector *out) {
+	if (usesSingleMath()) {
+		localToWorldDirectionPs2(direction, out);
+
+		return out;
+	}
+
 	if ((_nodeFlags & kWorldValid) == 0)
 		updateWorldTransform();
 
@@ -254,7 +295,247 @@ CVector *CNode::localToWorldDirection(const CVector *direction, CVector *out) {
 	return out;
 }
 
+bool CNode::usesSingleMath() const {
+	return g_grim && g_grim->getGamePlatform() == Common::kPlatformPS2;
+}
+
+void CNode::updateWorldTransformPs2() {
+	if ((_nodeFlags & kQuaternionValid) != 0) {
+		SingleMath::matrixFromQuaternion(_quat._x, _quat._y, _quat._z, _quat._w, _world._rot._m);
+		_world._pos = _pos;
+	} else if ((_nodeFlags & kEulerValid) != 0) {
+		SingleMath::matrixFromEuler(_eulerDeg._x, _eulerDeg._y, _eulerDeg._z, _world._rot._m);
+		_world._pos = _pos;
+	}
+
+	if (_parent) {
+		if ((_parent->_nodeFlags & kWorldValid) == 0)
+			_parent->updateWorldTransform();
+
+		const float *parentMatrix = _parent->_world._rot._m;
+		float localPosition[3] = { _world._pos._x, _world._pos._y, _world._pos._z };
+		float rotatedPosition[3];
+		float product[9];
+
+		SingleMath::rotate(parentMatrix, localPosition, rotatedPosition);
+
+		TruncFloat worldX = TruncFloat(rotatedPosition[0]) + TruncFloat(_parent->_world._pos._x);
+		TruncFloat worldY = TruncFloat(rotatedPosition[1]) + TruncFloat(_parent->_world._pos._y);
+		TruncFloat worldZ = TruncFloat(rotatedPosition[2]) + TruncFloat(_parent->_world._pos._z);
+
+		SingleMath::multiplyMatrices(_world._rot._m, parentMatrix, product);
+
+		for (int i = 0; i < 9; i++)
+			_world._rot._m[i] = product[i];
+
+		_world._pos._x = worldX.toFloat();
+		_world._pos._y = worldY.toFloat();
+		_world._pos._z = worldZ.toFloat();
+	}
+
+	_nodeFlags |= kWorldValid;
+}
+
+void CNode::computeParentRelativeMatrixPs2(float *matrix) {
+	const float *parentMatrix = _parent->_world._rot._m;
+	float transposed[9];
+
+	transposed[0] = parentMatrix[0];
+	transposed[1] = parentMatrix[3];
+	transposed[2] = parentMatrix[6];
+	transposed[3] = parentMatrix[1];
+	transposed[4] = parentMatrix[4];
+	transposed[5] = parentMatrix[7];
+	transposed[6] = parentMatrix[2];
+	transposed[7] = parentMatrix[5];
+	transposed[8] = parentMatrix[8];
+
+	SingleMath::multiplyMatrices(_world._rot._m, transposed, matrix);
+}
+
+void CNode::computeLocalMatrixFromWorldPs2() {
+	if ((_nodeFlags & kWorldValid) == 0)
+		updateWorldTransform();
+
+	float euler[3];
+
+	if (_parent) {
+		float local[9];
+
+		computeParentRelativeMatrixPs2(local);
+		SingleMath::matrixToEuler(local, euler);
+	} else {
+		SingleMath::matrixToEuler(_world._rot._m, euler);
+	}
+
+	_eulerDeg._x = euler[0];
+	_eulerDeg._y = euler[1];
+	_eulerDeg._z = euler[2];
+	_nodeFlags |= kEulerValid;
+}
+
+void CNode::updateLocalQuaternionPs2() {
+	float quaternion[4];
+
+	if ((_nodeFlags & kEulerValid) != 0) {
+		SingleMath::quaternionFromEuler(_eulerDeg._x, _eulerDeg._y, _eulerDeg._z, quaternion);
+	} else {
+		if ((_nodeFlags & kWorldValid) == 0)
+			updateWorldTransform();
+
+		if (_parent) {
+			float local[9];
+
+			computeParentRelativeMatrixPs2(local);
+			SingleMath::quaternionFromMatrix(local, quaternion);
+		} else {
+			SingleMath::quaternionFromMatrix(_world._rot._m, quaternion);
+		}
+	}
+
+	_quat._x = quaternion[0];
+	_quat._y = quaternion[1];
+	_quat._z = quaternion[2];
+	_quat._w = quaternion[3];
+	_nodeFlags |= kQuaternionValid;
+}
+
+CQuaternion CNode::getWorldOrientationPs2() {
+	CQuaternion orientation;
+	float quaternion[4];
+
+	if ((_nodeFlags & kWorldValid) == 0)
+		updateWorldTransform();
+
+	SingleMath::quaternionFromMatrix(_world._rot._m, quaternion);
+
+	orientation._x = quaternion[0];
+	orientation._y = quaternion[1];
+	orientation._z = quaternion[2];
+	orientation._w = quaternion[3];
+
+	return orientation;
+}
+
+void CNode::localToWorldPs2(const CVector *point, CVector *out) {
+	if ((_nodeFlags & kWorldValid) == 0)
+		updateWorldTransform();
+
+	float source[3] = { point->_x, point->_y, point->_z };
+	float rotated[3];
+
+	SingleMath::rotate(_world._rot._m, source, rotated);
+
+	out->_x = (TruncFloat(rotated[0]) + TruncFloat(_world._pos._x)).toFloat();
+	out->_y = (TruncFloat(rotated[1]) + TruncFloat(_world._pos._y)).toFloat();
+	out->_z = (TruncFloat(rotated[2]) + TruncFloat(_world._pos._z)).toFloat();
+}
+
+void CNode::worldToLocalPs2(const float *worldX, const float *worldY, const float *worldZ, float *localX, float *localY, float *localZ) {
+	if ((_nodeFlags & kWorldValid) == 0)
+		updateWorldTransform();
+
+	const float *m = _world._rot._m;
+
+	*localX = (TruncFloat(*worldX) - TruncFloat(_world._pos._x)).toFloat();
+	*localY = (TruncFloat(*worldY) - TruncFloat(_world._pos._y)).toFloat();
+	*localZ = (TruncFloat(*worldZ) - TruncFloat(_world._pos._z)).toFloat();
+
+	TruncFloat deltaX(*localX);
+	TruncFloat deltaY(*localY);
+	TruncFloat deltaZ(*localZ);
+
+	*localX = TruncFloat::multiplyAdd(deltaX * TruncFloat(m[0]) + deltaY * TruncFloat(m[1]), deltaZ, TruncFloat(m[2])).toFloat();
+	*localY = TruncFloat::multiplyAdd(deltaX * TruncFloat(m[3]) + deltaY * TruncFloat(m[4]), deltaZ, TruncFloat(m[5])).toFloat();
+	*localZ = TruncFloat::multiplyAdd(deltaX * TruncFloat(m[6]) + deltaY * TruncFloat(m[7]), deltaZ, TruncFloat(m[8])).toFloat();
+}
+
+void CNode::worldToLocalPs2(const CVector *point, CVector *out) {
+	if ((_nodeFlags & kWorldValid) == 0)
+		updateWorldTransform();
+
+	const float *m = _world._rot._m;
+	TruncFloat deltaX = TruncFloat(point->_x) - TruncFloat(_world._pos._x);
+	TruncFloat deltaY = TruncFloat(point->_y) - TruncFloat(_world._pos._y);
+	TruncFloat deltaZ = TruncFloat(point->_z) - TruncFloat(_world._pos._z);
+	TruncFloat newX = TruncFloat::multiplyAdd(deltaX * TruncFloat(m[0]) + deltaY * TruncFloat(m[1]), deltaZ, TruncFloat(m[2]));
+	TruncFloat newY = TruncFloat::multiplyAdd(deltaX * TruncFloat(m[3]) + deltaY * TruncFloat(m[4]), deltaZ, TruncFloat(m[5]));
+	TruncFloat newZ = TruncFloat::multiplyAdd(deltaX * TruncFloat(m[6]) + deltaY * TruncFloat(m[7]), deltaZ, TruncFloat(m[8]));
+
+	out->_x = newX.toFloat();
+	out->_y = newY.toFloat();
+	out->_z = newZ.toFloat();
+}
+
+void CNode::localToWorldDirectionPs2(const CVector *direction, CVector *out) {
+	if ((_nodeFlags & kWorldValid) == 0)
+		updateWorldTransform();
+
+	float source[3] = { direction->_x, direction->_y, direction->_z };
+	float rotated[3];
+
+	SingleMath::rotate(_world._rot._m, source, rotated);
+
+	out->_x = rotated[0];
+	out->_y = rotated[1];
+	out->_z = rotated[2];
+}
+
+void CNode::lookAtPs2(const CVector &target) {
+	float localTarget[3] = { target._x, target._y, target._z };
+
+	if (_parent) {
+		if ((_parent->_nodeFlags & kWorldValid) == 0)
+			_parent->updateWorldTransform();
+
+		const float *p = _parent->_world._rot._m;
+		TruncFloat deltaX = TruncFloat(localTarget[0]) - TruncFloat(_parent->_world._pos._x);
+		TruncFloat deltaY = TruncFloat(localTarget[1]) - TruncFloat(_parent->_world._pos._y);
+		TruncFloat deltaZ = TruncFloat(localTarget[2]) - TruncFloat(_parent->_world._pos._z);
+		TruncFloat newX = TruncFloat::multiplyAdd(deltaX * TruncFloat(p[0]) + deltaY * TruncFloat(p[1]), deltaZ, TruncFloat(p[2]));
+		TruncFloat newY = TruncFloat::multiplyAdd(deltaX * TruncFloat(p[3]) + deltaY * TruncFloat(p[4]), deltaZ, TruncFloat(p[5]));
+		TruncFloat newZ = TruncFloat::multiplyAdd(deltaX * TruncFloat(p[6]) + deltaY * TruncFloat(p[7]), deltaZ, TruncFloat(p[8]));
+
+		localTarget[0] = newX.toFloat();
+		localTarget[1] = newY.toFloat();
+		localTarget[2] = newZ.toFloat();
+	}
+
+	if ((_nodeFlags & kPositionValid) == 0)
+		computeLocalPositionFromWorld();
+
+	TruncFloat directionX = TruncFloat(localTarget[0]) - TruncFloat(_pos._x);
+	TruncFloat directionY = TruncFloat(localTarget[1]) - TruncFloat(_pos._y);
+	TruncFloat directionZ = TruncFloat(localTarget[2]) - TruncFloat(_pos._z);
+	TruncFloat directionLength = TruncFloat::squareRoot(TruncFloat::multiplyAdd(directionX * directionX + directionY * directionY, directionZ, directionZ));
+
+	if (!(directionLength < TruncFloat(SingleMath::kMinLength))) {
+		TruncFloat inverse = TruncFloat(1.0f) / directionLength;
+
+		directionX = directionX * inverse;
+		directionY = directionY * inverse;
+		directionZ = directionZ * inverse;
+	}
+
+	TruncFloat toRadians(SingleMath::kDegreesToRadians);
+	TruncFloat toDegrees = TruncFloat::fromBits(0x42652EE0);
+	TruncFloat yaw = toDegrees * (toRadians * TruncFloat(SingleMath::atan2Degrees(directionX.toFloat(), directionZ.toFloat())));
+	TruncFloat pitch = toDegrees * -(toRadians * TruncFloat(SingleMath::asinDegrees(directionY.toFloat())));
+
+	_eulerDeg._x = pitch.toFloat();
+	_eulerDeg._y = yaw.toFloat();
+	_eulerDeg._z = 0.0f;
+	_nodeFlags = (_nodeFlags | kEulerValid | kLocalSet) & ~kQuaternionValid;
+	updateLocalState();
+}
+
 void CNode::updateWorldTransform() {
+	if (usesSingleMath()) {
+		updateWorldTransformPs2();
+
+		return;
+	}
+
 	CMatrix rotation;
 
 	if ((_nodeFlags & kQuaternionValid) != 0) {
@@ -306,6 +587,12 @@ void CNode::updateWorldTransform() {
 }
 
 void CNode::computeLocalMatrixFromWorld() {
+	if (usesSingleMath()) {
+		computeLocalMatrixFromWorldPs2();
+
+		return;
+	}
+
 	if ((_nodeFlags & kWorldValid) == 0)
 		updateWorldTransform();
 
@@ -332,6 +619,12 @@ void CNode::computeLocalMatrixFromWorld() {
 }
 
 void CNode::updateLocalQuaternion() {
+	if (usesSingleMath()) {
+		updateLocalQuaternionPs2();
+
+		return;
+	}
+
 	if ((_nodeFlags & kEulerValid) != 0) {
 		_quat = CQuaternion(_eulerDeg);
 		_nodeFlags |= kQuaternionValid;
@@ -365,7 +658,19 @@ void CNode::updateLocalQuaternion() {
 void CNode::computeLocalPositionFromWorld() {
 	_pos = _world._pos;
 
-	if (_parent) {
+	if (_parent && usesSingleMath()) {
+		if ((_parent->_nodeFlags & kWorldValid) == 0)
+			_parent->updateWorldTransform();
+
+		TruncFloat deltaX = TruncFloat(_pos._x) - TruncFloat(_parent->_world._pos._x);
+		TruncFloat deltaY = TruncFloat(_pos._y) - TruncFloat(_parent->_world._pos._y);
+		TruncFloat deltaZ = TruncFloat(_pos._z) - TruncFloat(_parent->_world._pos._z);
+		const float *p = _parent->_world._rot._m;
+
+		_pos._x = TruncFloat::multiplyAdd(deltaX * TruncFloat(p[0]) + deltaY * TruncFloat(p[1]), deltaZ, TruncFloat(p[2])).toFloat();
+		_pos._y = TruncFloat::multiplyAdd(deltaX * TruncFloat(p[3]) + deltaY * TruncFloat(p[4]), deltaZ, TruncFloat(p[5])).toFloat();
+		_pos._z = TruncFloat::multiplyAdd(deltaX * TruncFloat(p[6]) + deltaY * TruncFloat(p[7]), deltaZ, TruncFloat(p[8])).toFloat();
+	} else if (_parent) {
 		if ((_parent->_nodeFlags & kWorldValid) == 0)
 			_parent->updateWorldTransform();
 
@@ -465,6 +770,12 @@ CNode *CNode::findNode(const LString &nodeName) {
 }
 
 void CNode::lookAt(const CVector &target) {
+	if (usesSingleMath()) {
+		lookAtPs2(target);
+
+		return;
+	}
+
 	CVector localTarget = target;
 
 	if (_parent) {

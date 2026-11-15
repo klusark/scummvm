@@ -40,6 +40,7 @@
 #include "engines/grim/emi/costume/choreinstance.h"
 #include "engines/grim/emi/emi_registry.h"
 #include "engines/grim/emi/emidebugger.h"
+#include "engines/grim/emi/input/demoreplay.h"
 #include "engines/grim/emi/input/inputrecorder.h"
 #include "engines/grim/emi/input/joystick.h"
 #include "engines/grim/emi/input/keygenerator.h"
@@ -68,6 +69,7 @@ namespace Grim {
 
 static const uint kMaxHardCap = 0x4000000;
 static const uint kReservedMemory = 0x800000;
+static const int kMaxDemos = 10;
 
 EmiEngine::EmiEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, Common::Platform platform, Common::Language language) :
 		GrimEngine(syst, gameFlags, gameType, platform, language),
@@ -106,7 +108,7 @@ EmiEngine::EmiEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, Com
 		_animInstances(),
 		_activeLights(),
 		_nextLayerId(1), _layer16BitFix(true),
-		_lipBuffer(), _lipMouthTable(),
+		_lipBuffer(), _lipFileName(), _lipMouthTable(),
 		_profilerOldest(nullptr), _profilerNewest(nullptr), _profilerTimerCount(0), _profilerCallStack(),
 		_profilerCallStackDepth(0), _profilerFrameCounter(0), _profilerSnapshotInterval(5),
 		_profilerCalibrationTicks(0), _profilerCalibrationSeconds(0.0), _profilerSecondsPerTick(0.0),
@@ -173,6 +175,7 @@ EmiEngine::~EmiEngine() {
 
 	destroyOverworld();
 	destroyInputRecorder();
+	destroyDemoReplay();
 
 	CTextFont::freeGlyphMap(this);
 
@@ -237,6 +240,10 @@ Overworld *EmiEngine::getOverworld() {
 
 InputRecorder *EmiEngine::getInputRecorder() {
 	return _inputRecorder;
+}
+
+DemoReplay *EmiEngine::getDemoReplay() {
+	return _demoReplay;
 }
 
 Lua_V2 *EmiEngine::getLua() {
@@ -394,6 +401,105 @@ void EmiEngine::destroyInputRecorder() {
 
 	delete _inputRecorder;
 	_inputRecorder = nullptr;
+}
+
+bool EmiEngine::createDemoReplay(int replayMode, const char *name) {
+	if (_demoReplay) {
+		delete _demoReplay;
+		_demoReplay = nullptr;
+	}
+
+	// The replay becomes visible only after its constructor, so restoring the state does not consume records
+	DemoReplay *replay = new DemoReplay(this, replayMode, name);
+
+	_demoReplay = replay;
+
+	return true;
+}
+
+void EmiEngine::destroyDemoReplay() {
+	if (!_demoReplay)
+		return;
+
+	delete _demoReplay;
+	_demoReplay = nullptr;
+
+	if (_consoleServices)
+		_consoleServices->logDebug("Replay log DISPOSED\n");
+}
+
+void EmiEngine::setReplayRequest(int mode, const char *name) {
+	_replayRequest = mode;
+
+	if (name)
+		_replayRequestName = name;
+	else
+		_replayRequestName.clear();
+
+	if (mode == 0)
+		_sounds->killMusicAndWait(false);
+}
+
+void EmiEngine::applyReplayRequest() {
+	int request = _replayRequest;
+
+	_replayRequest = -1;
+
+	if ((uint)request < 2)
+		_replayMusicFrames = 3;
+
+	if (request != 0) {
+		createDemoReplay(request == 1 ? DemoReplay::kModePlayback : DemoReplay::kModeRecord, _replayRequestName.c_str());
+
+		return;
+	}
+
+	if (_demoReplay && _demoReplay->_mode == DemoReplay::kModeFinished) {
+		Movie::drawLoadingIconPs2(this);
+		lua_dostring("system.currentSet:unlock_demo_resources()");
+		lua_dostring("start_script(system.restart)");
+	}
+
+	destroyDemoReplay();
+}
+
+void EmiEngine::countDemos() {
+	int count = 0;
+
+	do {
+		LString name = LString::format("DEMOS\\DEMO%d.DEM", count);
+
+		if (!_fileServices->exists(name.c_str()))
+			break;
+
+		count++;
+	} while (count < kMaxDemos);
+
+	_demoCount = count;
+
+	if (count > 0)
+		_demoIndex = 0;
+}
+
+int EmiEngine::getNextDemoNum() {
+	int current = _demoIndex;
+
+	if (current >= 0) {
+		_demoIndex = current + 1;
+
+		if (_demoIndex == _demoCount)
+			_demoIndex = 0;
+	}
+
+	return current;
+}
+
+int32 EmiEngine::nextRandom() {
+	return static_cast<EmiEngine *>(g_grim)->_random.next();
+}
+
+void EmiEngine::seedRandom(uint32 seed) {
+	static_cast<EmiEngine *>(g_grim)->_random.seed(seed);
 }
 
 void EmiEngine::destroyOverworld() {

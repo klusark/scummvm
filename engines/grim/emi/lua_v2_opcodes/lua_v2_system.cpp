@@ -101,7 +101,7 @@ void Lua_V2::FileFindFirst() {
 
 	if (!lua_isstring(extensionObj)) {
 		if (_engine->isDemo())
-			logConsole(kConsoleWarning, "FileFindFirst: the first argument must be a string.\n");
+			logMessage(kConsoleWarning, "FileFindFirst: first argument must be a string\n");
 
 		lua_pushnil();
 
@@ -160,7 +160,7 @@ void Lua_V2::TextFileGetLineCount() {
 
 	if (lua_isnil(nameObj)) {
 		if (_engine->isDemo())
-			logConsole(kConsoleDebug, "TextFileGetLineCount: the argument must be a file name.\n");
+			logMessage(kConsoleDebug, "TextFileGetLineCount: the argument must be a file name.\n");
 
 		lua_pushnil();
 
@@ -170,10 +170,7 @@ void Lua_V2::TextFileGetLineCount() {
 	const char *fileName = lua_getstring(nameObj);
 
 	if (!fileName) {
-		if (_engine->isDemo())
-			logConsole(kConsoleDebug, "TextFileGetLineCount: the argument must be a file name.\n");
-		else
-			warning("Lua_V2::TextFileGetLineCount(): the file name is not a string");
+		warning("Lua_V2::TextFileGetLineCount(): the file name is not a string");
 
 		lua_pushnil();
 
@@ -184,7 +181,7 @@ void Lua_V2::TextFileGetLineCount() {
 
 	if (!file) {
 		if (_engine->isDemo())
-			logConsole(kConsoleDebug, "TextFileGetLineCount: cannot open %s.\n", fileName);
+			logMessage(kConsoleDebug, "TextFileGetLineCount: cannot open %s.\n", fileName);
 
 		lua_pushnil();
 
@@ -218,7 +215,7 @@ void Lua_V2::TextFileGetLine() {
 
 	if (lua_isnil(nameObj) || lua_isnil(positionObj)) {
 		if (_engine->isDemo())
-			logConsole(kConsoleDebug, "TextFileGetLine: the arguments must be a file name and a position.\n");
+			logMessage(kConsoleDebug, "TextFileGetLine: the arguments must be a file name and a position.\n");
 
 		lua_pushnil();
 
@@ -228,10 +225,7 @@ void Lua_V2::TextFileGetLine() {
 	const char *fileName = lua_getstring(nameObj);
 
 	if (!fileName) {
-		if (_engine->isDemo())
-			logConsole(kConsoleDebug, "TextFileGetLine: the first argument must be a file name.\n");
-		else
-			warning("Lua_V2::TextFileGetLine(): the file name is not a string");
+		warning("Lua_V2::TextFileGetLine(): the file name is not a string");
 
 		lua_pushnil();
 
@@ -242,7 +236,7 @@ void Lua_V2::TextFileGetLine() {
 
 	if (!file) {
 		if (_engine->isDemo())
-			logConsole(kConsoleDebug, "TextFileGetLine: cannot open %s.\n", fileName);
+			logMessage(kConsoleDebug, "TextFileGetLine: cannot open %s.\n", fileName);
 
 		lua_pushnil();
 
@@ -259,6 +253,9 @@ void Lua_V2::TextFileGetLine() {
 }
 
 void Lua_V2::InputDialog() {
+	if (disabledFunction(kConsoleError, "InputDialog: usb_getcmd failed.\n", LUA_NOOBJECT))
+		return;
+
 	lua_Object captionObj = lua_getparam(1);
 	lua_Object promptObj = lua_getparam(2);
 	lua_Object defaultObj = lua_getparam(3);
@@ -314,7 +311,7 @@ void Lua_V2::QueryDialog() {
 			return;
 		}
 	} else if (_engine->isDemo()) {
-		logConsole(kConsoleWarning, "QueryDialog: the caption and the text must be strings.\n");
+		logMessage(kConsoleWarning, "QueryDialog: the caption and the text must be strings.\n");
 	}
 
 	lua_pushnil();
@@ -326,13 +323,9 @@ void Lua_V2::ScreenShot() {
 
 void Lua_V2::MakeScreenTextures() {
 	lua_Object indexObj = lua_getparam(1);
-	LConsoleServices *console = _engine->getConsoleServices();
 
 	if (lua_isnil(indexObj) || !lua_isnumber(indexObj)) {
-		if (console)
-			console->logError("sputLua_MakeScreenTextures: First parameter must be a specialty texture index. Operation aborted.\n");
-		else
-			warning("sputLua_MakeScreenTextures: First parameter must be a specialty texture index. Operation aborted.");
+		logMessage(kConsoleError, "sputLua_MakeScreenTextures: First parameter must be a specialty texture index. Operation aborted.\n");
 	} else if (_engine->buildSpecScreenTextures(luaFtol(lua_getnumber(indexObj)))) {
 		lua_pushnumber(1.0f);
 
@@ -360,12 +353,7 @@ void Lua_V2::SubmitSaveGameData() {
 			break;
 
 		if (!lua_isstring(entryObj)) {
-			LConsoleServices *console = _engine->getConsoleServices();
-
-			if (console)
-				console->logError("Savegame table must contain only strings!\n");
-			else
-				warning("Savegame table must contain only strings!");
+			logMessage(kConsoleError, "Savegame table must contain only strings!\n");
 
 			return;
 		}
@@ -480,13 +468,9 @@ void Lua_V2::ScreenshotForSavegame() {
 
 void Lua_V2::ThumbnailFromScreen() {
 	lua_Object indexObj = lua_getparam(1);
-	LConsoleServices *console = _engine->getConsoleServices();
 
 	if (lua_isnil(indexObj) || !lua_isnumber(indexObj)) {
-		if (console)
-			console->logError("sputLua_ThumbnailFromScreen: First parameter must be a specialty texture index. Operation aborted.\n");
-		else
-			warning("sputLua_ThumbnailFromScreen: First parameter must be a specialty texture index. Operation aborted.");
+		logMessage(kConsoleError, "sputLua_ThumbnailFromScreen: First parameter must be a specialty texture index. Operation aborted.\n");
 	} else if (_engine->makeThumbnailTexture(luaFtol(lua_getnumber(indexObj)), true)) {
 		lua_pushnumber(1.0f);
 
@@ -499,20 +483,12 @@ void Lua_V2::ThumbnailFromScreen() {
 void Lua_V2::ThumbnailFromFile() {
 	lua_Object indexObj = lua_getparam(1);
 	lua_Object nameObj = lua_getparam(2);
-	LConsoleServices *console = _engine->getConsoleServices();
 
 	if (lua_isnil(indexObj) || !lua_isnumber(indexObj)) {
-		if (console)
-			console->logError("sputLua_ThumbnailFromFile: First parameter must be a specialty texture index. Operation aborted.\n");
-		else
-			warning("sputLua_ThumbnailFromFile: First parameter must be a specialty texture index. Operation aborted.");
+		logMessage(kConsoleError, "sputLua_ThumbnailFromFile: First parameter must be a specialty texture index. Operation aborted.\n");
 	} else {
 		if (lua_isnil(nameObj) || !lua_isstring(nameObj)) {
-			if (console)
-				console->logError("sputLua_ThumbnailFromFile: First parameter must be a filename. Operation aborted.\n");
-			else
-				warning("sputLua_ThumbnailFromFile: First parameter must be a filename. Operation aborted.");
-
+			logMessage(kConsoleError, "sputLua_ThumbnailFromFile: First parameter must be a filename. Operation aborted.\n");
 			lua_pushnil();
 
 			return;
@@ -530,13 +506,9 @@ void Lua_V2::ThumbnailFromFile() {
 
 void Lua_V2::ClearSpecialtyTexture() {
 	lua_Object indexObj = lua_getparam(1);
-	LConsoleServices *console = _engine->getConsoleServices();
 
 	if (lua_isnil(indexObj) || !lua_isnumber(indexObj)) {
-		if (console)
-			console->logError("sputLua_ClearSpecialtyTexture: First parameter must be a specialty texture index. Operation aborted.\n");
-		else
-			warning("sputLua_ClearSpecialtyTexture: First parameter must be a specialty texture index. Operation aborted.");
+		logMessage(kConsoleError, "sputLua_ClearSpecialtyTexture: First parameter must be a specialty texture index. Operation aborted.\n");
 	} else if (_engine->clearTextureSlot(luaFtol(lua_getnumber(indexObj)))) {
 		lua_pushnumber(1.0f);
 

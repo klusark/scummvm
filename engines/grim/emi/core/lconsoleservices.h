@@ -43,6 +43,17 @@ public:
 	virtual int logToFile(const char *format, ...);
 
 protected:
+	enum {
+		kLevelStatus,
+		kLevelWarning,
+		kLevelError,
+		kLevelDebug
+	};
+
+	static const int kMaxMessageLength = 1021;
+
+	int logMessage(int level, const char *format, va_list args);
+
 	EmiEngine *_engine;
 };
 

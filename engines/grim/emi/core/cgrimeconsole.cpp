@@ -38,10 +38,12 @@ int CGrimeConsole::logPrintfStub(const char *text) {
 	while (!message.empty() && message.lastChar() == '\n')
 		message.deleteLastChar();
 
-	if (text[0] == 'E' || text[0] == 'W')
-		debug(1, "%s", message.c_str());
+	if (text[0] == 'E')
+		warning("ERROR: %s", message.c_str());
+	else if (text[0] == 'W')
+		warning("%s", message.c_str());
 	else
-		debug(2, "%s", message.c_str());
+		debug("%s", message.c_str());
 
 	return 0;
 }

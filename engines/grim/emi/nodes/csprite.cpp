@@ -349,16 +349,16 @@ int CSpriteInstance::getSaveSize() {
 	return RPrimitiveInstance::getSaveSize() + (int)sizeof(_textureIndex);
 }
 
-bool CSpriteInstance::saveState(SaveRestoreAccess *access) {
-	RPrimitiveInstance::saveState(access);
-	access(&_textureIndex, sizeof(_textureIndex));
+bool CSpriteInstance::saveState(SaveRestoreAccess *accessFunc) {
+	RPrimitiveInstance::saveState(accessFunc);
+	accessFunc(&_textureIndex, sizeof(_textureIndex));
 
 	return true;
 }
 
-bool CSpriteInstance::restoreState(SaveRestoreAccess *access) {
-	RPrimitiveInstance::restoreState(access);
-	access(&_textureIndex, sizeof(_textureIndex));
+bool CSpriteInstance::restoreState(SaveRestoreAccess *accessFunc) {
+	RPrimitiveInstance::restoreState(accessFunc);
+	accessFunc(&_textureIndex, sizeof(_textureIndex));
 
 	return true;
 }

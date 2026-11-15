@@ -49,8 +49,8 @@ public:
 	virtual void output(RNode *node, Camera *camera) {}
 	virtual void update(RNode *node, Camera *camera) {}
 	virtual int getSaveSize();
-	virtual bool saveState(SaveRestoreAccess *access);
-	virtual bool restoreState(SaveRestoreAccess *access);
+	virtual bool saveState(SaveRestoreAccess *accessFunc);
+	virtual bool restoreState(SaveRestoreAccess *accessFunc);
 	virtual bool isVisible(RNode *node, Camera *camera);
 	virtual void drawBounds(RNode *node, Camera *camera);
 

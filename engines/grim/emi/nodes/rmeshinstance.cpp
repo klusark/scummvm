@@ -306,25 +306,25 @@ int RMeshInstance::getSaveSize() {
 	return RPrimitiveInstance::getSaveSize() + (int)sizeof(int) + (int)(_texIndex.size() * sizeof(int));
 }
 
-bool RMeshInstance::saveState(SaveRestoreAccess *access) {
-	RPrimitiveInstance::saveState(access);
+bool RMeshInstance::saveState(SaveRestoreAccess *accessFunc) {
+	RPrimitiveInstance::saveState(accessFunc);
 
 	int count = (int)_texIndex.size();
 
-	access(&count, sizeof(count));
+	accessFunc(&count, sizeof(count));
 
 	for (int i = 0; i < count; i++)
-		access(&_texIndex[i], sizeof(int));
+		accessFunc(&_texIndex[i], sizeof(int));
 
 	return true;
 }
 
-bool RMeshInstance::restoreState(SaveRestoreAccess *access) {
-	RPrimitiveInstance::restoreState(access);
+bool RMeshInstance::restoreState(SaveRestoreAccess *accessFunc) {
+	RPrimitiveInstance::restoreState(accessFunc);
 
 	int count = 0;
 
-	access(&count, sizeof(count));
+	accessFunc(&count, sizeof(count));
 
 	if (count < 0) {
 		warning("RMeshInstance::restoreState(): invalid texture index count %d", count);
@@ -334,7 +334,7 @@ bool RMeshInstance::restoreState(SaveRestoreAccess *access) {
 	_texIndex.resize(count, 0);
 
 	for (int i = 0; i < count; i++)
-		access(&_texIndex[i], sizeof(int));
+		accessFunc(&_texIndex[i], sizeof(int));
 
 	return true;
 }

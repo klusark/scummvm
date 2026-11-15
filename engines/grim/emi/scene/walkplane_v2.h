@@ -51,7 +51,7 @@ public:
 	bool addNeighbor(int planeNumber);
 	bool touches(WalkPlane_v2 *other, bool both);
 	float *getGatePoint(float *out, WalkPlane_v2 *other, const float *from, const float *target);
-	void serialize(SaveRestoreAccess *access);
+	void serialize(SaveRestoreAccess *accessFunc);
 	void setType(int newType);
 	bool within(const float *point, bool checkActive);
 	void closestPoint(float *point);
@@ -59,6 +59,17 @@ public:
 	void project(float *point);
 	float *getConstraintVector(Puck_v2 *puck);
 	void jumpOut(Puck_v2 *puck);
+
+	void computeEquationPs2();
+	bool withinPs2(const float *point, bool checkActive);
+	void projectPs2(float *point);
+	void closestPointPs2(float *point);
+	void clampToEdgesPs2(float *point);
+	void closestPointOnEdgePs2(float *point, const float *current, const float *previous);
+	float *getConstraintVectorPs2(Puck_v2 *puck);
+	void findExitPs2(const float *ahead, const float *back, float *out);
+	static bool closestSharedVertexPs2(WalkPlane_v2 *planeA, WalkPlane_v2 *planeB, float x, float y, float z, float *out);
+	static bool segmentCrossesPs2(const float *startA, const float *endA, const float *startB, const float *endB, float *ratio);
 
 	static bool segmentIntersection(const float *startA, const float *endA, const float *startB, const float *endB, float *out);
 	static bool closestSharedVertex(WalkPlane_v2 *planeA, WalkPlane_v2 *planeB, float x, float y, float z, float *out);

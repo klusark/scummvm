@@ -37,8 +37,8 @@ void Layer::set16BitFix(EmiEngine *engine, bool enable) {
 	engine->_layer16BitFix = enable;
 }
 
-void Layer::saveRestoreNextId(EmiEngine *engine, SaveRestoreAccess *access) {
-	access(&engine->_nextLayerId, sizeof(engine->_nextLayerId));
+void Layer::saveRestoreNextId(EmiEngine *engine, SaveRestoreAccess *accessFunc) {
+	accessFunc(&engine->_nextLayerId, sizeof(engine->_nextLayerId));
 }
 
 Layer::Layer(EmiEngine *engine, const char *layerName, int layerSortOrder, int layerFrame, int layerId) : _tiledScene(engine), _background(engine), _engine(engine) {

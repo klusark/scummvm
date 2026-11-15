@@ -31,6 +31,7 @@ namespace Grim {
 
 struct FileUtilFind;
 class Actor;
+class Camera;
 class CjkString;
 class CLightNode;
 class Color;
@@ -62,6 +63,7 @@ public:
 	bool isSoundLocked(int soundHandle);
 	void callCollisionHandler(Actor *first, Actor *second, float x0, float y0, float z0, float x1, float y1, float z1, float x2, float y2, float z2);
 	bool buttonHandler(int vk, bool down);
+	void callAxisHandler(int index, float value);
 	void axisHandler();
 	void updateJoySelected();
 
@@ -76,7 +78,6 @@ public:
 	void restoreLocks(SaveRestoreAccess *reader);
 	void toggleStatsOverlay(bool hide);
 	static uint getClockUniqueUint();
-	void obsoleteFunctionPs2();
 
 	enum {
 		kStatsOverlayFlag = 0x20,
@@ -373,6 +374,8 @@ protected:
 	DECLARE_LUA_OPCODE(OverWorldToScreen);
 	DECLARE_LUA_OPCODE(SetVScanOffsets);
 	DECLARE_LUA_OPCODE(UnimplementedFunctionPs2);
+	DECLARE_LUA_OPCODE(ObsoleteFunctionPs2);
+	DECLARE_LUA_OPCODE(ToggleDrawFPS);
 
 protected:
 	enum {
@@ -385,9 +388,14 @@ protected:
 	bool isActor(lua_Object object);
 	Actor *getActor(lua_Object object, const char *opcodeName);
 	CLightNode *getLightArg(int paramNumber, const char *opcodeName);
-	void logConsole(int level, const char *format, ...) GCC_PRINTF(3, 4);
-	void logDemo(int level, const char *format, ...) GCC_PRINTF(3, 4);
+	void logMessage(int level, const char *format, ...);
+	bool disabledFunction(int level, const char *format, lua_Object argumentObj);
+	Camera *getCurrentCamera(const char *name);
+	bool getChoreId(lua_Object idObj, const char *name, uint *instanceId);
+	bool getChoreSeconds(lua_Object secondsObj, const char *name, const char *requirement, float *seconds);
 	bool fileExists(const char *name);
+	void lockBackgroundWithScene(const LString &name, bool recordName);
+	void unlockBackgroundWithScene(const LString &name, bool forgetName);
 
 private:
 	enum {

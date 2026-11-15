@@ -39,18 +39,18 @@ static const int kSavedStringBufferSize = 512;
 static const uint kMaxSkippedStateSize = 65536;
 static const char *const kOverworldRoomName = "[OW]";
 
-static void writeSavedString(SaveRestoreAccess *access, const LString &string) {
+static void writeSavedString(SaveRestoreAccess *accessFunc, const LString &string) {
 	int length = (int)string.size() + 1;
 
-	access(&length, sizeof(length));
-	access((void *)string.c_str(), length);
+	accessFunc(&length, sizeof(length));
+	accessFunc((void *)string.c_str(), length);
 }
 
-static bool readSavedString(SaveRestoreAccess *access, LString &string) {
+static bool readSavedString(SaveRestoreAccess *accessFunc, LString &string) {
 	char buffer[kSavedStringBufferSize + 1];
 	uint length = 0;
 
-	access(&length, sizeof(length));
+	accessFunc(&length, sizeof(length));
 
 	if (length > (uint)kSavedStringBufferSize) {
 		warning("Actor::restore(): invalid string length %u", length);
@@ -58,23 +58,23 @@ static bool readSavedString(SaveRestoreAccess *access, LString &string) {
 		return false;
 	}
 
-	access(buffer, length);
+	accessFunc(buffer, length);
 	buffer[length] = 0;
 	string = buffer;
 
 	return true;
 }
 
-static void writeSavedFlag(SaveRestoreAccess *access, bool value) {
+static void writeSavedFlag(SaveRestoreAccess *accessFunc, bool value) {
 	byte raw = value ? 1 : 0;
 
-	access(&raw, sizeof(raw));
+	accessFunc(&raw, sizeof(raw));
 }
 
-static bool readSavedFlag(SaveRestoreAccess *access) {
+static bool readSavedFlag(SaveRestoreAccess *accessFunc) {
 	byte raw = 0;
 
-	access(&raw, sizeof(raw));
+	accessFunc(&raw, sizeof(raw));
 
 	return raw != 0;
 }
@@ -85,45 +85,47 @@ static void restoreNodeEuler(CNode *node, const CVector &angles) {
 	node->updateLocalState();
 }
 
-bool Actor::save(SaveRestoreAccess *access) {
-	writeSavedString(access, _actorName);
-	access(&_id, sizeof(_id));
-	access(&_actorFlags, sizeof(_actorFlags));
-	access(&_mode, sizeof(_mode));
+bool Actor::save(SaveRestoreAccess *accessFunc) {
+	bool isPs2 = _engine->getGamePlatform() == Common::kPlatformPS2;
+
+	writeSavedString(accessFunc,_actorName);
+	accessFunc(&_id, sizeof(_id));
+	accessFunc(&_actorFlags, sizeof(_actorFlags));
+	accessFunc(&_mode, sizeof(_mode));
 
 	if ((_nodeFlags & kPositionValid) == 0)
 		computeLocalPositionFromWorld();
 
-	access(&_pos, sizeof(_pos));
+	accessFunc(&_pos, sizeof(_pos));
 
 	if ((_nodeFlags & kEulerValid) == 0)
 		computeLocalMatrixFromWorld();
 
-	access(&_eulerDeg, sizeof(_eulerDeg));
-	access(&_prevPos, sizeof(_prevPos));
-	access(&_reserved312, sizeof(_reserved312));
-	writeSavedFlag(access, _onScreen);
-	access(&_sortOrder, sizeof(_sortOrder));
+	accessFunc(&_eulerDeg, sizeof(_eulerDeg));
+	accessFunc(&_prevPos, sizeof(_prevPos));
+	accessFunc(&_reserved312, sizeof(_reserved312));
+	writeSavedFlag(accessFunc,_onScreen);
+	accessFunc(&_sortOrder, sizeof(_sortOrder));
 
 	if (_parentActorId && !actorDeref(_engine, _parentActorId))
 		_parentActorId = 0;
 
-	access(&_parentActorId, sizeof(_parentActorId));
+	accessFunc(&_parentActorId, sizeof(_parentActorId));
 
 	if (_parentActorId) {
 		if (_parent) {
-			access(_parent->_name, CNode::kNameSize);
+			accessFunc(_parent->_name, CNode::kNameSize);
 		} else {
 			char emptyName[CNode::kNameSize];
 
 			warning("Actor::save(): the parent node is missing");
 			memset(emptyName, 0, sizeof(emptyName));
-			access(emptyName, CNode::kNameSize);
+			accessFunc(emptyName, CNode::kNameSize);
 		}
 	}
 
 	for (int i = 0; i < 4; i++)
-		access(&_drawnRect[i], sizeof(int));
+		accessFunc(&_drawnRect[i], sizeof(int));
 
 	LString roomName;
 
@@ -141,111 +143,114 @@ bool Actor::save(SaveRestoreAccess *access) {
 		roomName = kOverworldRoomName;
 	}
 
-	writeSavedString(access, roomName);
+	writeSavedString(accessFunc,roomName);
 
 	removeFinishedChores();
 
 	int choreCount = (int)_choreIds.size();
 
-	access(&choreCount, sizeof(choreCount));
+	accessFunc(&choreCount, sizeof(choreCount));
 
 	Common::List<uint>::iterator choreIt;
 
 	for (choreIt = _choreIds.begin(); choreIt != _choreIds.end(); ++choreIt) {
 		uint choreId = *choreIt;
 
-		access(&choreId, sizeof(choreId));
+		accessFunc(&choreId, sizeof(choreId));
 
 		if (ChoreInstance::isInstanceValid(_engine, choreId)) {
 			ChoreInstance *instance = ChoreInstance::getInstance(_engine, choreId);
 
 			if (instance)
-				instance->save(access);
+				instance->save(accessFunc);
 		}
 	}
 
 	for (int i = 0; i < kNumChoreSlots; i++) {
-		writeSavedString(access, _choreSlotNames[i]);
-		writeSavedString(access, _choreSlotSetNames[i]);
-		access(&_choreSlotIds[i], sizeof(uint));
+		writeSavedString(accessFunc,_choreSlotNames[i]);
+		writeSavedString(accessFunc,_choreSlotSetNames[i]);
+		accessFunc(&_choreSlotIds[i], sizeof(uint));
 	}
 
 	int primitiveCount = (int)_instances.size();
 
-	access(&primitiveCount, sizeof(primitiveCount));
+	accessFunc(&primitiveCount, sizeof(primitiveCount));
 
 	for (int i = 0; i < primitiveCount; i++) {
 		RPrimitiveInstance *instance = _instances[i];
 
 		if (instance->_prim) {
-			writeSavedString(access, instance->_prim->_name);
+			writeSavedString(accessFunc,instance->_prim->_name);
 		} else {
 			warning("Actor::save(): the primitive instance has no primitive");
-			writeSavedString(access, LString());
+			writeSavedString(accessFunc,LString());
 		}
 
 		int stateSize = instance->getSaveSize();
 
-		access(&stateSize, sizeof(stateSize));
-		instance->saveState(access);
+		accessFunc(&stateSize, sizeof(stateSize));
+		instance->saveState(accessFunc);
 	}
 
 	int shadowCount = (int)_shadows.size();
 
-	access(&shadowCount, sizeof(shadowCount));
+	accessFunc(&shadowCount, sizeof(shadowCount));
 
 	for (int i = 0; i < shadowCount; i++)
-		writeSavedString(access, _shadows[i]->_name);
+		writeSavedString(accessFunc,_shadows[i]->_name);
 
-	writeSavedFlag(access, _extra != nullptr);
+	writeSavedFlag(accessFunc,_extra != nullptr);
 
 	if (_extra) {
-		writeSavedFlag(access, _extra->_lookAtActive);
-		writeSavedFlag(access, _extra->_lookAtHasTarget);
-		access(&_extra->_lookTarget, sizeof(CVector));
-		access(&_extra->_lookOffset, sizeof(CVector));
-		access(&_extra->_lookTargetActorId, sizeof(int));
-		access(&_extra->_lookGoalQuat, sizeof(CQuaternion));
-		access(&_extra->_lookDirection, sizeof(CVector));
-		access(&_extra->_lookCurQuat, sizeof(CQuaternion));
-		access(_extra->_lookLimits, Extra_v2::kNumLookLimits * sizeof(CVector));
-		writeSavedString(access, _extra->_lookJointName);
-		access(&_extra->_lookCosFov, sizeof(float));
-		access(&_extra->_lookRate, sizeof(float));
-		writeSavedFlag(access, _extra->_walking);
+		writeSavedFlag(accessFunc,_extra->_lookAtActive);
+		writeSavedFlag(accessFunc,_extra->_lookAtHasTarget);
+		accessFunc(&_extra->_lookTarget, sizeof(CVector));
+		accessFunc(&_extra->_lookOffset, sizeof(CVector));
+		accessFunc(&_extra->_lookTargetActorId, sizeof(int));
+		accessFunc(&_extra->_lookGoalQuat, sizeof(CQuaternion));
+		accessFunc(&_extra->_lookDirection, sizeof(CVector));
+		accessFunc(&_extra->_lookCurQuat, sizeof(CQuaternion));
+		accessFunc(_extra->_lookLimits, Extra_v2::kNumLookLimits * sizeof(CVector));
+		writeSavedString(accessFunc,_extra->_lookJointName);
+		accessFunc(&_extra->_lookCosFov, sizeof(float));
+		accessFunc(&_extra->_lookRate, sizeof(float));
+		writeSavedFlag(accessFunc,_extra->_walking);
 
 		// The disasm saves only the first byte of turnDir
 		byte turnDirLow = (byte)(_extra->_turnDir & 0xFF);
 
-		access(&turnDirLow, sizeof(turnDirLow));
-		writeSavedFlag(access, _extra->_resting);
-		access(&_extra->_walkRate, sizeof(float));
-		access(&_extra->_turnRate, sizeof(float));
-		writeSavedFlag(access, _extra->_aligned);
-		writeSavedFlag(access, _extra->_snapTurn);
-		access(&_extra->_offsetYaw, sizeof(float));
-		access(&_extra->_alignOff, sizeof(float));
-		access(&_extra->_walkTarget, sizeof(CVector));
-		access(&_extra->_goal, sizeof(CVector));
-		access(&_extra->_numPathPoints, sizeof(int));
-		access(_extra->_path, Extra_v2::kMaxPathPoints * sizeof(CVector));
-		access(&_extra->_pathIndex, sizeof(int));
-		writeSavedFlag(access, _extra->_puck != nullptr);
-		writeSavedFlag(access, _extra->_inBoxes);
-		writeSavedFlag(access, _extra->_walkDominate);
-		access(&_extra->_reflectionAngle, sizeof(float));
-		writeSavedFlag(access, _extra->_talking);
-		access(&_extra->_talkTimerMs, sizeof(int));
-		access(_extra->_sayLineId, Extra_v2::kSayLineIdSize);
-		access(&_extra->_textEventId, sizeof(int));
-		writeSavedFlag(access, _extra->_lipsyncActive);
-		access(&_extra->_soundHandle, sizeof(int));
-		access(&_extra->_visemeCurrent, sizeof(int));
-		access(&_extra->_collisionMode, sizeof(int));
-		access(&_extra->_collisionScale, sizeof(float));
-		writeSavedFlag(access, _extra->_inCollision);
-		access(&_extra->_talkColor, sizeof(Color));
-		access(&_extra->_timeScale, sizeof(float));
+		accessFunc(&turnDirLow, sizeof(turnDirLow));
+		writeSavedFlag(accessFunc,_extra->_resting);
+		accessFunc(&_extra->_walkRate, sizeof(float));
+		accessFunc(&_extra->_turnRate, sizeof(float));
+		writeSavedFlag(accessFunc,_extra->_aligned);
+		writeSavedFlag(accessFunc,_extra->_snapTurn);
+		accessFunc(&_extra->_offsetYaw, sizeof(float));
+		accessFunc(&_extra->_alignOff, sizeof(float));
+		accessFunc(&_extra->_walkTarget, sizeof(CVector));
+		accessFunc(&_extra->_goal, sizeof(CVector));
+		accessFunc(&_extra->_numPathPoints, sizeof(int));
+		accessFunc(_extra->_path, Extra_v2::kMaxPathPoints * sizeof(CVector));
+		accessFunc(&_extra->_pathIndex, sizeof(int));
+		writeSavedFlag(accessFunc,_extra->_puck != nullptr);
+		writeSavedFlag(accessFunc,_extra->_inBoxes);
+		writeSavedFlag(accessFunc,_extra->_walkDominate);
+
+		if (!isPs2)
+			accessFunc(&_extra->_reflectionAngle, sizeof(float));
+
+		writeSavedFlag(accessFunc,_extra->_talking);
+		accessFunc(&_extra->_talkTimerMs, sizeof(int));
+		accessFunc(_extra->_sayLineId, Extra_v2::kSayLineIdSize);
+		accessFunc(&_extra->_textEventId, sizeof(int));
+		writeSavedFlag(accessFunc,_extra->_lipsyncActive);
+		accessFunc(&_extra->_soundHandle, sizeof(int));
+		accessFunc(&_extra->_visemeCurrent, sizeof(int));
+		accessFunc(&_extra->_collisionMode, sizeof(int));
+		accessFunc(&_extra->_collisionScale, sizeof(float));
+		writeSavedFlag(accessFunc,_extra->_inCollision);
+		accessFunc(&_extra->_talkColor, sizeof(Color));
+		accessFunc(&_extra->_timeScale, sizeof(float));
 
 		if (_extra->_puck) {
 			Puck_v2 *puck = _extra->_puck;
@@ -253,58 +258,62 @@ bool Actor::save(SaveRestoreAccess *access) {
 			if ((puck->_nodeFlags & kPositionValid) == 0)
 				puck->computeLocalPositionFromWorld();
 
-			access(&puck->_pos, sizeof(CVector));
+			accessFunc(&puck->_pos, sizeof(CVector));
 
 			if ((puck->_nodeFlags & kEulerValid) == 0)
 				puck->computeLocalMatrixFromWorld();
 
-			access(&puck->_eulerDeg, sizeof(CVector));
+			accessFunc(&puck->_eulerDeg, sizeof(CVector));
 
-			// The disasm saves only the first byte of the reflection angle
-			byte reflectionRaw[sizeof(float)];
+			if (!isPs2) {
+				// The disasm saves only the first byte of the reflection angle
+				byte reflectionRaw[sizeof(float)];
 
-			memcpy(reflectionRaw, &puck->_reflectionAngle, sizeof(reflectionRaw));
-			access(&reflectionRaw[0], sizeof(byte));
-			writeSavedFlag(access, puck->_constrained);
-			access(puck->_constraint, sizeof(puck->_constraint));
-			access(puck->_lineA, sizeof(puck->_lineA));
-			access(puck->_lineB, sizeof(puck->_lineB));
+				memcpy(reflectionRaw, &puck->_reflectionAngle, sizeof(reflectionRaw));
+				accessFunc(&reflectionRaw[0], sizeof(byte));
+			}
+
+			writeSavedFlag(accessFunc,puck->_constrained);
+			accessFunc(puck->_constraint, sizeof(puck->_constraint));
+			accessFunc(puck->_lineA, sizeof(puck->_lineA));
+			accessFunc(puck->_lineB, sizeof(puck->_lineB));
 		}
 	}
 
-	access(&_drawFlags, sizeof(_drawFlags));
+	accessFunc(&_drawFlags, sizeof(_drawFlags));
 
 	return true;
 }
 
-bool Actor::restore(SaveRestoreAccess *access) {
+bool Actor::restore(SaveRestoreAccess *accessFunc) {
+	bool isPs2 = _engine->getGamePlatform() == Common::kPlatformPS2;
 	CVector savedVector;
 
-	if (!readSavedString(access, _actorName))
+	if (!readSavedString(accessFunc,_actorName))
 		return false;
 
-	access(&_id, sizeof(_id));
-	access(&_actorFlags, sizeof(_actorFlags));
-	access(&_mode, sizeof(_mode));
-	access(&savedVector, sizeof(savedVector));
+	accessFunc(&_id, sizeof(_id));
+	accessFunc(&_actorFlags, sizeof(_actorFlags));
+	accessFunc(&_mode, sizeof(_mode));
+	accessFunc(&savedVector, sizeof(savedVector));
 	setLocalPosition(savedVector);
-	access(&savedVector, sizeof(savedVector));
+	accessFunc(&savedVector, sizeof(savedVector));
 	restoreNodeEuler(this, savedVector);
-	access(&_prevPos, sizeof(_prevPos));
-	access(&_reserved312, sizeof(_reserved312));
-	_onScreen = readSavedFlag(access);
-	access(&_sortOrder, sizeof(_sortOrder));
-	access(&_parentActorId, sizeof(_parentActorId));
+	accessFunc(&_prevPos, sizeof(_prevPos));
+	accessFunc(&_reserved312, sizeof(_reserved312));
+	_onScreen = readSavedFlag(accessFunc);
+	accessFunc(&_sortOrder, sizeof(_sortOrder));
+	accessFunc(&_parentActorId, sizeof(_parentActorId));
 
 	if (_parentActorId)
-		access(_parentNodeName, CNode::kNameSize);
+		accessFunc(_parentNodeName, CNode::kNameSize);
 
 	for (int i = 0; i < 4; i++)
-		access(&_drawnRect[i], sizeof(int));
+		accessFunc(&_drawnRect[i], sizeof(int));
 
 	LString savedRoomName;
 
-	if (!readSavedString(access, savedRoomName))
+	if (!readSavedString(accessFunc,savedRoomName))
 		return false;
 
 	if (savedRoomName == kOverworldRoomName)
@@ -316,12 +325,12 @@ bool Actor::restore(SaveRestoreAccess *access) {
 
 	uint choreCount = 0;
 
-	access(&choreCount, sizeof(choreCount));
+	accessFunc(&choreCount, sizeof(choreCount));
 
 	for (uint i = 0; i < choreCount; i++) {
 		uint choreId = 0;
 
-		access(&choreId, sizeof(choreId));
+		accessFunc(&choreId, sizeof(choreId));
 
 		if (ChoreInstance::isInstanceValid(_engine, choreId)) {
 			ChoreInstance *existing = ChoreInstance::getInstance(_engine, choreId);
@@ -336,31 +345,31 @@ bool Actor::restore(SaveRestoreAccess *access) {
 			ChoreInstance *instance = ChoreInstance::getInstance(_engine, choreId);
 
 			if (instance)
-				instance->restore(access);
+				instance->restore(accessFunc);
 		}
 
 		_choreIds.push_back(choreId);
 	}
 
 	for (int i = 0; i < kNumChoreSlots; i++) {
-		if (!readSavedString(access, _choreSlotNames[i]))
+		if (!readSavedString(accessFunc,_choreSlotNames[i]))
 			return false;
 
-		if (!readSavedString(access, _choreSlotSetNames[i]))
+		if (!readSavedString(accessFunc,_choreSlotSetNames[i]))
 			return false;
 
-		access(&_choreSlotIds[i], sizeof(uint));
+		accessFunc(&_choreSlotIds[i], sizeof(uint));
 	}
 
 	uint primitiveCount = 0;
 
-	access(&primitiveCount, sizeof(primitiveCount));
+	accessFunc(&primitiveCount, sizeof(primitiveCount));
 
 	for (uint i = 0; i < primitiveCount; i++) {
 		LString primitiveName;
 		bool found = false;
 
-		if (!readSavedString(access, primitiveName))
+		if (!readSavedString(accessFunc,primitiveName))
 			return false;
 
 		for (uint j = 0; j < _instances.size() && !found; j++) {
@@ -369,8 +378,8 @@ bool Actor::restore(SaveRestoreAccess *access) {
 			if (instance->_prim && instance->_prim->_name == primitiveName && !instance->_stateRestored) {
 				int stateSize = 0;
 
-				access(&stateSize, sizeof(stateSize));
-				instance->restoreState(access);
+				accessFunc(&stateSize, sizeof(stateSize));
+				instance->restoreState(accessFunc);
 				found = true;
 			}
 		}
@@ -382,7 +391,7 @@ bool Actor::restore(SaveRestoreAccess *access) {
 
 			warning("%s", message.c_str());
 			_engine->showMessage(message.c_str(), "Error!");
-			access(&stateSize, sizeof(stateSize));
+			accessFunc(&stateSize, sizeof(stateSize));
 
 			if (stateSize > kMaxSkippedStateSize) {
 				warning("Actor::restore(): invalid primitive state size %u", stateSize);
@@ -395,7 +404,7 @@ bool Actor::restore(SaveRestoreAccess *access) {
 			while (stateSize > 0) {
 				uint chunk = stateSize < sizeof(discard) ? stateSize : (uint)sizeof(discard);
 
-				access(discard, chunk);
+				accessFunc(discard, chunk);
 				stateSize -= chunk;
 			}
 		}
@@ -403,12 +412,12 @@ bool Actor::restore(SaveRestoreAccess *access) {
 
 	uint shadowCount = 0;
 
-	access(&shadowCount, sizeof(shadowCount));
+	accessFunc(&shadowCount, sizeof(shadowCount));
 
 	for (uint i = 0; i < shadowCount; i++) {
 		LString shadowName;
 
-		if (!readSavedString(access, shadowName))
+		if (!readSavedString(accessFunc,shadowName))
 			return false;
 
 		bool locked = _room.lock();
@@ -423,62 +432,65 @@ bool Actor::restore(SaveRestoreAccess *access) {
 			_room.unlock();
 	}
 
-	if (readSavedFlag(access)) {
+	if (readSavedFlag(accessFunc)) {
 		_extra = nullptr;
 		allocateActorExtra();
 
-		_extra->_lookAtActive = readSavedFlag(access);
-		_extra->_lookAtHasTarget = readSavedFlag(access);
-		access(&_extra->_lookTarget, sizeof(CVector));
-		access(&_extra->_lookOffset, sizeof(CVector));
-		access(&_extra->_lookTargetActorId, sizeof(int));
-		access(&_extra->_lookGoalQuat, sizeof(CQuaternion));
-		access(&_extra->_lookDirection, sizeof(CVector));
-		access(&_extra->_lookCurQuat, sizeof(CQuaternion));
-		access(_extra->_lookLimits, Extra_v2::kNumLookLimits * sizeof(CVector));
+		_extra->_lookAtActive = readSavedFlag(accessFunc);
+		_extra->_lookAtHasTarget = readSavedFlag(accessFunc);
+		accessFunc(&_extra->_lookTarget, sizeof(CVector));
+		accessFunc(&_extra->_lookOffset, sizeof(CVector));
+		accessFunc(&_extra->_lookTargetActorId, sizeof(int));
+		accessFunc(&_extra->_lookGoalQuat, sizeof(CQuaternion));
+		accessFunc(&_extra->_lookDirection, sizeof(CVector));
+		accessFunc(&_extra->_lookCurQuat, sizeof(CQuaternion));
+		accessFunc(_extra->_lookLimits, Extra_v2::kNumLookLimits * sizeof(CVector));
 
-		if (!readSavedString(access, _extra->_lookJointName))
+		if (!readSavedString(accessFunc,_extra->_lookJointName))
 			return false;
 
-		access(&_extra->_lookCosFov, sizeof(float));
-		access(&_extra->_lookRate, sizeof(float));
-		_extra->_walking = readSavedFlag(access);
+		accessFunc(&_extra->_lookCosFov, sizeof(float));
+		accessFunc(&_extra->_lookRate, sizeof(float));
+		_extra->_walking = readSavedFlag(accessFunc);
 
 		// The disasm restores only the first byte of turnDir
 		byte turnDirLow = 0;
 
-		access(&turnDirLow, sizeof(turnDirLow));
+		accessFunc(&turnDirLow, sizeof(turnDirLow));
 		_extra->_turnDir = (_extra->_turnDir & ~0xFF) | turnDirLow;
-		_extra->_resting = readSavedFlag(access);
-		access(&_extra->_walkRate, sizeof(float));
-		access(&_extra->_turnRate, sizeof(float));
-		_extra->_aligned = readSavedFlag(access);
-		_extra->_snapTurn = readSavedFlag(access);
-		access(&_extra->_offsetYaw, sizeof(float));
-		access(&_extra->_alignOff, sizeof(float));
-		access(&_extra->_walkTarget, sizeof(CVector));
-		access(&_extra->_goal, sizeof(CVector));
-		access(&_extra->_numPathPoints, sizeof(int));
-		access(_extra->_path, Extra_v2::kMaxPathPoints * sizeof(CVector));
-		access(&_extra->_pathIndex, sizeof(int));
+		_extra->_resting = readSavedFlag(accessFunc);
+		accessFunc(&_extra->_walkRate, sizeof(float));
+		accessFunc(&_extra->_turnRate, sizeof(float));
+		_extra->_aligned = readSavedFlag(accessFunc);
+		_extra->_snapTurn = readSavedFlag(accessFunc);
+		accessFunc(&_extra->_offsetYaw, sizeof(float));
+		accessFunc(&_extra->_alignOff, sizeof(float));
+		accessFunc(&_extra->_walkTarget, sizeof(CVector));
+		accessFunc(&_extra->_goal, sizeof(CVector));
+		accessFunc(&_extra->_numPathPoints, sizeof(int));
+		accessFunc(_extra->_path, Extra_v2::kMaxPathPoints * sizeof(CVector));
+		accessFunc(&_extra->_pathIndex, sizeof(int));
 
-		bool hasPuck = readSavedFlag(access);
+		bool hasPuck = readSavedFlag(accessFunc);
 
-		_extra->_inBoxes = readSavedFlag(access);
-		_extra->_walkDominate = readSavedFlag(access);
-		access(&_extra->_reflectionAngle, sizeof(float));
-		_extra->_talking = readSavedFlag(access);
-		access(&_extra->_talkTimerMs, sizeof(int));
-		access(_extra->_sayLineId, Extra_v2::kSayLineIdSize);
-		access(&_extra->_textEventId, sizeof(int));
-		_extra->_lipsyncActive = readSavedFlag(access);
-		access(&_extra->_soundHandle, sizeof(int));
-		access(&_extra->_visemeCurrent, sizeof(int));
-		access(&_extra->_collisionMode, sizeof(int));
-		access(&_extra->_collisionScale, sizeof(float));
-		_extra->_inCollision = readSavedFlag(access);
-		access(&_extra->_talkColor, sizeof(Color));
-		access(&_extra->_timeScale, sizeof(float));
+		_extra->_inBoxes = readSavedFlag(accessFunc);
+		_extra->_walkDominate = readSavedFlag(accessFunc);
+
+		if (!isPs2)
+			accessFunc(&_extra->_reflectionAngle, sizeof(float));
+
+		_extra->_talking = readSavedFlag(accessFunc);
+		accessFunc(&_extra->_talkTimerMs, sizeof(int));
+		accessFunc(_extra->_sayLineId, Extra_v2::kSayLineIdSize);
+		accessFunc(&_extra->_textEventId, sizeof(int));
+		_extra->_lipsyncActive = readSavedFlag(accessFunc);
+		accessFunc(&_extra->_soundHandle, sizeof(int));
+		accessFunc(&_extra->_visemeCurrent, sizeof(int));
+		accessFunc(&_extra->_collisionMode, sizeof(int));
+		accessFunc(&_extra->_collisionScale, sizeof(float));
+		_extra->_inCollision = readSavedFlag(accessFunc);
+		accessFunc(&_extra->_talkColor, sizeof(Color));
+		accessFunc(&_extra->_timeScale, sizeof(float));
 
 		if (hasPuck) {
 			Puck_v2 *puck = new Puck_v2(_engine, _extra->_reflectionAngle);
@@ -487,20 +499,23 @@ bool Actor::restore(SaveRestoreAccess *access) {
 			_extra->_puck = puck;
 			puck->_actorName = _actorName;
 
-			access(&puckVector, sizeof(puckVector));
+			accessFunc(&puckVector, sizeof(puckVector));
 			puck->setLocalPosition(puckVector);
-			access(&puckVector, sizeof(puckVector));
+			accessFunc(&puckVector, sizeof(puckVector));
 			restoreNodeEuler(puck, puckVector);
 
-			byte reflectionRaw[sizeof(float)];
+			if (!isPs2) {
+				byte reflectionRaw[sizeof(float)];
 
-			memcpy(reflectionRaw, &puck->_reflectionAngle, sizeof(reflectionRaw));
-			access(&reflectionRaw[0], sizeof(byte));
-			memcpy(&puck->_reflectionAngle, reflectionRaw, sizeof(reflectionRaw));
-			puck->_constrained = readSavedFlag(access);
-			access(puck->_constraint, sizeof(puck->_constraint));
-			access(puck->_lineA, sizeof(puck->_lineA));
-			access(puck->_lineB, sizeof(puck->_lineB));
+				memcpy(reflectionRaw, &puck->_reflectionAngle, sizeof(reflectionRaw));
+				accessFunc(&reflectionRaw[0], sizeof(byte));
+				memcpy(&puck->_reflectionAngle, reflectionRaw, sizeof(reflectionRaw));
+			}
+
+			puck->_constrained = readSavedFlag(accessFunc);
+			accessFunc(puck->_constraint, sizeof(puck->_constraint));
+			accessFunc(puck->_lineA, sizeof(puck->_lineA));
+			accessFunc(puck->_lineB, sizeof(puck->_lineB));
 
 			if (_extra->_inBoxes && _room._resource) {
 				bool locked = _room.lock();
@@ -528,33 +543,33 @@ bool Actor::restore(SaveRestoreAccess *access) {
 		}
 	}
 
-	access(&_drawFlags, sizeof(_drawFlags));
+	accessFunc(&_drawFlags, sizeof(_drawFlags));
 
 	return true;
 }
 
-void Actor::saveActors(EmiEngine *engine, SaveRestoreAccess *access) {
+void Actor::saveActors(EmiEngine *engine, SaveRestoreAccess *accessFunc) {
 	int selectedId = -1;
 
 	if (engine->_selectedActor)
 		selectedId = engine->_selectedActor->_id;
 
-	access(&selectedId, sizeof(selectedId));
+	accessFunc(&selectedId, sizeof(selectedId));
 
 	int actorCount = (int)engine->_actors.size();
 
-	access(&actorCount, sizeof(actorCount));
+	accessFunc(&actorCount, sizeof(actorCount));
 
 	Common::List<Actor *>::iterator it;
 
 	for (it = engine->_actors.begin(); it != engine->_actors.end(); ++it)
-		(*it)->save(access);
+		(*it)->save(accessFunc);
 
-	access(&engine->_nextChoreInstanceId, sizeof(engine->_nextChoreInstanceId));
-	access(&engine->_nextActorId, sizeof(engine->_nextActorId));
+	accessFunc(&engine->_nextChoreInstanceId, sizeof(engine->_nextChoreInstanceId));
+	accessFunc(&engine->_nextActorId, sizeof(engine->_nextActorId));
 }
 
-void Actor::restoreActors(EmiEngine *engine, SaveRestoreAccess *access) {
+void Actor::restoreActors(EmiEngine *engine, SaveRestoreAccess *accessFunc) {
 	for (int i = 0; i < kNumSpeakers; i++)
 		engine->_speakers[i] = nullptr;
 
@@ -563,17 +578,17 @@ void Actor::restoreActors(EmiEngine *engine, SaveRestoreAccess *access) {
 	int selectedId = 0;
 	int actorCount = 0;
 
-	access(&selectedId, sizeof(selectedId));
-	access(&actorCount, sizeof(actorCount));
+	accessFunc(&selectedId, sizeof(selectedId));
+	accessFunc(&actorCount, sizeof(actorCount));
 
 	for (int i = 0; i < actorCount; i++) {
 		Actor *actor = new Actor(engine, "Restored");
 
-		actor->restore(access);
+		actor->restore(accessFunc);
 	}
 
-	access(&engine->_nextChoreInstanceId, sizeof(engine->_nextChoreInstanceId));
-	access(&engine->_nextActorId, sizeof(engine->_nextActorId));
+	accessFunc(&engine->_nextChoreInstanceId, sizeof(engine->_nextChoreInstanceId));
+	accessFunc(&engine->_nextActorId, sizeof(engine->_nextActorId));
 
 	engine->_selectedActor = nullptr;
 

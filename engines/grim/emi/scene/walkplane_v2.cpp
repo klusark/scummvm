@@ -133,6 +133,9 @@ WalkPlane_v2::WalkPlane_v2(EmiEngine *engine, const float *vertices, int vertexC
 
 	_d = (float)-(((double)_normal[2] * first->z + (double)_normal[1] * first->y) + (double)_normal[0] * first->x);
 
+	if (_engine->getGamePlatform() == Common::kPlatformPS2)
+		computeEquationPs2();
+
 	if (_engine->isDemo()) {
 		// The demo works on the two axes left after dropping the dominant normal component
 		float dominant = _normal[0];
@@ -228,12 +231,12 @@ float *WalkPlane_v2::getGatePoint(float *out, WalkPlane_v2 *other, const float *
 	return out;
 }
 
-void WalkPlane_v2::serialize(SaveRestoreAccess *access) {
-	access(&_type, sizeof(_type));
-	access(&_active, sizeof(_active));
-	access(&_enabled, sizeof(_enabled));
-	access(&_tolerance, sizeof(_tolerance));
-	access(&_numSortOrders, sizeof(_numSortOrders));
+void WalkPlane_v2::serialize(SaveRestoreAccess *accessFunc) {
+	accessFunc(&_type, sizeof(_type));
+	accessFunc(&_active, sizeof(_active));
+	accessFunc(&_enabled, sizeof(_enabled));
+	accessFunc(&_tolerance, sizeof(_tolerance));
+	accessFunc(&_numSortOrders, sizeof(_numSortOrders));
 
 	if (_numSortOrders < 0 || _numSortOrders > kMaxSortOrders) {
 		warning("WalkPlane_v2::serialize(): invalid number of sort orders (%d)", _numSortOrders);
@@ -243,7 +246,7 @@ void WalkPlane_v2::serialize(SaveRestoreAccess *access) {
 	}
 
 	for (int i = 0; i < _numSortOrders; i++)
-		access(&_sortOrder[i], sizeof(int));
+		accessFunc(&_sortOrder[i], sizeof(int));
 }
 
 void WalkPlane_v2::setType(int newType) {
@@ -377,6 +380,9 @@ void WalkPlane_v2::setType(int newType) {
 }
 
 bool WalkPlane_v2::within(const float *point, bool checkActive) {
+	if (_engine->getGamePlatform() == Common::kPlatformPS2)
+		return withinPs2(point, checkActive);
+
 	if (checkActive && (!_enabled || !_active))
 		return false;
 
@@ -461,6 +467,12 @@ bool WalkPlane_v2::within(const float *point, bool checkActive) {
 }
 
 void WalkPlane_v2::closestPoint(float *point) {
+	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		closestPointPs2(point);
+
+		return;
+	}
+
 	if (_engine->isDemo())
 		solveMinorAxis(point);
 	else
@@ -758,6 +770,12 @@ float WalkPlane_v2::intersection(const float *pointA, const float *pointB, float
 }
 
 void WalkPlane_v2::project(float *point) {
+	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		projectPs2(point);
+
+		return;
+	}
+
 	if (_engine->isDemo()) {
 		double distance = ((double)_normal[0] * point[0] + (double)_normal[1] * point[1] + (double)_normal[2] * point[2]) + _d;
 
@@ -802,6 +820,9 @@ void WalkPlane_v2::solveMinorAxis(float *point) {
 }
 
 float *WalkPlane_v2::getConstraintVector(Puck_v2 *puck) {
+	if (_engine->getGamePlatform() == Common::kPlatformPS2)
+		return getConstraintVectorPs2(puck);
+
 	float position[3] = { 0.0f, 0.0f, 0.0f };
 	float behind[3] = { 0.0f, 0.0f, 0.0f };
 
@@ -1037,6 +1058,9 @@ void WalkPlane_v2::jumpOut(Puck_v2 *puck) {
 }
 
 bool WalkPlane_v2::closestSharedVertex(WalkPlane_v2 *planeA, WalkPlane_v2 *planeB, float x, float y, float z, float *out) {
+	if (planeA->_engine->getGamePlatform() == Common::kPlatformPS2)
+		return closestSharedVertexPs2(planeA, planeB, x, y, z, out);
+
 	float best = kMaxFloat;
 
 	for (int i = 0; i < planeA->_numVerts; i++) {

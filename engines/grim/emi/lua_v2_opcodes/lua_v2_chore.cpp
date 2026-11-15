@@ -29,16 +29,35 @@
 
 namespace Grim {
 
-void Lua_V2::IsChoreValid() {
-	lua_Object idObj = lua_getparam(1);
-
+bool Lua_V2::getChoreId(lua_Object idObj, const char *name, uint *instanceId) {
 	if (!lua_isnumber(idObj)) {
-		logDemo(kConsoleWarning, "IsChoreValid: the first parameter must be a chore id.\n");
+		logMessage(kConsoleWarning, "sputLua_%sL: First parameter must be a chore ID!\n", name);
 
-		return;
+		return false;
 	}
 
-	uint instanceId = (uint)luaFtol(lua_getnumber(idObj));
+	*instanceId = (uint)luaFtol(lua_getnumber(idObj));
+
+	return true;
+}
+
+bool Lua_V2::getChoreSeconds(lua_Object secondsObj, const char *name, const char *requirement, float *seconds) {
+	if (!lua_isnumber(secondsObj)) {
+		logMessage(kConsoleWarning, "sputLua_%sL: %s\n", name, requirement);
+
+		return false;
+	}
+
+	*seconds = lua_getnumber(secondsObj);
+
+	return true;
+}
+
+void Lua_V2::IsChoreValid() {
+	uint instanceId;
+
+	if (!getChoreId(lua_getparam(1), "IsChoreValid", &instanceId))
+		return;
 
 	if (ChoreInstance::isInstanceValid(_engine, instanceId))
 		lua_pushnumber(1.0f);
@@ -47,15 +66,10 @@ void Lua_V2::IsChoreValid() {
 }
 
 void Lua_V2::IsChorePlaying() {
-	lua_Object idObj = lua_getparam(1);
+	uint instanceId;
 
-	if (!lua_isnumber(idObj)) {
-		logDemo(kConsoleWarning, "IsChorePlaying: the first parameter must be a chore id.\n");
-
+	if (!getChoreId(lua_getparam(1), "IsChorePlaying", &instanceId))
 		return;
-	}
-
-	uint instanceId = (uint)luaFtol(lua_getnumber(idObj));
 
 	if (ChoreInstance::isInstanceValid(_engine, instanceId) && ChoreInstance::getInstance(_engine, instanceId)->isPlaying())
 		lua_pushnumber(1.0f);
@@ -64,15 +78,10 @@ void Lua_V2::IsChorePlaying() {
 }
 
 void Lua_V2::IsChoreLooping() {
-	lua_Object idObj = lua_getparam(1);
+	uint instanceId;
 
-	if (!lua_isnumber(idObj)) {
-		logDemo(kConsoleWarning, "IsChoreLooping: the first parameter must be a chore id.\n");
-
+	if (!getChoreId(lua_getparam(1), "IsChoreLooping", &instanceId))
 		return;
-	}
-
-	uint instanceId = (uint)luaFtol(lua_getnumber(idObj));
 
 	if (ChoreInstance::isInstanceValid(_engine, instanceId) && ChoreInstance::getInstance(_engine, instanceId)->isLooping())
 		lua_pushnumber(1.0f);
@@ -83,14 +92,11 @@ void Lua_V2::IsChoreLooping() {
 void Lua_V2::SetChoreLooping() {
 	lua_Object idObj = lua_getparam(1);
 	lua_Object loopObj = lua_getparam(2);
+	uint instanceId;
 
-	if (!lua_isnumber(idObj)) {
-		logDemo(kConsoleWarning, "SetChoreLooping: the first parameter must be a chore id.\n");
-
+	if (!getChoreId(idObj, "SetChoreLooping", &instanceId))
 		return;
-	}
 
-	uint instanceId = (uint)luaFtol(lua_getnumber(idObj));
 	bool looping = lua_isnil(loopObj) == 0;
 
 	if (ChoreInstance::isInstanceValid(_engine, instanceId))
@@ -98,15 +104,10 @@ void Lua_V2::SetChoreLooping() {
 }
 
 void Lua_V2::PlayChore() {
-	lua_Object idObj = lua_getparam(1);
+	uint instanceId;
 
-	if (!lua_isnumber(idObj)) {
-		logDemo(kConsoleWarning, "PlayChore: the first parameter must be a chore id.\n");
-
+	if (!getChoreId(lua_getparam(1), "PlayChore", &instanceId))
 		return;
-	}
-
-	uint instanceId = (uint)luaFtol(lua_getnumber(idObj));
 
 	if (ChoreInstance::isInstanceValid(_engine, instanceId))
 		ChoreInstance::getInstance(_engine, instanceId)->setPlaying();
@@ -115,23 +116,13 @@ void Lua_V2::PlayChore() {
 void Lua_V2::FadeInChore() {
 	lua_Object idObj = lua_getparam(1);
 	lua_Object secondsObj = lua_getparam(2);
+	uint instanceId;
+	float seconds;
 
-	logDemo(kConsoleWarning, "FadeInChore: this function is obsolete, stop using it.\n");
+	logMessage(kConsoleWarning, "FadeInChore: Stop using this function and replace this call with PlayActorChore( ..., fadetime ).\n");
 
-	if (!lua_isnumber(idObj)) {
-		logDemo(kConsoleWarning, "FadeInChore: the first parameter must be a chore id.\n");
-
+	if (!getChoreId(idObj, "FadeInChore", &instanceId) || !getChoreSeconds(secondsObj, "FadeInChore", "Second parameter must be fadetime!", &seconds))
 		return;
-	}
-
-	if (!lua_isnumber(secondsObj)) {
-		logDemo(kConsoleWarning, "FadeInChore: the second parameter must be a number of seconds.\n");
-
-		return;
-	}
-
-	uint instanceId = (uint)luaFtol(lua_getnumber(idObj));
-	float seconds = lua_getnumber(secondsObj);
 
 	if (ChoreInstance::isInstanceValid(_engine, instanceId))
 		ChoreInstance::getInstance(_engine, instanceId)->fadeIn(seconds);
@@ -140,23 +131,13 @@ void Lua_V2::FadeInChore() {
 void Lua_V2::FadeOutChore() {
 	lua_Object idObj = lua_getparam(1);
 	lua_Object secondsObj = lua_getparam(2);
+	uint instanceId;
+	float seconds;
 
-	logDemo(kConsoleWarning, "FadeOutChore: this function is obsolete, stop using it.\n");
+	logMessage(kConsoleWarning, "FadeOutChore: Stop using this function and replace this call with StopChore( fadetime ).\n");
 
-	if (!lua_isnumber(idObj)) {
-		logDemo(kConsoleWarning, "FadeOutChore: the first parameter must be a chore id.\n");
-
+	if (!getChoreId(idObj, "FadeOutChore", &instanceId) || !getChoreSeconds(secondsObj, "FadeOutChore", "Second parameter must be fadetime!", &seconds))
 		return;
-	}
-
-	if (!lua_isnumber(secondsObj)) {
-		logDemo(kConsoleWarning, "FadeOutChore: the second parameter must be a number of seconds.\n");
-
-		return;
-	}
-
-	uint instanceId = (uint)luaFtol(lua_getnumber(idObj));
-	float seconds = lua_getnumber(secondsObj);
 
 	if (ChoreInstance::isInstanceValid(_engine, instanceId))
 		ChoreInstance::getInstance(_engine, instanceId)->fadeOut(seconds);
@@ -166,17 +147,13 @@ void Lua_V2::StopChore() {
 	lua_Object idObj = lua_getparam(1);
 	lua_Object secondsObj = lua_getparam(2);
 	float seconds = 0.0f;
+	uint instanceId;
 
-	if (!lua_isnumber(idObj)) {
-		logDemo(kConsoleWarning, "StopChore: the first parameter must be a chore id.\n");
-
+	if (!getChoreId(idObj, "StopChore", &instanceId))
 		return;
-	}
 
 	if (!lua_isnil(secondsObj) && lua_isnumber(secondsObj))
 		seconds = lua_getnumber(secondsObj);
-
-	uint instanceId = (uint)luaFtol(lua_getnumber(idObj));
 
 	if (!(seconds > 0.0f)) {
 		if (ChoreInstance::isInstanceValid(_engine, instanceId))
@@ -187,15 +164,10 @@ void Lua_V2::StopChore() {
 }
 
 void Lua_V2::PauseChore() {
-	lua_Object idObj = lua_getparam(1);
+	uint instanceId;
 
-	if (!lua_isnumber(idObj)) {
-		logDemo(kConsoleWarning, "PauseChore: the first parameter must be a chore id.\n");
-
+	if (!getChoreId(lua_getparam(1), "PauseChore", &instanceId))
 		return;
-	}
-
-	uint instanceId = (uint)luaFtol(lua_getnumber(idObj));
 
 	if (ChoreInstance::isInstanceValid(_engine, instanceId))
 		ChoreInstance::getInstance(_engine, instanceId)->pause();
@@ -204,36 +176,21 @@ void Lua_V2::PauseChore() {
 void Lua_V2::AdvanceChore() {
 	lua_Object idObj = lua_getparam(1);
 	lua_Object secondsObj = lua_getparam(2);
+	uint instanceId;
+	float seconds;
 
-	if (!lua_isnumber(idObj)) {
-		logDemo(kConsoleWarning, "AdvanceChore: the first parameter must be a chore id.\n");
-
+	if (!getChoreId(idObj, "AdvanceChore", &instanceId) || !getChoreSeconds(secondsObj, "AdvanceChore", "Second paramter must be a time value!", &seconds))
 		return;
-	}
-
-	if (!lua_isnumber(secondsObj)) {
-		logDemo(kConsoleWarning, "AdvanceChore: the second parameter must be a number of seconds.\n");
-
-		return;
-	}
-
-	uint instanceId = (uint)luaFtol(lua_getnumber(idObj));
-	float seconds = lua_getnumber(secondsObj);
 
 	if (ChoreInstance::isInstanceValid(_engine, instanceId))
 		ChoreInstance::getInstance(_engine, instanceId)->update(seconds, false);
 }
 
 void Lua_V2::CompleteChore() {
-	lua_Object idObj = lua_getparam(1);
+	uint instanceId;
 
-	if (!lua_isnumber(idObj)) {
-		logDemo(kConsoleWarning, "CompleteChore: the first parameter must be a chore id.\n");
-
+	if (!getChoreId(lua_getparam(1), "CompleteChore", &instanceId))
 		return;
-	}
-
-	uint instanceId = (uint)luaFtol(lua_getnumber(idObj));
 
 	if (ChoreInstance::isInstanceValid(_engine, instanceId))
 		ChoreInstance::getInstance(_engine, instanceId)->complete();
@@ -244,14 +201,14 @@ void Lua_V2::LockChore() {
 	lua_Object choreSetObj = lua_getparam(2);
 
 	if (!lua_isstring(choreObj)) {
-		logDemo(kConsoleWarning, "LockChore: the first parameter must be a chore name.\n");
+		logMessage(kConsoleWarning, "LockChore: First param must be a chore name.\n");
 		lua_pushnil();
 
 		return;
 	}
 
 	if (!lua_isstring(choreSetObj)) {
-		logDemo(kConsoleWarning, "LockChore: the second parameter must be a costume file name.\n");
+		logMessage(kConsoleWarning, "LockChore: Second param must be a .COS file name.\n");
 		lua_pushnil();
 
 		return;
@@ -276,10 +233,10 @@ void Lua_V2::LockChore() {
 				_lockedChores.push_back(lockedChore);
 			}
 		} else {
-			logDemo(kConsoleWarning, "LockChore: chore %s not found in costume file %s.\n", choreName.c_str(), choreSetName.c_str());
+			logMessage(kConsoleWarning, "LockChore: Chore %s not found in .COS file %s.\n", choreName.c_str(), choreSetName.c_str());
 		}
 	} else {
-		logDemo(kConsoleWarning, "LockChore: costume file %s not found.\n", choreSetName.c_str());
+		logMessage(kConsoleWarning, "LockChore: .COS file %s not found.\n", choreSetName.c_str());
 	}
 
 	choreSetHandle.unlock();
@@ -290,14 +247,14 @@ void Lua_V2::UnlockChore() {
 	lua_Object choreSetObj = lua_getparam(2);
 
 	if (!lua_isstring(choreObj)) {
-		logDemo(kConsoleWarning, "UnlockChore: the first parameter must be a chore name.\n");
+		logMessage(kConsoleWarning, "UnlockChore: First param must be a chore name.\n");
 		lua_pushnil();
 
 		return;
 	}
 
 	if (!lua_isstring(choreSetObj)) {
-		logDemo(kConsoleWarning, "UnlockChore: the second parameter must be a costume file name.\n");
+		logMessage(kConsoleWarning, "UnlockChore: Second param must be a .COS file name.\n");
 		lua_pushnil();
 
 		return;
@@ -321,10 +278,10 @@ void Lua_V2::UnlockChore() {
 				}
 			}
 		} else {
-			logDemo(kConsoleWarning, "UnlockChore: chore %s not found in costume file %s.\n", choreName.c_str(), choreSetName.c_str());
+			logMessage(kConsoleWarning, "UnlockChore: Chore %s not found in .COS file %s.\n", choreName.c_str(), choreSetName.c_str());
 		}
 	} else {
-		logDemo(kConsoleWarning, "UnlockChore: costume file %s not found.\n", choreSetName.c_str());
+		logMessage(kConsoleWarning, "UnlockChore: .COS file %s not found.\n", choreSetName.c_str());
 	}
 
 	choreSetHandle.unlock();
@@ -333,8 +290,11 @@ void Lua_V2::UnlockChore() {
 void Lua_V2::LockChoreSet() {
 	lua_Object choreSetObj = lua_getparam(1);
 
+	if (disabledFunction(kConsoleWarning, "LockChoreSet( %s ): Function disabled.\n", choreSetObj))
+		return;
+
 	if (!lua_isstring(choreSetObj)) {
-		logDemo(kConsoleWarning, "LockChoreSet: the parameter must be a costume file name.\n");
+		logMessage(kConsoleWarning, "LockChoreSet: the parameter must be a costume file name.\n");
 		lua_pushnil();
 
 		return;
@@ -354,7 +314,7 @@ void Lua_V2::LockChoreSet() {
 				chore->lockComponents();
 		}
 	} else {
-		logDemo(kConsoleWarning, "LockChoreSet: costume file %s not found.\n", choreSetName.c_str());
+		logMessage(kConsoleWarning, "LockChoreSet: costume file %s not found.\n", choreSetName.c_str());
 	}
 
 	choreSetHandle.unlock();
@@ -363,8 +323,11 @@ void Lua_V2::LockChoreSet() {
 void Lua_V2::UnlockChoreSet() {
 	lua_Object choreSetObj = lua_getparam(1);
 
+	if (disabledFunction(kConsoleWarning, "UnlockChoreSet( %s ): Function disabled.\n", choreSetObj))
+		return;
+
 	if (!lua_isstring(choreSetObj)) {
-		logDemo(kConsoleWarning, "UnlockChoreSet: the parameter must be a costume file name.\n");
+		logMessage(kConsoleWarning, "UnlockChoreSet: the parameter must be a costume file name.\n");
 		lua_pushnil();
 
 		return;
@@ -389,7 +352,7 @@ void Lua_V2::UnlockChoreSet() {
 				chore->unlockComponents();
 		}
 	} else {
-		logDemo(kConsoleWarning, "UnlockChoreSet: costume file %s not found.\n", choreSetName.c_str());
+		logMessage(kConsoleWarning, "UnlockChoreSet: costume file %s not found.\n", choreSetName.c_str());
 	}
 
 	choreSetHandle.unlock();

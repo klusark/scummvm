@@ -22,6 +22,7 @@
 #include "common/fs.h"
 #include "common/path.h"
 #include "common/str.h"
+#include "common/system.h"
 #include "common/textconsole.h"
 
 #include "engines/grim/emi/actor/actor.h"
@@ -30,6 +31,7 @@
 #include "engines/grim/emi/images/ctgafile.h"
 #include "engines/grim/emi/graphics/dimregion.h"
 #include "engines/grim/emi/emiengine.h"
+#include "engines/grim/emi/input/demoreplay.h"
 #include "engines/grim/emi/input/inputrecorder.h"
 #include "engines/grim/emi/images/labitmap.h"
 #include "engines/grim/emi/graphics/layer.h"
@@ -63,6 +65,8 @@ static const byte kStatsTextJustify = 16;
 static const int kNumStatsEventsDemo = 4;
 static const int kStatsTextDemoTexY = 100;
 static const int kMovieControlSkipFrames = 5;
+static const int kReplayControlSkipFrames = 3;
+static const float kMaxReplayRealTime = 120.0f;
 
 bool EmiEngine::runFrame() {
 	updateManual(_drawContext, true, 0);
@@ -98,14 +102,37 @@ int EmiEngine::updateManual(CDrawContext *drawContext, bool draw, int manualMs) 
 	// Not in the disasm, the options changed from the ScummVM menu
 	applyPendingGameSettings(manualMs);
 
-	if (_inputRecorder && _inputRecorder->_mode == InputRecorder::kModeReplay)
-		_inputRecorder->replayKeys();
-	else if (_controlSkipFrames != 0)
-		_controlSkipFrames--;
-	else
-		_control->update();
+	float frameTime;
 
-	float frameTime = updateFrameTime(manualMs);
+	if (isPs2) {
+		if (_demoReplay && _demoReplay->_mode == DemoReplay::kModeFinished)
+			setReplayRequest(0, nullptr);
+
+		frameTime = updateFrameTime(manualMs);
+
+		if (!_demoReplay || _demoReplay->_mode == DemoReplay::kModeRecord) {
+			if (_controlSkipFrames != 0)
+				_controlSkipFrames--;
+			else
+				_control->update();
+		} else {
+			_demoReplay->deliverEvents();
+		}
+
+		if (_replayRequest != -1) {
+			applyReplayRequest();
+			_controlSkipFrames = kReplayControlSkipFrames;
+		}
+	} else {
+		if (_inputRecorder && _inputRecorder->_mode == InputRecorder::kModeReplay)
+			_inputRecorder->replayKeys();
+		else if (_controlSkipFrames != 0)
+			_controlSkipFrames--;
+		else
+			_control->update();
+
+		frameTime = updateFrameTime(manualMs);
+	}
 
 	if (!_isDemo)
 		_gameResourceManager->update(frameTime);
@@ -184,6 +211,13 @@ void EmiEngine::applyPendingMusicState() {
 	if (_pendingMusicState == -1)
 		return;
 
+	// After a replay change the new music state waits a few frames
+	if (_replayMusicFrames != 0 && _pendingMusicState != 0) {
+		_replayMusicFrames--;
+
+		return;
+	}
+
 	setMusicState(_pendingMusicState, -1);
 
 	// On PS2, a new music state fades out the loading loop
@@ -200,6 +234,37 @@ float EmiEngine::updateFrameTime(int manualMs) {
 
 	if (_inputRecorder && _inputRecorder->_mode == InputRecorder::kModeReplay) {
 		_frameTime = _inputRecorder->replayFrame();
+
+		return _frameTime;
+	}
+
+	if (_demoReplay && _demoReplay->_mode == DemoReplay::kModePlayback) {
+		float realTime = (float)(stamp._seconds - _lastStamp);
+
+		if (realTime > kMaxReplayRealTime || realTime < 0.0f)
+			realTime = kMaxReplayRealTime;
+
+		_rawFrameTime = realTime;
+		_frameTime = _demoReplay->consumeFrame();
+
+		// Wait until the recorded frame time has passed
+		while (_rawFrameTime < _frameTime) {
+			g_system->delayMillis(1);
+			stamp.stamp();
+
+			_rawFrameTime = (float)(stamp._seconds - _lastStamp);
+
+			if (_rawFrameTime < realTime) {
+				_rawFrameTime = realTime;
+
+				break;
+			}
+		}
+
+		if (_rawFrameTime > kMaxReplayRealTime)
+			_rawFrameTime = realTime;
+
+		_lastStamp = stamp._seconds;
 
 		return _frameTime;
 	}
@@ -236,6 +301,9 @@ float EmiEngine::updateFrameTime(int manualMs) {
 
 	if (_inputRecorder)
 		_inputRecorder->recordFrame(elapsed);
+
+	if (_demoReplay)
+		_demoReplay->recordFrame(elapsed);
 
 	return elapsed;
 }

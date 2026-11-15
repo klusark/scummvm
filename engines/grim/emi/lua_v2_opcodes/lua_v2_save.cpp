@@ -77,8 +77,8 @@ static bool readSavedLockCount(SaveRestoreAccess *reader, int *count) {
 void Lua_V2::Load() {
 	lua_Object fileNameObj = lua_getparam(1);
 
-	if (_engine->isDemo() && !lua_isnil(fileNameObj) && !lua_isstring(fileNameObj))
-		logConsole(kConsoleWarning, "Load: the argument must be a file name or nil.\n");
+	if (!lua_isnil(fileNameObj) && !lua_isstring(fileNameObj))
+		logMessage(kConsoleWarning, "Argument to Load() must be a string!\n");
 
 	Lua_V1::Load();
 }
@@ -86,8 +86,8 @@ void Lua_V2::Load() {
 void Lua_V2::Save() {
 	lua_Object fileNameObj = lua_getparam(1);
 
-	if (_engine->isDemo() && !lua_isnil(fileNameObj) && !lua_isstring(fileNameObj))
-		logConsole(kConsoleWarning, "Save: the argument must be a file name or nil.\n");
+	if (!lua_isnil(fileNameObj) && !lua_isstring(fileNameObj))
+		logMessage(kConsoleWarning, "Save: the argument must be a file name or nil.\n");
 
 	Lua_V1::Save();
 }
@@ -112,12 +112,12 @@ void Lua_V2::saveGameCallback(SaveRestoreAccess *writer) {
 			lua_pushobject(handler);
 			lua_callfunction(function);
 		} else {
-			_engine->getConsoleServices()->logError("Installed savegame handler has no member func '%s'\n", "saveGameCallback");
+			logMessage(kConsoleError, "Installed savegame handler has no member func '%s'\n", "saveGameCallback");
 		}
 	} else if (lua_isfunction(handler)) {
 		lua_callfunction(handler);
 	} else if (!lua_isnil(handler)) {
-		_engine->getConsoleServices()->logError("Installed save game callback is invalid.\n");
+		logMessage(kConsoleError, "Installed save game callback is invalid.\n");
 	}
 
 	if (_saveDataSize == 0)
@@ -255,6 +255,12 @@ void Lua_V2::restoreLocks(SaveRestoreAccess *reader) {
 	for (int i = 0; i < count; i++) {
 		if (!readSavedString(reader, _lockedBackgrounds[i]))
 			return;
+
+		if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+			lockBackgroundWithScene(_lockedBackgrounds[i], false);
+
+			continue;
+		}
 
 		LResourceHandle<Background> backgroundHandle(_engine, _lockedBackgrounds[i]);
 

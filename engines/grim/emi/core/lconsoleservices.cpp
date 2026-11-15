@@ -48,108 +48,68 @@ void LConsoleServices::operator delete(void *block) {
 	LMemoryServices::getCurrent()->freeImpl(block);
 }
 
-int LConsoleServices::logStatus(const char *format, ...) {
-	char output[1024];
-	va_list args;
-
-	output[0] = 'S';
-	output[1] = ':';
-
-	va_start(args, format);
+int LConsoleServices::logMessage(int level, const char *format, va_list args) {
 	Common::String message = Common::String::vformat(format, args);
-	va_end(args);
+	int length = message.size();
 
-	uint copyLength = message.size();
-	if (copyLength > 1021) {
-		warning("LConsoleServices::logStatus(): message too long");
-		copyLength = 1021;
+	if (length > kMaxMessageLength) {
+		warning("LConsoleServices::logMessage(): message too long");
+		message = Common::String(message.c_str(), kMaxMessageLength);
 	}
 
-	memcpy(output + 2, message.c_str(), copyLength);
-	output[2 + copyLength] = 0;
+	logToFile("%s", message.c_str());
 
-	debugN("%s", output);
-	logToFile("%s", output);
+	while (!message.empty() && message.lastChar() == '\n')
+		message.deleteLastChar();
 
-	return message.size();
+	if (level == kLevelWarning)
+		warning("%s", message.c_str());
+	else if (level == kLevelError)
+		warning("ERROR: %s", message.c_str());
+	else
+		debug("%s", message.c_str());
+
+	return length;
+}
+
+int LConsoleServices::logStatus(const char *format, ...) {
+	va_list args;
+
+	va_start(args, format);
+	int length = logMessage(kLevelStatus, format, args);
+	va_end(args);
+
+	return length;
 }
 
 int LConsoleServices::logWarning(const char *format, ...) {
-	char output[1024];
 	va_list args;
 
-	output[0] = 'W';
-	output[1] = ':';
-
 	va_start(args, format);
-	Common::String message = Common::String::vformat(format, args);
+	int length = logMessage(kLevelWarning, format, args);
 	va_end(args);
 
-	uint copyLength = message.size();
-	if (copyLength > 1021) {
-		warning("LConsoleServices::logWarning(): message too long");
-		copyLength = 1021;
-	}
-
-	memcpy(output + 2, message.c_str(), copyLength);
-	output[2 + copyLength] = 0;
-
-	debugN("%s", output);
-	logToFile("%s", output);
-
-	return message.size();
+	return length;
 }
 
 int LConsoleServices::logError(const char *format, ...) {
-	char output[1024];
 	va_list args;
 
-	output[0] = 'E';
-	output[1] = ':';
-
 	va_start(args, format);
-	Common::String message = Common::String::vformat(format, args);
+	int length = logMessage(kLevelError, format, args);
 	va_end(args);
 
-	uint copyLength = message.size();
-	if (copyLength > 1021) {
-		warning("LConsoleServices::logError(): message too long");
-		copyLength = 1021;
-	}
-
-	memcpy(output + 2, message.c_str(), copyLength);
-	output[2 + copyLength] = 0;
-
-	debugN("%s", output);
-	logToFile("%s", output);
-
-	return message.size();
+	return length;
 }
 
 int LConsoleServices::logDebug(const char *format, ...) {
-	char output[1024];
 	va_list args;
 
-	output[0] = 'D';
-	output[1] = ':';
-
 	va_start(args, format);
-	Common::String message = Common::String::vformat(format, args);
+	int length = logMessage(kLevelDebug, format, args);
 	va_end(args);
 
-	uint copyLength = message.size();
-	if (copyLength > 1021) {
-		warning("LConsoleServices::logDebug(): message too long");
-		copyLength = 1021;
-	}
-
-	memcpy(output + 2, message.c_str(), copyLength);
-	output[2 + copyLength] = 0;
-
-	debugN("%s", output);
-	logToFile("%s", output);
-
-	return message.size();
+	return length;
 }
 
 int LConsoleServices::logToFile(const char *format, ...) {

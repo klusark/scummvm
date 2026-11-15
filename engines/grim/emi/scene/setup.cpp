@@ -168,12 +168,12 @@ void Setup::removeLayerById(int layerId) {
 	}
 }
 
-bool Setup::save(SaveRestoreAccess *access) {
-	access(&_layersBuilt, sizeof(_layersBuilt));
+bool Setup::save(SaveRestoreAccess *accessFunc) {
+	accessFunc(&_layersBuilt, sizeof(_layersBuilt));
 
 	int count = (int)_layers.size();
 
-	access(&count, sizeof(count));
+	accessFunc(&count, sizeof(count));
 
 	Common::List<Layer *>::iterator it;
 
@@ -181,22 +181,22 @@ bool Setup::save(SaveRestoreAccess *access) {
 		Layer *layer = *it;
 		int value = layer->_id;
 
-		access(&value, sizeof(value));
+		accessFunc(&value, sizeof(value));
 		value = layer->_sortOrder;
-		access(&value, sizeof(value));
+		accessFunc(&value, sizeof(value));
 		value = layer->_frame;
-		access(&value, sizeof(value));
+		accessFunc(&value, sizeof(value));
 
 		int length = (int)strlen(layer->_name) + 1;
 
-		access(&length, sizeof(length));
-		access(layer->_name, length);
+		accessFunc(&length, sizeof(length));
+		accessFunc(layer->_name, length);
 	}
 
 	return true;
 }
 
-bool Setup::restore(SaveRestoreAccess *access) {
+bool Setup::restore(SaveRestoreAccess *accessFunc) {
 	Common::List<Layer *>::iterator it;
 
 	for (it = _layers.begin(); it != _layers.end(); ++it) {
@@ -209,9 +209,9 @@ bool Setup::restore(SaveRestoreAccess *access) {
 	byte built = 0;
 	int count = 0;
 
-	access(&built, sizeof(built));
+	accessFunc(&built, sizeof(built));
 	_layersBuilt = built != 0;
-	access(&count, sizeof(count));
+	accessFunc(&count, sizeof(count));
 
 	for (int i = 0; i < count; i++) {
 		char layerName[kNameSize];
@@ -220,24 +220,24 @@ bool Setup::restore(SaveRestoreAccess *access) {
 		int layerFrame = 0;
 		int length = 0;
 
-		access(&layerId, sizeof(layerId));
-		access(&layerSortOrder, sizeof(layerSortOrder));
-		access(&layerFrame, sizeof(layerFrame));
-		access(&length, sizeof(length));
+		accessFunc(&layerId, sizeof(layerId));
+		accessFunc(&layerSortOrder, sizeof(layerSortOrder));
+		accessFunc(&layerFrame, sizeof(layerFrame));
+		accessFunc(&length, sizeof(length));
 
 		layerName[0] = 0;
 
 		if (length > kNameSize) {
 			warning("Setup::restore(): the layer name is too long");
-			access(layerName, kNameSize);
+			accessFunc(layerName, kNameSize);
 
 			for (int skipped = kNameSize; skipped < length; skipped++) {
 				char discard;
 
-				access(&discard, sizeof(discard));
+				accessFunc(&discard, sizeof(discard));
 			}
 		} else if (length > 0) {
-			access(layerName, length);
+			accessFunc(layerName, length);
 		}
 
 		layerName[kNameSize - 1] = 0;

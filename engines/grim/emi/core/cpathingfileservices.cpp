@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/platform.h"
 #include "common/str.h"
 #include "common/textconsole.h"
 
@@ -162,6 +163,9 @@ LFile *CPathingFileServices::openExtended(const char *path, const char *mode, in
 
 bool CPathingFileServices::exists(const char *path) {
 	LString resolved;
+
+	if (_engine->getGamePlatform() == Common::kPlatformPS2)
+		return LFileServices::exists(path);
 
 	if (strchr(path, ':'))
 		return false;

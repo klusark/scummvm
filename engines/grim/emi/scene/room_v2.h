@@ -63,8 +63,8 @@ public:
 	Shadow_v2 *newShadow();
 	void removeShadow(Shadow_v2 *shadow);
 	void setSoundParameters(float newMaxDist, char newMinVol, char newMaxVol, float newPanFactor, float newMaxRadius);
-	bool save(SaveRestoreAccess *access);
-	bool restore(SaveRestoreAccess *access);
+	bool save(SaveRestoreAccess *accessFunc);
+	bool restore(SaveRestoreAccess *accessFunc);
 	void freeSetups();
 	bool loadText(const char *path);
 	bool parseSection(LFile *file, const char *sectionName);
@@ -77,8 +77,8 @@ public:
 
 	static bool startup(EmiEngine *engine);
 	static void shutdown(EmiEngine *engine);
-	static void saveCurrentRoom(EmiEngine *engine, SaveRestoreAccess *access);
-	static void restoreCurrentRoom(EmiEngine *engine, SaveRestoreAccess *access);
+	static void saveCurrentRoom(EmiEngine *engine, SaveRestoreAccess *accessFunc);
+	static void restoreCurrentRoom(EmiEngine *engine, SaveRestoreAccess *accessFunc);
 	static Layer *findLayerById(EmiEngine *engine, int layerId);
 	static void loadRoom(EmiEngine *engine, const char *roomName);
 	static Room_v2 *getCurrentRoom(EmiEngine *engine);

@@ -62,6 +62,7 @@ public:
 	void operator delete(void *block);
 
 	void init();
+	void setPosition(int x, int y);
 	int activate(float newDuration, int newFlags);
 	void freeGeometry();
 	void buildGeometry();
@@ -71,8 +72,8 @@ public:
 	int getHeight();
 	int getCharWidth(uint16 character);
 	void draw(CDrawContext *drawContext);
-	bool save(SaveRestoreAccess *access);
-	bool restore(SaveRestoreAccess *access);
+	bool save(SaveRestoreAccess *accessFunc);
+	bool restore(SaveRestoreAccess *accessFunc);
 	bool setFont(const char *fontName);
 	bool setFont(LResourceHandle<CTextFont> newFont);
 
@@ -96,8 +97,8 @@ public:
 	static CjkString concatCjk(const CjkString &first, const CjkString &second);
 	static void holdAll(EmiEngine *engine);
 	static void releaseAll(EmiEngine *engine);
-	static bool saveAll(EmiEngine *engine, SaveRestoreAccess *access);
-	static bool restoreAll(EmiEngine *engine, SaveRestoreAccess *access);
+	static bool saveAll(EmiEngine *engine, SaveRestoreAccess *accessFunc);
+	static bool restoreAll(EmiEngine *engine, SaveRestoreAccess *accessFunc);
 
 	LString _text;
 	CjkString _cjkText;

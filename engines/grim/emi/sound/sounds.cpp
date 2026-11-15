@@ -35,6 +35,7 @@
 #include "engines/grim/emi/sound/cwavesound.h"
 #include "engines/grim/emi/sound/demomusic.h"
 #include "engines/grim/emi/emiengine.h"
+#include "engines/grim/emi/input/demoreplay.h"
 #include "engines/grim/emi/core/lconsoleservices.h"
 #include "engines/grim/emi/sound/lipdata.h"
 #include "engines/grim/emi/core/lstring.h"
@@ -156,28 +157,43 @@ int Sounds::soundGainToVolume(float gain) {
 	return (int)((log10((double)gain) * 20.0 - (double)-40.0f) * (double)kInvDbStep) + 1;
 }
 
-uint16 Sounds::registerSound(CSoundCue *cue) {
-	uint16 handle = _soundCounter;
+uint Sounds::registerSound(CSoundCue *cue) {
+	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		_soundMap[cue->_handle] = cue;
+
+		return cue->_handle;
+	}
+
+	uint16 handle = (uint16)_soundCounter;
 
 	_soundMap[handle] = cue;
-	cue->_handle = _soundCounter;
-	_soundCounter++;
+	cue->_handle = handle;
+	_soundCounter = (uint16)(handle + 1);
 
 	return handle;
 }
 
-void Sounds::unregisterSound(uint16 soundHandle) {
+void Sounds::unregisterSound(uint soundHandle) {
 	_soundMap.erase(soundHandle);
 }
 
 CSoundCue *Sounds::findSoundCue(uint soundHandle) {
 	CSoundCue *cue = nullptr;
 
+	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		for (cue = _firstCue; cue; cue = cue->_next) {
+			if ((uint)cue->_handle == soundHandle)
+				return cue;
+		}
+
+		return nullptr;
+	}
+
 	// The disasm keys the map with the whole dword
 	if (soundHandle > kMaxHandle)
 		return nullptr;
 
-	if (_soundMap.tryGetVal((uint16)soundHandle, cue))
+	if (_soundMap.tryGetVal(soundHandle, cue))
 		return cue;
 
 	return nullptr;
@@ -291,6 +307,11 @@ void Sounds::startSounds(bool startMusicNow) {
 	}
 }
 
+uint Sounds::getLoadFailure() const {
+	// PS2 gives -1 for a sound that cannot be loaded and 0 for a disabled category
+	return _engine->getGamePlatform() == Common::kPlatformPS2 ? (uint)-1 : 0;
+}
+
 bool Sounds::isAudioActive() const {
 	return _audioSystem && _audioSystem->_audioAvailable;
 }
@@ -329,7 +350,7 @@ void Sounds::releaseAllSounds() {
 		return;
 	}
 
-	Common::Array<uint16> handles;
+	Common::Array<uint> handles;
 
 	for (CSoundCue::SoundCueMap::iterator it = _soundMap.begin(); it != _soundMap.end(); ++it)
 		handles.push_back(it->_key);
@@ -362,16 +383,38 @@ void Sounds::soundCueLipCallback(const char *soundName, CSoundCue *cue) {
 		cue->setLipData(lipData, lipSize);
 }
 
-void Sounds::saveSounds(SaveRestoreAccess *access) {
-	access(&_soundCounter, sizeof(_soundCounter));
-	_audioSystem->saveAudioSettings(access);
-	CSoundCue::saveCues(this, access);
+void Sounds::saveSounds(SaveRestoreAccess *accessFunc) {
+	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		LipData::saveFileName(_engine, accessFunc);
+		_audioSystem->saveAudioSettings(accessFunc);
+		CSoundCue::saveCues(this, accessFunc);
+
+		return;
+	}
+
+	uint16 shortCounter = (uint16)_soundCounter;
+
+	accessFunc(&shortCounter, sizeof(shortCounter));
+	_audioSystem->saveAudioSettings(accessFunc);
+	CSoundCue::saveCues(this, accessFunc);
 }
 
-void Sounds::restoreSounds(SaveRestoreAccess *access) {
-	access(&_soundCounter, sizeof(_soundCounter));
-	_audioSystem->restoreAudioSettings(access);
-	CSoundCue::restoreCues(this, access, &_soundMap);
+void Sounds::restoreSounds(SaveRestoreAccess *accessFunc) {
+	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		int lipSize = LipData::restoreFileName(_engine, accessFunc);
+
+		_audioSystem->restoreAudioSettings(accessFunc);
+		CSoundCue::restoreCues(this, accessFunc,&_soundMap, _engine->_lipBuffer, lipSize);
+
+		return;
+	}
+
+	uint16 shortCounter = 0;
+
+	accessFunc(&shortCounter, sizeof(shortCounter));
+	_soundCounter = shortCounter;
+	_audioSystem->restoreAudioSettings(accessFunc);
+	CSoundCue::restoreCues(this, accessFunc,&_soundMap, nullptr, 0);
 }
 
 void Sounds::setSoundSystemEnabled(bool enabled) {
@@ -388,7 +431,7 @@ uint Sounds::loadSound(const char *soundName, int category) {
 
 uint Sounds::loadSound(const LString &soundName, int category) {
 	if (!isAudioActive())
-		return 0;
+		return getLoadFailure();
 
 	uint dotPosition = soundName.find('.');
 	bool hasDot = dotPosition != LString::npos;
@@ -442,7 +485,7 @@ uint Sounds::loadSound(const LString &soundName, int category) {
 	CSoundCue *cue = CSoundCue::newSoundCue(this, fullName, cueCategory, nullptr);
 
 	if (!cue)
-		return 0;
+		return getLoadFailure();
 
 	if (category == 2) {
 		LipData *lipData = nullptr;
@@ -489,10 +532,10 @@ void Sounds::playSoundFrom(const LString &soundName, float x, float y, float z, 
 
 	uint soundHandle = loadSound(soundName, 1);
 
-	if (soundHandle) {
+	if (soundHandle != getLoadFailure()) {
 		startSound(soundHandle, 1, false, volume);
 		setSoundPosition(soundHandle, x, y, z);
-		unregisterSound((uint16)soundHandle);
+		unregisterSound(soundHandle);
 	}
 }
 
@@ -570,7 +613,7 @@ void Sounds::stopSound(uint soundHandle) {
 	if (cue)
 		CSoundCue::deleteSoundCue(cue);
 
-	unregisterSound((uint16)soundHandle);
+	unregisterSound(soundHandle);
 }
 
 void Sounds::stopSoundPlayback(uint soundHandle) {
@@ -578,7 +621,7 @@ void Sounds::stopSoundPlayback(uint soundHandle) {
 
 	if (cue) {
 		if (!_engine->isDemo() && (cue->_flags & CSoundCue::kFlagReleaseWhenDone) != 0)
-			unregisterSound((uint16)soundHandle);
+			unregisterSound(soundHandle);
 
 		cue->stop();
 	}
@@ -587,7 +630,7 @@ void Sounds::stopSoundPlayback(uint soundHandle) {
 void Sounds::releaseSoundWhenDone(uint soundHandle) {
 	// The demo only drops the handle; the cue is deleted by the update once it is done
 	if (_engine->isDemo()) {
-		unregisterSound((uint16)soundHandle);
+		unregisterSound(soundHandle);
 
 		return;
 	}
@@ -597,7 +640,7 @@ void Sounds::releaseSoundWhenDone(uint soundHandle) {
 	if (cue) {
 		if (cue->getState() == CSoundCue::kStatePlaying) {
 			cue->_flags |= CSoundCue::kFlagReleaseWhenDone;
-			unregisterSound((uint16)soundHandle);
+			unregisterSound(soundHandle);
 
 			return;
 		}
@@ -605,7 +648,7 @@ void Sounds::releaseSoundWhenDone(uint soundHandle) {
 		CSoundCue::deleteSoundCue(cue);
 	}
 
-	unregisterSound((uint16)soundHandle);
+	unregisterSound(soundHandle);
 }
 
 void Sounds::pauseSound(uint soundHandle) {
@@ -639,6 +682,29 @@ bool Sounds::isSoundPlayingNoFiniteLoop(uint soundHandle) {
 		return cue->getState() == CSoundCue::kStatePlaying;
 
 	return cue->getState() == CSoundCue::kStatePlaying && !cue->hasFiniteLoopCount();
+}
+
+bool Sounds::isSoundPlayingPs2(uint soundHandle, const char *source) {
+	bool playing = false;
+	CSoundCue *cue = findSoundCue(soundHandle);
+
+	if (cue) {
+		playing = cue->getState() == CSoundCue::kStatePlaying;
+
+		if (!playing && cue->_category == 2 && cue->getState() == CSoundCue::kStateStarted)
+			playing = true;
+	}
+
+	DemoReplay *replay = _engine->getDemoReplay();
+
+	if (replay) {
+		if (replay->_mode == DemoReplay::kModePlayback)
+			playing = replay->consumeVoice(source);
+		else if (replay->_mode == DemoReplay::kModeRecord)
+			replay->recordVoice(playing);
+	}
+
+	return playing;
 }
 
 bool Sounds::isSoundPaused(uint soundHandle) {
@@ -1111,21 +1177,21 @@ void Sounds::setMusicState(int newState, int startMs, const bool &immediate) {
 	}
 }
 
-void Sounds::saveMusicState(SaveRestoreAccess *access) {
-	access(&_musicVolume, sizeof(_musicVolume));
-	access(&_musicState, sizeof(_musicState));
-	access(&_pushedMusicState, sizeof(_pushedMusicState));
-	access(&_pushedMusicPosition, sizeof(_pushedMusicPosition));
+void Sounds::saveMusicState(SaveRestoreAccess *accessFunc) {
+	accessFunc(&_musicVolume, sizeof(_musicVolume));
+	accessFunc(&_musicState, sizeof(_musicState));
+	accessFunc(&_pushedMusicState, sizeof(_pushedMusicState));
+	accessFunc(&_pushedMusicPosition, sizeof(_pushedMusicPosition));
 }
 
-void Sounds::restoreMusicState(SaveRestoreAccess *access) {
-	access(&_musicVolume, sizeof(_musicVolume));
+void Sounds::restoreMusicState(SaveRestoreAccess *accessFunc) {
+	accessFunc(&_musicVolume, sizeof(_musicVolume));
 
 	setMusicVolume(_musicVolume);
 
-	access(&_musicState, sizeof(_musicState));
-	access(&_pushedMusicState, sizeof(_pushedMusicState));
-	access(&_pushedMusicPosition, sizeof(_pushedMusicPosition));
+	accessFunc(&_musicState, sizeof(_musicState));
+	accessFunc(&_pushedMusicState, sizeof(_pushedMusicState));
+	accessFunc(&_pushedMusicPosition, sizeof(_pushedMusicPosition));
 
 	// The demo restarts the saved cue at load time
 	if (_demoMusic && _musicState != 0)
@@ -1223,6 +1289,14 @@ void Sounds::popMusicState(const bool &immediate) {
 
 void Sounds::flushMusicStateStack() {
 	_pushedMusicState = -1;
+}
+
+int Sounds::takePushedMusicState() {
+	int musicState = _pushedMusicState;
+
+	_pushedMusicState = -1;
+
+	return musicState;
 }
 
 int Sounds::getMusicPositionMs(const uint &musicId) {

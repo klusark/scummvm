@@ -75,7 +75,13 @@ lua_CFunction lua_IDToFuncPtr(uint32 id);
 bool lua_FuncPtrHasID(lua_CFunction func);
 void lua_FuncIDsInvalidate();
 void lua_FuncIDsSetEmiDemo(bool isDemo);
+void lua_FuncIDsSetEmiPs2(bool isPs2);
 void lua_FuncIDsSetRemastered(bool isRemastered);
+
+typedef int32 (*lua_RandomFunction)();
+typedef void (*lua_SeedFunction)(uint32 seed);
+
+void lua_SetRandomFunctions(lua_RandomFunction random, lua_SeedFunction seed);
 
 void lua_removelibslists();
 

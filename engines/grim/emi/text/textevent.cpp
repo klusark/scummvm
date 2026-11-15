@@ -165,14 +165,19 @@ void TextEvent::init() {
 		_clipRect[1] = defaultEvent->_clipRect[1];
 		_clipRect[2] = defaultEvent->_clipRect[2];
 		_clipRect[3] = defaultEvent->_clipRect[3];
-		_x = defaultEvent->_x;
-		_y = defaultEvent->_y;
-		_geometryReady = false;
+		if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+			setPosition(defaultEvent->_x, defaultEvent->_y);
+			setFont("arial14bos.laf");
+		} else {
+			_x = defaultEvent->_x;
+			_y = defaultEvent->_y;
+			_geometryReady = false;
 
-		LResourceHandle<CTextFont> defaultFont(_engine);
+			LResourceHandle<CTextFont> defaultFont(_engine);
 
-		defaultFont.setResource(defaultEvent->_font._resource);
-		setFont(defaultFont);
+			defaultFont.setResource(defaultEvent->_font._resource);
+			setFont(defaultFont);
+		}
 
 		_color = defaultEvent->_color;
 		_geometryReady = false;
@@ -189,7 +194,23 @@ void TextEvent::init() {
 		else
 			warning("TextEvent::init(): the default duration is out of range");
 
-		_duration = (float)((double)truncatedMs * (double)0.001f);
+		if (_engine->getGamePlatform() == Common::kPlatformPS2)
+			_duration = (float)truncatedMs / 1000.0f;
+		else
+			_duration = (float)((double)truncatedMs * (double)0.001f);
+	} else if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		_clipRect[0] = 32;
+		_clipRect[1] = 32;
+		_clipRect[2] = 576;
+		_clipRect[3] = 404;
+		setPosition(32, 32);
+		setFont("arial14bos.laf");
+		_color = Color::kWhite;
+		_geometryReady = false;
+		_outlineColor = Color::kWhite;
+		_justify = 4;
+		_geometryReady = false;
+		_duration = (float)-0.001;
 	} else {
 		if (_engine->isCjkMode()) {
 			_clipRect[0] = 2;
@@ -227,6 +248,26 @@ void TextEvent::init() {
 	_normals = nullptr;
 	_colors = nullptr;
 	_uvs = nullptr;
+}
+
+void TextEvent::setPosition(int x, int y) {
+	_x = x;
+
+	if (_x < _clipRect[0])
+		_x = _clipRect[0];
+
+	if (_clipRect[0] + _clipRect[2] < _x)
+		_x = _clipRect[0] + _clipRect[2];
+
+	_y = y;
+
+	if (_y < _clipRect[1])
+		_y = _clipRect[1];
+
+	if (_clipRect[1] + _clipRect[3] < _y)
+		_y = _clipRect[1] + _clipRect[3];
+
+	_geometryReady = false;
 }
 
 int TextEvent::activate(float newDuration, int newFlags) {
@@ -1084,30 +1125,30 @@ void TextEvent::drawCjk(CDrawContext *drawContext) {
 	}
 }
 
-bool TextEvent::save(SaveRestoreAccess *access) {
+bool TextEvent::save(SaveRestoreAccess *accessFunc) {
 	int length;
 
 	if (_engine->isCjkMode()) {
 		length = (int)_cjkText.size() + 1;
 
-		access(&length, sizeof(length));
-		access((void *)_cjkText.c_str(), 2 * length);
+		accessFunc(&length, sizeof(length));
+		accessFunc((void *)_cjkText.c_str(), 2 * length);
 	} else {
 		length = (int)_text.size() + 1;
 
-		access(&length, sizeof(length));
-		access((void *)_text.c_str(), length);
+		accessFunc(&length, sizeof(length));
+		accessFunc((void *)_text.c_str(), length);
 	}
 
-	access(&_x, sizeof(_x));
-	access(&_y, sizeof(_y));
-	access(&_duration, sizeof(_duration));
-	access(&_actorId, sizeof(_actorId));
-	access(&_flags, sizeof(_flags));
-	access(&_id, sizeof(_id));
+	accessFunc(&_x, sizeof(_x));
+	accessFunc(&_y, sizeof(_y));
+	accessFunc(&_duration, sizeof(_duration));
+	accessFunc(&_actorId, sizeof(_actorId));
+	accessFunc(&_flags, sizeof(_flags));
+	accessFunc(&_id, sizeof(_id));
 
 	for (int i = 0; i < 4; i++)
-		access(&_clipRect[i], sizeof(int));
+		accessFunc(&_clipRect[i], sizeof(int));
 
 	LString fontName;
 
@@ -1118,24 +1159,24 @@ bool TextEvent::save(SaveRestoreAccess *access) {
 
 	length = (int)fontName.size() + 1;
 
-	access(&length, sizeof(length));
-	access((void *)fontName.c_str(), length);
-	access(&_layer, sizeof(_layer));
-	access(&_hold, sizeof(_hold));
-	access(&_color, sizeof(_color));
-	access(&_outlineColor, sizeof(_outlineColor));
-	access(&_scaleX, sizeof(_scaleX));
-	access(&_scaleY, sizeof(_scaleY));
-	access(&_justify, sizeof(_justify));
+	accessFunc(&length, sizeof(length));
+	accessFunc((void *)fontName.c_str(), length);
+	accessFunc(&_layer, sizeof(_layer));
+	accessFunc(&_hold, sizeof(_hold));
+	accessFunc(&_color, sizeof(_color));
+	accessFunc(&_outlineColor, sizeof(_outlineColor));
+	accessFunc(&_scaleX, sizeof(_scaleX));
+	accessFunc(&_scaleY, sizeof(_scaleY));
+	accessFunc(&_justify, sizeof(_justify));
 
 	return true;
 }
 
-bool TextEvent::restore(SaveRestoreAccess *access) {
+bool TextEvent::restore(SaveRestoreAccess *accessFunc) {
 	char buffer[kRestoreBufferSize + 1];
 	int length;
 
-	access(&length, sizeof(length));
+	accessFunc(&length, sizeof(length));
 
 	if (length < 1 || length > kRestoreBufferSize) {
 		warning("TextEvent::restore(): invalid text length %d", length);
@@ -1147,26 +1188,26 @@ bool TextEvent::restore(SaveRestoreAccess *access) {
 		// The length counts UTF-16 units here
 		uint16 cjkBuffer[kRestoreBufferSize + 1];
 
-		access(cjkBuffer, 2 * length);
+		accessFunc(cjkBuffer, 2 * length);
 		cjkBuffer[length] = 0;
 		_cjkText.assign(cjkBuffer);
 	} else {
-		access(buffer, length);
+		accessFunc(buffer, length);
 		buffer[length] = 0;
 		_text = buffer;
 	}
 
-	access(&_x, sizeof(_x));
-	access(&_y, sizeof(_y));
-	access(&_duration, sizeof(_duration));
-	access(&_actorId, sizeof(_actorId));
-	access(&_flags, sizeof(_flags));
-	access(&_id, sizeof(_id));
+	accessFunc(&_x, sizeof(_x));
+	accessFunc(&_y, sizeof(_y));
+	accessFunc(&_duration, sizeof(_duration));
+	accessFunc(&_actorId, sizeof(_actorId));
+	accessFunc(&_flags, sizeof(_flags));
+	accessFunc(&_id, sizeof(_id));
 
 	for (int i = 0; i < 4; i++)
-		access(&_clipRect[i], sizeof(int));
+		accessFunc(&_clipRect[i], sizeof(int));
 
-	access(&length, sizeof(length));
+	accessFunc(&length, sizeof(length));
 
 	if (length < 1 || length > kRestoreBufferSize) {
 		warning("TextEvent::restore(): invalid font name length %d", length);
@@ -1174,7 +1215,7 @@ bool TextEvent::restore(SaveRestoreAccess *access) {
 		return false;
 	}
 
-	access(buffer, length);
+	accessFunc(buffer, length);
 	buffer[length] = 0;
 
 	LString fontName = buffer;
@@ -1187,13 +1228,13 @@ bool TextEvent::restore(SaveRestoreAccess *access) {
 		_font.setResource(restoredFont._resource);
 	}
 
-	access(&_layer, sizeof(_layer));
-	access(&_hold, sizeof(_hold));
-	access(&_color, sizeof(_color));
-	access(&_outlineColor, sizeof(_outlineColor));
-	access(&_scaleX, sizeof(_scaleX));
-	access(&_scaleY, sizeof(_scaleY));
-	access(&_justify, sizeof(_justify));
+	accessFunc(&_layer, sizeof(_layer));
+	accessFunc(&_hold, sizeof(_hold));
+	accessFunc(&_color, sizeof(_color));
+	accessFunc(&_outlineColor, sizeof(_outlineColor));
+	accessFunc(&_scaleX, sizeof(_scaleX));
+	accessFunc(&_scaleY, sizeof(_scaleY));
+	accessFunc(&_justify, sizeof(_justify));
 	_geometryReady = false;
 
 	return true;
@@ -1448,28 +1489,28 @@ void TextEvent::releaseAll(EmiEngine *engine) {
 	}
 }
 
-bool TextEvent::saveAll(EmiEngine *engine, SaveRestoreAccess *access) {
+bool TextEvent::saveAll(EmiEngine *engine, SaveRestoreAccess *accessFunc) {
 	uint count = engine->_textEvents.size();
 
-	access(&count, sizeof(count));
+	accessFunc(&count, sizeof(count));
 
 	Common::List<TextEvent *>::iterator it;
 
 	for (it = engine->_textEvents.begin(); it != engine->_textEvents.end(); ++it)
-		(*it)->save(access);
+		(*it)->save(accessFunc);
 
-	access(&engine->_nextTextEventId, sizeof(engine->_nextTextEventId));
-	access(&engine->_textMode, sizeof(engine->_textMode));
+	accessFunc(&engine->_nextTextEventId, sizeof(engine->_nextTextEventId));
+	accessFunc(&engine->_textMode, sizeof(engine->_textMode));
 
 	if (engine->_defaultTextEvent)
-		engine->_defaultTextEvent->save(access);
+		engine->_defaultTextEvent->save(accessFunc);
 	else
 		warning("TextEvent::saveAll(): no default event");
 
 	return true;
 }
 
-bool TextEvent::restoreAll(EmiEngine *engine, SaveRestoreAccess *access) {
+bool TextEvent::restoreAll(EmiEngine *engine, SaveRestoreAccess *accessFunc) {
 	Common::List<TextEvent *>::iterator it = engine->_textEvents.begin();
 
 	while (it != engine->_textEvents.end()) {
@@ -1485,12 +1526,12 @@ bool TextEvent::restoreAll(EmiEngine *engine, SaveRestoreAccess *access) {
 
 	int count;
 
-	access(&count, sizeof(count));
+	accessFunc(&count, sizeof(count));
 
 	for (int i = 0; i < count; i++) {
 		TextEvent *event = new TextEvent(engine);
 
-		if (!event->restore(access)) {
+		if (!event->restore(accessFunc)) {
 			delete event;
 
 			return false;
@@ -1499,11 +1540,11 @@ bool TextEvent::restoreAll(EmiEngine *engine, SaveRestoreAccess *access) {
 		engine->_textEvents.push_back(event);
 	}
 
-	access(&engine->_nextTextEventId, sizeof(engine->_nextTextEventId));
-	access(&engine->_textMode, sizeof(engine->_textMode));
+	accessFunc(&engine->_nextTextEventId, sizeof(engine->_nextTextEventId));
+	accessFunc(&engine->_textMode, sizeof(engine->_textMode));
 
 	if (engine->_defaultTextEvent)
-		engine->_defaultTextEvent->restore(access);
+		engine->_defaultTextEvent->restore(accessFunc);
 	else
 		warning("TextEvent::restoreAll(): no default event");
 

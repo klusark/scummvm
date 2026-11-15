@@ -43,6 +43,10 @@ static const float kVisemeFadeTime = 0.0625f;
 static const int kSpeechTextFlags = 13;
 static const int kMinTextRate = 1;
 static const int kMaxTextRate = 10;
+static const int kPs2TextMinX = 160;
+static const int kPs2TextMaxX = 480;
+static const int kPs2TextMinY = 32;
+static const int kPs2TextMaxY = 436;
 static const int kTextMarginX = 40;
 static const int kTextMarginY = 25;
 
@@ -195,13 +199,29 @@ void Actor::sayLine(const char *text, int volume, int pan, int x, int y) {
 
 	_engine->_numSpeakers++;
 
-	int speakerSlot = 0;
+	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		bool assigned = false;
 
-	while (speakerSlot < kNumSpeakers && _engine->_speakers[speakerSlot])
-		speakerSlot++;
+		for (int slot = 0; slot < kNumSpeakers; slot++) {
+			Actor *speaker = _engine->_speakers[slot];
 
-	if (speakerSlot < kNumSpeakers)
-		_engine->_speakers[speakerSlot] = this;
+			if (speaker) {
+				if (speaker->_extra && speaker->_extra->_talking)
+					speaker->shutUp(true);
+			} else if (!assigned) {
+				_engine->_speakers[slot] = this;
+				assigned = true;
+			}
+		}
+	} else {
+		int speakerSlot = 0;
+
+		while (speakerSlot < kNumSpeakers && _engine->_speakers[speakerSlot])
+			speakerSlot++;
+
+		if (speakerSlot < kNumSpeakers)
+			_engine->_speakers[speakerSlot] = this;
+	}
 
 	bool createText = textEnabled;
 
@@ -269,6 +289,61 @@ void Actor::sayLine(const char *text, int volume, int pan, int x, int y) {
 
 TextEvent *Actor::createActorText(const LString &text, int x, int y) {
 	TextEvent *textEvent = new TextEvent(_engine, text);
+
+	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		if (_extra)
+			textEvent->_color = _extra->_talkColor;
+		else
+			warning("Actor::createActorText(): missing extra data");
+
+		textEvent->_justify = 6;
+		textEvent->_geometryReady = false;
+
+		int rect[4];
+
+		if (!_onScreen) {
+			rect[0] = _engine->_offscreenTextRect.x;
+			rect[1] = _engine->_offscreenTextRect.y;
+			rect[2] = _engine->_offscreenTextRect.w;
+			rect[3] = _engine->_offscreenTextRect.h;
+		} else {
+			rect[0] = _drawnRect[0];
+			rect[1] = _drawnRect[1];
+			rect[2] = _drawnRect[2];
+			rect[3] = _drawnRect[3];
+		}
+
+		int textX = x;
+
+		if (x == -1)
+			textX = rect[0] + rect[2] / 2;
+
+		if (textX < kPs2TextMinX)
+			textX = kPs2TextMinX;
+
+		if (textX > kPs2TextMaxX)
+			textX = kPs2TextMaxX;
+
+		textEvent->setPosition(textX, kPs2TextMinY);
+
+		int height = textEvent->getHeight();
+		int textY = y;
+
+		if (y == -1)
+			textY = rect[1] - height;
+
+		if (textY < kPs2TextMinY)
+			textY = kPs2TextMinY;
+
+		if (textY + height > kPs2TextMaxY)
+			textY = kPs2TextMaxY - height;
+
+		textEvent->setPosition(textX, textY);
+		textEvent->_actorId = _id;
+		_actorFlags |= 4;
+
+		return textEvent;
+	}
 
 	textEvent->_geometryReady = false;
 	textEvent->_clipRect[0] = _engine->_textScreenRect[0];
@@ -483,6 +558,9 @@ bool Actor::isVoicePlaying() {
 
 	if (!_extra->_soundHandle)
 		return false;
+
+	if (_engine->getGamePlatform() == Common::kPlatformPS2)
+		return _engine->getSounds()->isSoundPlayingPs2((uint)_extra->_soundHandle, _actorName.c_str());
 
 	if (_engine->isDemo())
 		return _engine->getSounds()->isSoundPlaying((uint)_extra->_soundHandle);

@@ -22,6 +22,7 @@
 #include "common/textconsole.h"
 
 #include "engines/grim/emi/emiengine.h"
+#include "engines/grim/emi/input/demoreplay.h"
 #include "engines/grim/emi/input/inputrecorder.h"
 #include "engines/grim/emi/input/joystick.h"
 #include "engines/grim/emi/core/lconsoleservices.h"
@@ -56,9 +57,7 @@ void Lua_V2::EnableControl() {
 	lua_Object controlObj = lua_getparam(1);
 
 	if (!lua_isnumber(controlObj)) {
-		if (_engine->isDemo())
-			logConsole(kConsoleDebug, "EnableControl: the control must be a number.\n");
-
+		logMessage(kConsoleDebug, "Invalid control (non-numerical); will not be enabled.\n");
 		lua_pushnil();
 
 		return;
@@ -71,9 +70,7 @@ void Lua_V2::DisableControl() {
 	lua_Object controlObj = lua_getparam(1);
 
 	if (!lua_isnumber(controlObj)) {
-		if (_engine->isDemo())
-			logConsole(kConsoleDebug, "DisableControl: the control must be a number.\n");
-
+		logMessage(kConsoleDebug, "Invalid control (non-numerical); will not be disabled.\n");
 		lua_pushnil();
 
 		return;
@@ -86,8 +83,7 @@ void Lua_V2::GetControlState() {
 	lua_Object controlObj = lua_getparam(1);
 
 	if (!lua_isnumber(controlObj)) {
-		if ((_engine->getGamePlatform() == Common::kPlatformPS2 || _engine->isDemo()) && _engine->getConsoleServices())
-			_engine->getConsoleServices()->logDebug("GetControlState: Invalid control (non-numerical).\n");
+		logMessage(kConsoleDebug, "GetControlState: Invalid control (non-numerical).\n");
 
 		return;
 	}
@@ -95,10 +91,7 @@ void Lua_V2::GetControlState() {
 	int index = luaFtol(lua_getnumber(controlObj));
 
 	if ((uint)index >= (uint)_engine->getControl()->getNumControls()) {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logError("GetControlState: Invalid control %d.\n", index);
-		else
-			warning("GetControlState: Invalid control %d.", index);
+		logMessage(kConsoleError, "GetControlState: Invalid control %d.\n", index);
 
 		return;
 	}
@@ -135,10 +128,7 @@ bool Lua_V2::buttonHandler(int vk, bool down) {
 			pushSelf = true;
 			callHandler = true;
 		} else {
-			if (_engine->getConsoleServices())
-				_engine->getConsoleServices()->logError("Installed button handler table has no member func '%s'!\n", "buttonHandler");
-			else
-				warning("Installed button handler table has no member func '%s'!", "buttonHandler");
+			logMessage(kConsoleError, "Installed button handler table has no member func '%s'!\n", "buttonHandler");
 
 			callHandler = down;
 		}
@@ -146,10 +136,7 @@ bool Lua_V2::buttonHandler(int vk, bool down) {
 		function = handler;
 		callHandler = true;
 	} else {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logError("Installed button handler is invalid!\n");
-		else
-			warning("Installed button handler is invalid!");
+		logMessage(kConsoleError, "Installed button handler is invalid!\n");
 
 		function = LUA_NOOBJECT;
 		callHandler = false;
@@ -169,9 +156,11 @@ bool Lua_V2::buttonHandler(int vk, bool down) {
 		} else {
 			control->state = down;
 
-			if (_engine->getInputRecorder())
+			if (_engine->getDemoReplay())
+				_engine->getDemoReplay()->consumeKey(control, down);
+			else if (_engine->getInputRecorder())
 				_engine->getInputRecorder()->recordKey(control, down);
-			else
+			else if (_engine->getGamePlatform() != Common::kPlatformPS2)
 				warning("Lua_V2::buttonHandler(): there is no input recorder");
 		}
 	}
@@ -198,11 +187,9 @@ bool Lua_V2::buttonHandler(int vk, bool down) {
 	return handled;
 }
 
-void Lua_V2::axisHandler() {
+void Lua_V2::callAxisHandler(int index, float value) {
 	bool pushSelf = false;
 	bool callHandler = false;
-	bool buttonHandled = false;
-	bool isPs2 = _engine->getGamePlatform() == Common::kPlatformPS2;
 	lua_Object function = LUA_NOOBJECT;
 
 	lua_beginblock();
@@ -221,20 +208,83 @@ void Lua_V2::axisHandler() {
 			pushSelf = true;
 			callHandler = true;
 		} else {
-			// The disasm leaves the flag uninitialized here
-			if (_engine->getConsoleServices())
-				_engine->getConsoleServices()->logError("Installed axis handler table has no member func '%s'!\n", "axisHandler");
-			else
-				warning("Installed axis handler table has no member func '%s'!", "axisHandler");
+			logMessage(kConsoleError, "Installed axis handler table has no member func '%s'!\n", "axisHandler");
 		}
 	} else if (lua_isfunction(handler)) {
 		function = handler;
 		callHandler = true;
 	} else {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logError("Installed axis handler is invalid!\n");
-		else
-			warning("Installed axis handler is invalid!");
+		logMessage(kConsoleError, "Installed axis handler is invalid!\n");
+	}
+
+	if (callHandler) {
+		if (pushSelf)
+			lua_pushobject(handler);
+
+		lua_pushnumber((float)index);
+		lua_pushnumber(value);
+		lua_callfunction(function);
+
+		if (_engine->getDemoReplay())
+			_engine->getDemoReplay()->consumeAxis(index, value);
+	}
+
+	lua_endblock();
+}
+
+void Lua_V2::axisHandler() {
+	bool pushSelf = false;
+	bool callHandler = false;
+	bool buttonHandled = false;
+	lua_Object function = LUA_NOOBJECT;
+
+	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		for (int i = 0; i < _engine->getControl()->getNumControls(); i++) {
+			ControlEntry *control = &_engine->getControl()->_controlTable[i];
+
+			if (!(control->flags & ControlEntry::kEnabled))
+				continue;
+
+			if (control->flags & ControlEntry::kAxis) {
+				float value = _engine->getJoystick()->getAxis((int)control->code);
+
+				callAxisHandler(i, value);
+				control->axisValue = value;
+			} else if (control->flags & ControlEntry::kJoystickButton) {
+				bool state = _engine->getJoystick()->getControlState((int)control->code);
+
+				if ((byte)state != control->state && !buttonHandled)
+					buttonHandled = buttonHandler((int)control->code, state);
+			}
+		}
+
+		return;
+	}
+
+	lua_beginblock();
+	lua_pushobject(lua_getref(_refSystemTable));
+	lua_pushstring("axisHandler");
+
+	lua_Object handler = lua_gettable();
+
+	if (lua_istable(handler)) {
+		lua_pushobject(handler);
+		lua_pushstring("axisHandler");
+
+		function = lua_gettable();
+
+		if (lua_isfunction(function)) {
+			pushSelf = true;
+			callHandler = true;
+		} else {
+			// The disasm leaves the flag uninitialized here
+			logMessage(kConsoleError, "Installed axis handler table has no member func '%s'!\n", "axisHandler");
+		}
+	} else if (lua_isfunction(handler)) {
+		function = handler;
+		callHandler = true;
+	} else {
+		logMessage(kConsoleError, "Installed axis handler is invalid!\n");
 	}
 
 	for (int i = 0; i < _engine->getControl()->getNumControls(); i++) {
@@ -246,8 +296,7 @@ void Lua_V2::axisHandler() {
 		if (control->flags & ControlEntry::kAxis) {
 			float value = _engine->getJoystick()->getAxis((int)control->code);
 
-			// PS2 calls the handler on every update, PC only when the value changes
-			bool callNow = callHandler && (isPs2 || value != control->axisValue);
+			bool callNow = callHandler && value != control->axisValue;
 
 			if (callNow) {
 				if (pushSelf)
@@ -256,10 +305,8 @@ void Lua_V2::axisHandler() {
 				lua_pushnumber((float)i);
 				lua_pushnumber(value);
 				lua_callfunction(function);
-			}
-
-			if (callNow || isPs2)
 				control->axisValue = value;
+			}
 		} else if (control->flags & ControlEntry::kJoystickButton) {
 			bool state = _engine->getJoystick()->getControlState((int)control->code);
 

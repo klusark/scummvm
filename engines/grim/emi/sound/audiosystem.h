@@ -61,8 +61,8 @@ public:
 	bool setSonyReverb(int type, int depth, int delay, int feedback);
 	bool setAudioDevicePreference(const uint16 *preference);
 	void stopAllChannels();
-	bool saveAudioSettings(SaveRestoreAccess *access);
-	bool restoreAudioSettings(SaveRestoreAccess *access);
+	bool saveAudioSettings(SaveRestoreAccess *accessFunc);
+	bool restoreAudioSettings(SaveRestoreAccess *accessFunc);
 	EMIMilesDriver *getMilesDriver();
 
 	int16 _refCount;

@@ -65,6 +65,11 @@ CSoundCue::CSoundCue(Sounds *sounds, LResourceHandle<CSnd> *sndHandle, CNode *no
 	_handle = 0;
 	_category = 0;
 
+	if (sounds->getEngine()->getGamePlatform() == Common::kPlatformPS2) {
+		_handle = sounds->_soundCounter;
+		sounds->_soundCounter++;
+	}
+
 	if (!sndHandle->lock() || !sndHandle->_typed) {
 		initDefaults(node);
 	} else {
@@ -121,6 +126,11 @@ CSoundCue::CSoundCue(Sounds *sounds, const LString &name, CNode *node) : _soundH
 	_lipSize = 0;
 	_handle = 0;
 	_category = 0;
+
+	if (sounds->getEngine()->getGamePlatform() == Common::kPlatformPS2) {
+		_handle = sounds->_soundCounter;
+		sounds->_soundCounter++;
+	}
 
 	LString upperName(name);
 
@@ -550,26 +560,36 @@ bool CSoundCue::stopCueToFreeChannel(Sounds *sounds, bool finiteLoopsFirst, bool
 	return true;
 }
 
-bool CSoundCue::saveCues(Sounds *sounds, SaveRestoreAccess *access) {
-	int16 savedCount = (int16)sounds->_cueCount;
+bool CSoundCue::saveCues(Sounds *sounds, SaveRestoreAccess *accessFunc) {
 	CSoundCue *cue = sounds->_firstCue;
 
-	access(&savedCount, sizeof(savedCount));
+	if (sounds->getEngine()->getGamePlatform() == Common::kPlatformPS2) {
+		int savedCounter = sounds->_soundCounter;
+		int savedCount = (int)sounds->_cueCount;
+
+		accessFunc(&savedCounter, sizeof(savedCounter));
+		accessFunc(&savedCount, sizeof(savedCount));
+	} else {
+		int16 savedCount = (int16)sounds->_cueCount;
+
+		accessFunc(&savedCount, sizeof(savedCount));
+	}
 
 	while (cue) {
 		CSoundCue *current = cue;
 
 		cue = cue->_next;
-		current->save(access);
+		current->save(accessFunc);
 	}
 
 	return true;
 }
 
-bool CSoundCue::restoreCues(Sounds *sounds, SaveRestoreAccess *access, SoundCueMap *cueMap) {
+bool CSoundCue::restoreCues(Sounds *sounds, SaveRestoreAccess *accessFunc, SoundCueMap *cueMap, const void *lipData, int lipSize) {
+	bool isPs2 = sounds->getEngine()->getGamePlatform() == Common::kPlatformPS2;
 	LString cueName;
-	int16 restoredCount = 0;
-	int16 nameLength = 0;
+	int restoredCount = 0;
+	int nameLength = 0;
 	int category = 0;
 	byte loopFlag = 0;
 	byte pausedFlag = 0;
@@ -577,13 +597,30 @@ bool CSoundCue::restoreCues(Sounds *sounds, SaveRestoreAccess *access, SoundCueM
 	byte positionBytes[kSavedPositionSize];
 	int restoredPositionMs = 0;
 	float restoredPan = 0.0f;
-	uint16 restoredHandle = 0;
+	int restoredHandle = 0;
+	int restoredCounter = 0;
 
-	access(&restoredCount, sizeof(restoredCount));
+	if (isPs2) {
+		accessFunc(&restoredCounter, sizeof(restoredCounter));
+		accessFunc(&restoredCount, sizeof(restoredCount));
+	} else {
+		int16 shortCount = 0;
+
+		accessFunc(&shortCount, sizeof(shortCount));
+		restoredCount = shortCount;
+	}
+
 	memset(positionBytes, 0, sizeof(positionBytes));
 
-	for (int16 i = 0; i < restoredCount; i++) {
-		access(&nameLength, sizeof(nameLength));
+	for (int i = 0; i < restoredCount; i++) {
+		if (isPs2) {
+			accessFunc(&nameLength, sizeof(nameLength));
+		} else {
+			int16 shortLength = 0;
+
+			accessFunc(&shortLength, sizeof(shortLength));
+			nameLength = shortLength;
+		}
 
 		if (nameLength < 0) {
 			warning("CSoundCue::restoreCues(): invalid name length %d", (int)nameLength);
@@ -593,23 +630,31 @@ bool CSoundCue::restoreCues(Sounds *sounds, SaveRestoreAccess *access, SoundCueM
 
 		char *nameBuffer = new char[nameLength + 1];
 
-		access(nameBuffer, nameLength);
+		accessFunc(nameBuffer, nameLength);
 		nameBuffer[nameLength] = 0;
 		cueName = nameBuffer;
 		delete[] nameBuffer;
 
-		access(&category, sizeof(category));
-		access(&loopFlag, sizeof(loopFlag));
-		access(&pausedFlag, sizeof(pausedFlag));
-		access(&restoredVolume, sizeof(restoredVolume));
-		access(positionBytes, kSavedPositionSize);
-		access(&restoredPositionMs, sizeof(restoredPositionMs));
-		access(&restoredPan, sizeof(restoredPan));
-		access(&restoredHandle, sizeof(restoredHandle));
+		accessFunc(&category, sizeof(category));
+		accessFunc(&loopFlag, sizeof(loopFlag));
+		accessFunc(&pausedFlag, sizeof(pausedFlag));
+		accessFunc(&restoredVolume, sizeof(restoredVolume));
+		accessFunc(positionBytes, kSavedPositionSize);
+		accessFunc(&restoredPositionMs, sizeof(restoredPositionMs));
+		accessFunc(&restoredPan, sizeof(restoredPan));
+
+		if (isPs2) {
+			accessFunc(&restoredHandle, sizeof(restoredHandle));
+		} else {
+			uint16 shortHandle = 0;
+
+			accessFunc(&shortHandle, sizeof(shortHandle));
+			restoredHandle = shortHandle;
+		}
 
 		CSoundCue *cue = newSoundCue(sounds, cueName, category, nullptr);
 
-		if (!cue)
+		if (!cue || (isPs2 && restoredHandle == -1))
 			continue;
 
 		if (loopFlag)
@@ -626,8 +671,12 @@ bool CSoundCue::restoreCues(Sounds *sounds, SaveRestoreAccess *access, SoundCueM
 			cue->_channel->setPaused(false);
 		}
 
-		if (cue->_category == 2)
-			sounds->soundCueLipCallback(cueName.c_str(), cue);
+		if (cue->_category == 2) {
+			if (!isPs2)
+				sounds->soundCueLipCallback(cueName.c_str(), cue);
+			else if (lipSize)
+				cue->setLipData(lipData, lipSize);
+		}
 
 		SoundPosition restoredPosition;
 
@@ -640,10 +689,14 @@ bool CSoundCue::restoreCues(Sounds *sounds, SaveRestoreAccess *access, SoundCueM
 		cue->setPan(restoredPan);
 
 		if (restoredHandle) {
-			(*cueMap)[restoredHandle] = cue;
+			(*cueMap)[(uint)restoredHandle] = cue;
 			cue->_handle = restoredHandle;
 		}
 	}
+
+	// The cues created above used up counter values
+	if (isPs2)
+		sounds->_soundCounter = restoredCounter;
 
 	return true;
 }
@@ -990,13 +1043,14 @@ void CSoundCue::setPositionMs(int milliseconds) {
 		_channel->setPositionMs(milliseconds);
 }
 
-bool CSoundCue::save(SaveRestoreAccess *access) {
+bool CSoundCue::save(SaveRestoreAccess *accessFunc) {
 	const char *savedName = "<file_error>";
 
 	if (_soundHandle._resource)
 		savedName = _soundHandle._resource->_name.c_str();
 
-	int16 savedLength = (int16)strlen(savedName);
+	bool isPs2 = _sounds->getEngine()->getGamePlatform() == Common::kPlatformPS2;
+	int savedLength = (int)strlen(savedName);
 	byte positionBytes[kSavedPositionSize];
 	byte loopFlag = 0;
 	byte pausedFlag = 0;
@@ -1012,16 +1066,32 @@ bool CSoundCue::save(SaveRestoreAccess *access) {
 
 	int savedPositionMs = getPositionMs(nullptr);
 
-	access(&savedLength, sizeof(savedLength));
-	access(const_cast<char *>(savedName), savedLength);
-	access(&_category, sizeof(_category));
-	access(&loopFlag, sizeof(loopFlag));
-	access(&pausedFlag, sizeof(pausedFlag));
-	access(&_volume, sizeof(_volume));
-	access(positionBytes, kSavedPositionSize);
-	access(&savedPositionMs, sizeof(savedPositionMs));
-	access(&_pan, sizeof(_pan));
-	access(&_handle, sizeof(_handle));
+	if (isPs2) {
+		// The text goes out with its terminator
+		savedLength++;
+		accessFunc(&savedLength, sizeof(savedLength));
+	} else {
+		int16 shortLength = (int16)savedLength;
+
+		accessFunc(&shortLength, sizeof(shortLength));
+	}
+
+	accessFunc(const_cast<char *>(savedName), savedLength);
+	accessFunc(&_category, sizeof(_category));
+	accessFunc(&loopFlag, sizeof(loopFlag));
+	accessFunc(&pausedFlag, sizeof(pausedFlag));
+	accessFunc(&_volume, sizeof(_volume));
+	accessFunc(positionBytes, kSavedPositionSize);
+	accessFunc(&savedPositionMs, sizeof(savedPositionMs));
+	accessFunc(&_pan, sizeof(_pan));
+
+	if (isPs2) {
+		accessFunc(&_handle, sizeof(_handle));
+	} else {
+		uint16 shortHandle = (uint16)_handle;
+
+		accessFunc(&shortHandle, sizeof(shortHandle));
+	}
 
 	return true;
 }

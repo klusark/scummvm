@@ -45,13 +45,13 @@ int Lua_V2::doExitCallback() {
 			lua_pushobject(handler);
 			lua_callfunction(function);
 		} else {
-			_engine->getConsoleServices()->logError("Installed exitHandler has no member func '%s'\n", "exitHandler");
+			logMessage(kConsoleError, "Installed exitHandler has no member func '%s'\n", "exitHandler");
 		}
 	} else if (lua_isfunction(handler)) {
 		called = true;
 		lua_callfunction(handler);
 	} else if (!lua_isnil(handler)) {
-		_engine->getConsoleServices()->logError("Installed exitHandler is invalid.\n");
+		logMessage(kConsoleError, "Installed exitHandler is invalid.\n");
 	}
 
 	lua_endblock();
@@ -79,13 +79,13 @@ int Lua_V2::doPauseCallback() {
 			lua_pushobject(handler);
 			lua_callfunction(function);
 		} else {
-			_engine->getConsoleServices()->logError("Installed pauseHandler has no member func '%s'\n", "pauseHandler");
+			logMessage(kConsoleError, "Installed pauseHandler has no member func '%s'\n", "pauseHandler");
 		}
 	} else if (lua_isfunction(handler)) {
 		called = true;
 		lua_callfunction(handler);
 	} else if (!lua_isnil(handler)) {
-		_engine->getConsoleServices()->logError("Installed pauseHandler is invalid.\n");
+		logMessage(kConsoleError, "Installed pauseHandler is invalid.\n");
 	}
 
 	lua_endblock();
@@ -115,14 +115,14 @@ int Lua_V2::doCharacterCallback(int character) {
 			callHandler = true;
 			lua_pushobject(handler);
 		} else {
-			_engine->getConsoleServices()->logError("Installed characterHandler has no member func '%s'\n", "characterHandler");
+			logMessage(kConsoleError, "Installed characterHandler has no member func '%s'\n", "characterHandler");
 		}
 	} else if (lua_isfunction(handler)) {
 		function = handler;
 		called = true;
 		callHandler = true;
 	} else if (!lua_isnil(handler)) {
-		_engine->getConsoleServices()->logError("Installed character handler is invalid.\n");
+		logMessage(kConsoleError, "Installed character handler is invalid.\n");
 	}
 
 	if (callHandler) {

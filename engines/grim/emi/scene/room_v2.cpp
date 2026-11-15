@@ -32,6 +32,7 @@
 #include "engines/grim/emi/graphics/color.h"
 #include "engines/grim/emi/math/cquaternion.h"
 #include "engines/grim/emi/emiengine.h"
+#include "engines/grim/emi/input/demoreplay.h"
 #include "engines/grim/emi/input/inputrecorder.h"
 #include "engines/grim/emi/math/irect.h"
 #include "engines/grim/emi/core/lconsoleservices.h"
@@ -545,13 +546,16 @@ void Room_v2::setSoundParameters(float newMaxDist, char newMinVol, char newMaxVo
 	_maxRadius = newMaxRadius;
 }
 
-bool Room_v2::save(SaveRestoreAccess *access) {
-	access(&_currentSetup, sizeof(_currentSetup));
-	access(&_minVol, sizeof(_minVol));
-	access(&_maxVol, sizeof(_maxVol));
-	access(&_maxDist, sizeof(_maxDist));
-	access(&_panFactor, sizeof(_panFactor));
-	access(&_maxRadius, sizeof(_maxRadius));
+bool Room_v2::save(SaveRestoreAccess *accessFunc) {
+	accessFunc(&_currentSetup, sizeof(_currentSetup));
+
+	if (_engine->getGamePlatform() != Common::kPlatformPS2) {
+		accessFunc(&_minVol, sizeof(_minVol));
+		accessFunc(&_maxVol, sizeof(_maxVol));
+		accessFunc(&_maxDist, sizeof(_maxDist));
+		accessFunc(&_panFactor, sizeof(_panFactor));
+		accessFunc(&_maxRadius, sizeof(_maxRadius));
+	}
 
 	Common::List<CLightNode *>::iterator it;
 
@@ -567,32 +571,35 @@ bool Room_v2::save(SaveRestoreAccess *access) {
 			position[0] = lightNode->_world._pos._x;
 			position[1] = lightNode->_world._pos._y;
 			position[2] = lightNode->_world._pos._z;
-			access(position, sizeof(position));
+			accessFunc(position, sizeof(position));
 
 			byte activeByte = lightNode->_active ? 1 : 0;
 
-			access(&activeByte, sizeof(activeByte));
+			accessFunc(&activeByte, sizeof(activeByte));
 		}
 	}
 
 	for (int i = 0; i < _numSetups; i++)
-		_setups[i].save(access);
+		_setups[i].save(accessFunc);
 
 	if (_walkPlanes)
-		_walkPlanes->save(access);
+		_walkPlanes->save(accessFunc);
 	else
 		warning("Room_v2::save(): the room has no sectors");
 
 	return true;
 }
 
-bool Room_v2::restore(SaveRestoreAccess *access) {
-	access(&_currentSetup, sizeof(_currentSetup));
-	access(&_minVol, sizeof(_minVol));
-	access(&_maxVol, sizeof(_maxVol));
-	access(&_maxDist, sizeof(_maxDist));
-	access(&_panFactor, sizeof(_panFactor));
-	access(&_maxRadius, sizeof(_maxRadius));
+bool Room_v2::restore(SaveRestoreAccess *accessFunc) {
+	accessFunc(&_currentSetup, sizeof(_currentSetup));
+
+	if (_engine->getGamePlatform() != Common::kPlatformPS2) {
+		accessFunc(&_minVol, sizeof(_minVol));
+		accessFunc(&_maxVol, sizeof(_maxVol));
+		accessFunc(&_maxDist, sizeof(_maxDist));
+		accessFunc(&_panFactor, sizeof(_panFactor));
+		accessFunc(&_maxRadius, sizeof(_maxRadius));
+	}
 
 	Common::List<CLightNode *>::iterator it;
 
@@ -602,7 +609,7 @@ bool Room_v2::restore(SaveRestoreAccess *access) {
 		if (lightNode) {
 			float position[3] = { 0.0f, 0.0f, 0.0f };
 
-			access(position, sizeof(position));
+			accessFunc(position, sizeof(position));
 
 			CVector newPosition;
 
@@ -613,16 +620,16 @@ bool Room_v2::restore(SaveRestoreAccess *access) {
 
 			byte activeByte = 0;
 
-			access(&activeByte, sizeof(activeByte));
+			accessFunc(&activeByte, sizeof(activeByte));
 			lightNode->setActive(activeByte != 0);
 		}
 	}
 
 	for (int i = 0; i < _numSetups; i++)
-		_setups[i].restore(access);
+		_setups[i].restore(accessFunc);
 
 	if (_walkPlanes)
-		_walkPlanes->restore(access);
+		_walkPlanes->restore(accessFunc);
 	else
 		warning("Room_v2::restore(): the room has no sectors");
 
@@ -655,27 +662,27 @@ void Room_v2::shutdown(EmiEngine *engine) {
 	engine->_roomsStarted = false;
 }
 
-void Room_v2::saveCurrentRoom(EmiEngine *engine, SaveRestoreAccess *access) {
+void Room_v2::saveCurrentRoom(EmiEngine *engine, SaveRestoreAccess *accessFunc) {
 	if (engine->_currentRoom) {
 		uint length = engine->_currentRoom->_name.size() + 1;
 
-		access(&length, sizeof(length));
-		access((void *)engine->_currentRoom->_name.c_str(), length);
-		engine->_currentRoom->save(access);
-		Layer::saveRestoreNextId(engine, access);
+		accessFunc(&length, sizeof(length));
+		accessFunc((void *)engine->_currentRoom->_name.c_str(), length);
+		engine->_currentRoom->save(accessFunc);
+		Layer::saveRestoreNextId(engine, accessFunc);
 	} else {
 		int noRoom = 0;
 
-		access(&noRoom, sizeof(noRoom));
-		Layer::saveRestoreNextId(engine, access);
+		accessFunc(&noRoom, sizeof(noRoom));
+		Layer::saveRestoreNextId(engine, accessFunc);
 	}
 }
 
-void Room_v2::restoreCurrentRoom(EmiEngine *engine, SaveRestoreAccess *access) {
+void Room_v2::restoreCurrentRoom(EmiEngine *engine, SaveRestoreAccess *accessFunc) {
 	char buffer[kSavedRoomNameSize + 1];
 	uint length = 0;
 
-	access(&length, sizeof(length));
+	accessFunc(&length, sizeof(length));
 
 	if (length) {
 		if (length > kSavedRoomNameSize) {
@@ -684,17 +691,17 @@ void Room_v2::restoreCurrentRoom(EmiEngine *engine, SaveRestoreAccess *access) {
 			return;
 		}
 
-		access(buffer, length);
+		accessFunc(buffer, length);
 		buffer[length] = 0;
 		loadRoom(engine, buffer);
 
 		if (engine->_currentRoom)
-			engine->_currentRoom->restore(access);
+			engine->_currentRoom->restore(accessFunc);
 		else
 			warning("Room_v2::restoreCurrentRoom(): the room could not be loaded");
 	}
 
-	Layer::saveRestoreNextId(engine, access);
+	Layer::saveRestoreNextId(engine, accessFunc);
 }
 
 Layer *Room_v2::findLayerById(EmiEngine *engine, int layerId) {
@@ -778,9 +785,11 @@ void Room_v2::loadRoom(EmiEngine *engine, const char *roomName) {
 	engine->_currentRoom->setSoundParameters(8.0f, 20, 127, 1.5f, 0.8f);
 	engine->_currentRoom->setLightsActive(true);
 
-	if (engine->getInputRecorder())
+	if (engine->getDemoReplay())
+		engine->getDemoReplay()->consumeSet();
+	else if (engine->getInputRecorder())
 		engine->getInputRecorder()->recordRoom(roomName);
-	else
+	else if (engine->getGamePlatform() != Common::kPlatformPS2)
 		warning("Room_v2::loadRoom(): there is no input recorder");
 }
 

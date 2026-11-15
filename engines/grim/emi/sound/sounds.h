@@ -52,8 +52,8 @@ public:
 	static float soundVolumeToGain(int volume);
 	static int soundGainToVolume(float gain);
 
-	uint16 registerSound(CSoundCue *cue);
-	void unregisterSound(uint16 soundHandle);
+	uint registerSound(CSoundCue *cue);
+	void unregisterSound(uint soundHandle);
 	CSoundCue *findSoundCue(uint soundHandle);
 	bool isCueRegistered(CSoundCue *cue);
 	bool soundsUpdate(const bool *force);
@@ -63,10 +63,11 @@ public:
 	void releaseAllSounds();
 	void releaseUnlockedSounds();
 	void soundCueLipCallback(const char *soundName, CSoundCue *cue);
-	void saveSounds(SaveRestoreAccess *access);
-	void restoreSounds(SaveRestoreAccess *access);
+	void saveSounds(SaveRestoreAccess *accessFunc);
+	void restoreSounds(SaveRestoreAccess *accessFunc);
 	void setSoundSystemEnabled(bool enabled);
 	void setMusicSystemEnabled(bool enabled);
+	uint getLoadFailure() const;
 	uint loadSound(const char *soundName, int category);
 	uint loadSound(const LString &soundName, int category);
 	void playSound(const LString &soundName, int volume);
@@ -80,6 +81,7 @@ public:
 	void resumeSound(uint soundHandle);
 	bool isSoundPlaying(uint soundHandle);
 	bool isSoundPlayingNoFiniteLoop(uint soundHandle);
+	bool isSoundPlayingPs2(uint soundHandle, const char *source);
 	bool isSoundPaused(uint soundHandle);
 	void setSoundPosition(uint soundHandle, float x, float y, float z);
 	bool setSoundVolume(uint soundHandle, int volume);
@@ -108,8 +110,8 @@ public:
 	int stopMusic();
 	void setMusicVolume(float volume);
 	void setMusicState(int newState, int startMs, const bool &immediate);
-	void saveMusicState(SaveRestoreAccess *access);
-	void restoreMusicState(SaveRestoreAccess *access);
+	void saveMusicState(SaveRestoreAccess *accessFunc);
+	void restoreMusicState(SaveRestoreAccess *accessFunc);
 	void pauseMusicStreams();
 	void resumeMusicStreams();
 	void stopAllMusic();
@@ -118,6 +120,7 @@ public:
 	void pushMusicState(int musicId, const bool &immediate);
 	void popMusicState(const bool &immediate);
 	void flushMusicStateStack();
+	int takePushedMusicState();
 	int getMusicPositionMs(const uint &musicId);
 	void killMusicAndWait(bool loadingLoop);
 	void killMusicForSet(const char *setName);
@@ -144,7 +147,7 @@ private:
 	StreamScript *_streamScript;
 	DemoMusicScript *_demoMusic;
 	CSoundCue::SoundCueMap _soundMap;
-	uint16 _soundCounter;
+	int _soundCounter;
 	int16 _audioMixAhead;
 	bool _soundsEnabled;
 	bool _musicEnabled;

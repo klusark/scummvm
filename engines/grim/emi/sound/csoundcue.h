@@ -62,7 +62,7 @@ public:
 	static const uint kFlagInRange = 0x40000000;
 	static const uint kFlagReleaseWhenDone = 0x80000000;
 
-	typedef Common::HashMap<uint16, CSoundCue *> SoundCueMap;
+	typedef Common::HashMap<uint, CSoundCue *> SoundCueMap;
 
 	CSoundCue(Sounds *sounds, LResourceHandle<CSnd> *sndHandle, CNode *node);
 	CSoundCue(Sounds *sounds, const LString &name, CNode *node);
@@ -83,8 +83,8 @@ public:
 	static void releaseUnlockedCues(Sounds *sounds);
 	static void updateSoundCues(Sounds *sounds);
 	static bool stopCueToFreeChannel(Sounds *sounds, bool finiteLoopsFirst, bool anyNonLooping);
-	static bool saveCues(Sounds *sounds, SaveRestoreAccess *access);
-	static bool restoreCues(Sounds *sounds, SaveRestoreAccess *access, SoundCueMap *cueMap);
+	static bool saveCues(Sounds *sounds, SaveRestoreAccess *accessFunc);
+	static bool restoreCues(Sounds *sounds, SaveRestoreAccess *accessFunc, SoundCueMap *cueMap, const void *lipData, int lipSize);
 
 	int getSoundType();
 	bool start(bool releaseWhenDone);
@@ -112,7 +112,7 @@ public:
 	int getState();
 	int getPositionMs(int *totalMs);
 	void setPositionMs(int milliseconds);
-	bool save(SaveRestoreAccess *access);
+	bool save(SaveRestoreAccess *accessFunc);
 
 	CSoundCue *_prev;
 	CSoundCue *_next;
@@ -136,7 +136,7 @@ public:
 	int _group;
 	LipData *_lipData;
 	uint _lipSize;
-	uint16 _handle;
+	int _handle;
 	int _category;
 	LResourceHandle<LSound> _soundHandle;
 

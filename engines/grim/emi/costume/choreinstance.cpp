@@ -427,7 +427,7 @@ bool ChoreInstance::setLooping(bool looping) {
 	return true;
 }
 
-bool ChoreInstance::save(SaveRestoreAccess *access) {
+bool ChoreInstance::save(SaveRestoreAccess *accessFunc) {
 	LString choreSetName;
 
 	if (_resource)
@@ -437,21 +437,21 @@ bool ChoreInstance::save(SaveRestoreAccess *access) {
 
 	int length = (int)choreSetName.size() + 1;
 
-	access(&length, sizeof(length));
-	access((void *)choreSetName.c_str(), length);
+	accessFunc(&length, sizeof(length));
+	accessFunc((void *)choreSetName.c_str(), length);
 
 	length = (int)_choreName.size() + 1;
 
-	access(&length, sizeof(length));
-	access((void *)_choreName.c_str(), length);
-	access(&_time, sizeof(_time));
-	access(&_stopTime, sizeof(_stopTime));
-	access(&_flags, sizeof(_flags));
+	accessFunc(&length, sizeof(length));
+	accessFunc((void *)_choreName.c_str(), length);
+	accessFunc(&_time, sizeof(_time));
+	accessFunc(&_stopTime, sizeof(_stopTime));
+	accessFunc(&_flags, sizeof(_flags));
 
 	return true;
 }
 
-bool ChoreInstance::restore(SaveRestoreAccess *access) {
+bool ChoreInstance::restore(SaveRestoreAccess *accessFunc) {
 	char buffer[kRestoreBufferSize + 1];
 	int length;
 	LString choreSetName;
@@ -459,7 +459,7 @@ bool ChoreInstance::restore(SaveRestoreAccess *access) {
 	float savedTime;
 	uint savedFlags;
 
-	access(&length, sizeof(length));
+	accessFunc(&length, sizeof(length));
 
 	if (length < 1 || length > kRestoreBufferSize) {
 		warning("ChoreInstance::restore(): invalid chore set name length %d", length);
@@ -467,11 +467,11 @@ bool ChoreInstance::restore(SaveRestoreAccess *access) {
 		return false;
 	}
 
-	access(buffer, length);
+	accessFunc(buffer, length);
 	buffer[length] = 0;
 	choreSetName = buffer;
 
-	access(&length, sizeof(length));
+	accessFunc(&length, sizeof(length));
 
 	if (length < 1 || length > kRestoreBufferSize) {
 		warning("ChoreInstance::restore(): invalid chore name length %d", length);
@@ -479,15 +479,15 @@ bool ChoreInstance::restore(SaveRestoreAccess *access) {
 		return false;
 	}
 
-	access(buffer, length);
+	accessFunc(buffer, length);
 	buffer[length] = 0;
 	restoredChoreName = buffer;
 
 	bind(restoredChoreName, choreSetName);
 
-	access(&savedTime, sizeof(savedTime));
-	access(&_stopTime, sizeof(_stopTime));
-	access(&savedFlags, sizeof(savedFlags));
+	accessFunc(&savedTime, sizeof(savedTime));
+	accessFunc(&_stopTime, sizeof(_stopTime));
+	accessFunc(&savedFlags, sizeof(savedFlags));
 
 	_flags = kPlaying;
 

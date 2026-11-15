@@ -168,11 +168,15 @@ void Lua_V2::NukeAllScriptLocks() {
 		if (roomHandle.lock() && roomHandle._typed) {
 			Room_v2 *room = roomHandle._typed;
 
-			room->_lockCount--;
-			_engine->getResourceManager()->unlockResource(room);
+			if (_engine->getGamePlatform() == Common::kPlatformPS2 && room->_lockCount <= 0) {
+				logMessage(kConsoleError, "Attempted to unlock a non-locked resource (%s) !\n", _lockedRooms[i].c_str());
+			} else {
+				room->_lockCount--;
+				_engine->getResourceManager()->unlockResource(room);
 
-			if (room->_lockCount == 0 && room->_purgeOnFree)
-				_engine->getResourceManager()->purgeResource(room, true);
+				if (room->_lockCount == 0 && room->_purgeOnFree)
+					_engine->getResourceManager()->purgeResource(room, true);
+			}
 		}
 
 		roomHandle.unlock();
@@ -181,6 +185,12 @@ void Lua_V2::NukeAllScriptLocks() {
 	_lockedRooms.clear();
 
 	for (uint i = 0; i < _lockedBackgrounds.size(); i++) {
+		if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+			unlockBackgroundWithScene(_lockedBackgrounds[i], false);
+
+			continue;
+		}
+
 		LResourceHandle<Background> backgroundHandle(_engine, _lockedBackgrounds[i]);
 
 		if (backgroundHandle.lock() && backgroundHandle._typed) {

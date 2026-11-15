@@ -61,10 +61,19 @@ void SndInstance::setKey(float value, float elapsed, float nextValue, float rema
 		loop = true;
 		// Fall through
 	case 2:
-		if (sounds->isSoundPaused(_soundHandle))
+		if (sounds->isSoundPaused(_soundHandle)) {
 			sounds->resumeSound(_soundHandle);
-		else if (!sounds->isSoundPlaying(_soundHandle))
-			sounds->startSound(_soundHandle, 0, loop, 100);
+		} else {
+			bool isPlaying;
+
+			if (_engine->getGamePlatform() == Common::kPlatformPS2)
+				isPlaying = sounds->isSoundPlayingPs2(_soundHandle, "a costume sound");
+			else
+				isPlaying = sounds->isSoundPlaying(_soundHandle);
+
+			if (!isPlaying)
+				sounds->startSound(_soundHandle, 0, loop, 100);
+		}
 
 		break;
 	case 3:

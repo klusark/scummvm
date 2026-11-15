@@ -365,71 +365,70 @@ void AudioSystem::stopAllChannels() {
 		_device->stopAll();
 }
 
-bool AudioSystem::saveAudioSettings(SaveRestoreAccess *access) {
-	access(&_devicePreference, sizeof(_devicePreference));
-	access(&_masterGain, sizeof(_masterGain));
-	access(&_categoryGain[0], sizeof(float));
-	access(&_categoryGain[1], sizeof(float));
-	access(&_categoryGain[2], sizeof(float));
+bool AudioSystem::saveAudioSettings(SaveRestoreAccess *accessFunc) {
+	accessFunc(&_devicePreference, sizeof(_devicePreference));
+	accessFunc(&_masterGain, sizeof(_masterGain));
+	accessFunc(&_categoryGain[0], sizeof(float));
+	accessFunc(&_categoryGain[1], sizeof(float));
+	accessFunc(&_categoryGain[2], sizeof(float));
 
-	// PS2 keeps the PC layout and stores the four Sony values in the preset and the first floats
 	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
-		int type = _sonyReverbType;
-		float values[5];
-
-		values[0] = (float)_sonyReverbDepth;
-		values[1] = (float)_sonyReverbDelay;
-		values[2] = (float)_sonyReverbFeedback;
-		values[3] = -1.0f;
-		values[4] = -1.0f;
-
-		access(&type, sizeof(type));
-
-		for (int i = 0; i < 5; i++)
-			access(&values[i], sizeof(float));
+		accessFunc(&_sonyReverbType, sizeof(_sonyReverbType));
+		accessFunc(&_sonyReverbDepth, sizeof(_sonyReverbDepth));
+		accessFunc(&_sonyReverbDelay, sizeof(_sonyReverbDelay));
+		accessFunc(&_sonyReverbFeedback, sizeof(_sonyReverbFeedback));
 
 		return true;
 	}
 
-	access(&_reverbPreset, sizeof(_reverbPreset));
+	accessFunc(&_reverbPreset, sizeof(_reverbPreset));
 
 	for (int i = 0; i < 5; i++)
-		access(&_reverbValues[i], sizeof(float));
+		accessFunc(&_reverbValues[i], sizeof(float));
 
 	return true;
 }
 
-bool AudioSystem::restoreAudioSettings(SaveRestoreAccess *access) {
+bool AudioSystem::restoreAudioSettings(SaveRestoreAccess *accessFunc) {
 	uint16 preference = 0;
 	float restoredValue = 0.0f;
 	int restoredPreset = 0;
 	float restoredReverb[5];
 
-	access(&preference, sizeof(preference));
+	accessFunc(&preference, sizeof(preference));
 	setAudioDevicePreference(&preference);
 
-	access(&restoredValue, sizeof(restoredValue));
+	accessFunc(&restoredValue, sizeof(restoredValue));
 	setMasterGain(restoredValue);
 
-	access(&restoredValue, sizeof(restoredValue));
+	accessFunc(&restoredValue, sizeof(restoredValue));
 	setCategoryGain(1, restoredValue);
 
-	access(&restoredValue, sizeof(restoredValue));
+	accessFunc(&restoredValue, sizeof(restoredValue));
 	setCategoryGain(2, restoredValue);
 
-	access(&restoredValue, sizeof(restoredValue));
+	accessFunc(&restoredValue, sizeof(restoredValue));
 	setCategoryGain(3, restoredValue);
 
-	access(&restoredPreset, sizeof(restoredPreset));
-
-	for (int i = 0; i < 5; i++)
-		access(&restoredReverb[i], sizeof(float));
-
 	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
-		setSonyReverb(restoredPreset, (int)restoredReverb[0], (int)restoredReverb[1], (int)restoredReverb[2]);
+		int type = 0;
+		int depth = 0;
+		int delay = 0;
+		int feedback = 0;
+
+		accessFunc(&type, sizeof(type));
+		accessFunc(&depth, sizeof(depth));
+		accessFunc(&delay, sizeof(delay));
+		accessFunc(&feedback, sizeof(feedback));
+		setSonyReverb(type, depth, delay, feedback);
 
 		return true;
 	}
+
+	accessFunc(&restoredPreset, sizeof(restoredPreset));
+
+	for (int i = 0; i < 5; i++)
+		accessFunc(&restoredReverb[i], sizeof(float));
 
 	setGlobalReverb(restoredPreset, &restoredReverb[0], &restoredReverb[1], &restoredReverb[2], &restoredReverb[3], &restoredReverb[4]);
 

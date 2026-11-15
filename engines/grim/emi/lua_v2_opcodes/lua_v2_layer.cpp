@@ -39,7 +39,7 @@ void Lua_V2::NewLayer() {
 	Room_v2 *currentRoom = Room_v2::getCurrentRoom(_engine);
 
 	if (!currentRoom) {
-		logDemo(kConsoleWarning, "NewLayer: there is no current set.\n");
+		logMessage(kConsoleWarning, "NewLayer: No current Set!\n");
 		lua_pushnil();
 
 		return;
@@ -78,10 +78,7 @@ void Lua_V2::FreeLayer() {
 			currentRoom->_setups[currentRoom->_currentSetup].removeLayerById(layerId);
 		}
 	} else {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logError("FreeLayer first parm must be a layer");
-		else
-			warning("FreeLayer first parm must be a layer");
+		logMessage(kConsoleError, "FreeLayer first parm must be a layer");
 	}
 }
 
@@ -96,16 +93,10 @@ void Lua_V2::SetLayerSortOrder() {
 
 			layer->_sortOrder = luaFtol(lua_getnumber(sortOrderObj));
 		} else {
-			if (_engine->getConsoleServices())
-				_engine->getConsoleServices()->logError("SetLayerSortOrder layer not found.\n");
-			else
-				warning("SetLayerSortOrder layer not found.");
+			logMessage(kConsoleError, "SetLayerSortOrder layer not found.\n");
 		}
 	} else {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logError("SetLayerSortOrder first parm must be a layer");
-		else
-			warning("SetLayerSortOrder first parm must be a layer");
+		logMessage(kConsoleError, "SetLayerSortOrder first parm must be a layer");
 	}
 }
 
@@ -118,16 +109,10 @@ void Lua_V2::GetLayerSortOrder() {
 		if (layer) {
 			lua_pushnumber((float)layer->_sortOrder);
 		} else {
-			if (_engine->getConsoleServices())
-				_engine->getConsoleServices()->logError("GetLayerSortOrder: layer not found.\n");
-			else
-				warning("GetLayerSortOrder: layer not found.");
+			logMessage(kConsoleError, "GetLayerSortOrder: layer not found.\n");
 		}
 	} else {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logError("GetLayerSortOrder first parm must be a layer");
-		else
-			warning("GetLayerSortOrder first parm must be a layer");
+		logMessage(kConsoleError, "GetLayerSortOrder first parm must be a layer");
 	}
 }
 
@@ -140,16 +125,10 @@ void Lua_V2::GetLayerFrame() {
 		if (layer) {
 			lua_pushnumber((float)layer->_frame);
 		} else {
-			if (_engine->getConsoleServices())
-				_engine->getConsoleServices()->logError("GetLayerCurFrame: layer not found.\n");
-			else
-				warning("GetLayerCurFrame: layer not found.");
+			logMessage(kConsoleError, "GetLayerCurFrame: layer not found.\n");
 		}
 	} else {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logError("GetLayerCurFrame first parm must be a layer");
-		else
-			warning("GetLayerCurFrame first parm must be a layer");
+		logMessage(kConsoleError, "GetLayerCurFrame first parm must be a layer");
 	}
 }
 
@@ -164,16 +143,10 @@ void Lua_V2::SetLayerFrame() {
 
 			layer->_frame = luaFtol(lua_getnumber(frameObj));
 		} else {
-			if (_engine->getConsoleServices())
-				_engine->getConsoleServices()->logError("SetLayerCurFrame: layer not found.\n");
-			else
-				warning("SetLayerCurFrame: layer not found.");
+			logMessage(kConsoleError, "SetLayerCurFrame: layer not found.\n");
 		}
 	} else {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logError("SetLayerCurFrame first parm must be a layer");
-		else
-			warning("SetLayerCurFrame first parm must be a layer");
+		logMessage(kConsoleError, "SetLayerCurFrame first parm must be a layer");
 	}
 }
 
@@ -188,16 +161,10 @@ void Lua_V2::AdvanceLayerFrame() {
 
 			layer->_frame += luaFtol(lua_getnumber(frameObj));
 		} else {
-			if (_engine->getConsoleServices())
-				_engine->getConsoleServices()->logError("AdvanceLayerCurFrame: layer not found.\n");
-			else
-				warning("AdvanceLayerCurFrame: layer not found.");
+			logMessage(kConsoleError, "AdvanceLayerCurFrame: layer not found.\n");
 		}
 	} else {
-		if (_engine->getConsoleServices())
-			_engine->getConsoleServices()->logError("AdvanceLayerCurFrame: first parm must be a layer");
-		else
-			warning("AdvanceLayerCurFrame: first parm must be a layer");
+		logMessage(kConsoleError, "AdvanceLayerCurFrame: first parm must be a layer");
 	}
 }
 

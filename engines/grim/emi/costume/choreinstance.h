@@ -67,8 +67,8 @@ public:
 	bool complete();
 	bool update(float deltaTime, bool replay);
 	bool setLooping(bool looping);
-	bool save(SaveRestoreAccess *access);
-	bool restore(SaveRestoreAccess *access);
+	bool save(SaveRestoreAccess *accessFunc);
+	bool restore(SaveRestoreAccess *accessFunc);
 
 	static uint newInstanceWithId(EmiEngine *engine, Actor *actor, uint instanceId);
 	static uint newInstance(EmiEngine *engine, Actor *actor, const LString &newChoreName, const LString &choreSetName);

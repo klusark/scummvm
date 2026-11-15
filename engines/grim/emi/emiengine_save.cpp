@@ -20,6 +20,7 @@
  */
 
 #include "common/language.h"
+#include "common/memstream.h"
 #include "common/platform.h"
 #include "common/savefile.h"
 #include "common/stream.h"
@@ -39,6 +40,7 @@
 #include "engines/grim/emi/core/lconsoleservices.h"
 #include "engines/grim/emi/core/lmemoryservices.h"
 #include "engines/grim/emi/lua_v2_opcodes/lua_v2.h"
+#include "engines/grim/emi/movie/movie.h"
 #include "engines/grim/emi/scene/overworld.h"
 #include "engines/grim/emi/resources/resourcemanager.h"
 #include "engines/grim/emi/scene/room_v2.h"
@@ -238,10 +240,10 @@ int EmiEngine::readSaveData(void *data, int bytes) {
 	return 1;
 }
 
-bool EmiEngine::readSavedText(char *buffer, int bufferSize) {
+bool EmiEngine::readSavedText(SaveRestoreAccess *accessFunc, char *buffer, int bufferSize) {
 	int length = 0;
 
-	readSaveData(&length, sizeof(length));
+	accessFunc(&length, sizeof(length));
 
 	if (length < 0 || length > bufferSize) {
 		warning("EmiEngine::readSavedText(): invalid text length %d", length);
@@ -250,7 +252,7 @@ bool EmiEngine::readSavedText(char *buffer, int bufferSize) {
 		return false;
 	}
 
-	readSaveData(buffer, length);
+	accessFunc(buffer, length);
 
 	if (length == 0) {
 		buffer[0] = 0;
@@ -260,6 +262,13 @@ bool EmiEngine::readSavedText(char *buffer, int bufferSize) {
 	}
 
 	return true;
+}
+
+void EmiEngine::writeSavedText(SaveRestoreAccess *accessFunc, const LString &text) {
+	int length = (int)text.size() + 1;
+
+	accessFunc(&length, sizeof(length));
+	accessFunc((void *)text.c_str(), length);
 }
 
 LABitmap *EmiEngine::getScreenBitmap() {
@@ -419,10 +428,12 @@ bool EmiEngine::makeThumbnailTexture(int index, bool fromScreen) {
 }
 
 bool EmiEngine::loadThumbnailTexture(int index, const char *fileName) {
+	bool isPs2 = getGamePlatform() == Common::kPlatformPS2;
 	LABitmap bitmap(this);
 	LColorFormat rgbFormat(6);
+	LColorFormat imageFormat(isPs2 ? 15 : 6);
 
-	bitmap.create(kThumbnailTextureWidth, kThumbnailTextureHeight, rgbFormat, nullptr);
+	bitmap.create(kThumbnailTextureWidth, kThumbnailTextureHeight, imageFormat, nullptr);
 
 	_saveFile = static_cast<ZFile *>(openSaveFile(fileName, "rb"));
 
@@ -430,11 +441,15 @@ bool EmiEngine::loadThumbnailTexture(int index, const char *fileName) {
 		return false;
 
 	int tableSize = 0;
-	char version[kSavedTextBufferSize + 1];
 
 	readSaveData(&tableSize, sizeof(tableSize));
 	_saveFile->seek(tableSize, 1);
-	readSavedText(version, kSavedTextBufferSize);
+
+	if (!isPs2) {
+		char version[kSavedTextBufferSize + 1];
+
+		readSavedText(readSaveData, version, kSavedTextBufferSize);
+	}
 
 	uint imageSize = 0;
 
@@ -448,6 +463,9 @@ bool EmiEngine::loadThumbnailTexture(int index, const char *fileName) {
 	readSaveData(bitmap._pixels, imageSize);
 	closeSaveFile(_saveFile);
 	_saveFile = nullptr;
+
+	if (isPs2)
+		bitmap.convertFormat(rgbFormat);
 
 	if (!_drawContext) {
 		warning("EmiEngine::loadThumbnailTexture(): no draw context");
@@ -587,15 +605,6 @@ void EmiEngine::saveGame(CDrawContext *drawContext) {
 	if (_saveFile) {
 		_lua->saveGameCallback(writeSaveData);
 
-		LString version;
-
-		_lua->getVersion(version);
-
-		int length = (int)version.size() + 1;
-
-		writeSaveData(&length, sizeof(length));
-		writeSaveData((void *)version.c_str(), length);
-
 		LColorFormat rgbFormat(6);
 		LABitmap *screen = getScreenBitmap();
 
@@ -605,12 +614,23 @@ void EmiEngine::saveGame(CDrawContext *drawContext) {
 			LABitmap thumbnail(this);
 
 			scaleToThumbnail(screen, &thumbnail);
+			thumbnail.convertFormat(LColorFormat(15));
 
 			int imageSize = thumbnail._sizeBytes;
 
 			writeSaveData(&imageSize, sizeof(imageSize));
 			writeSaveData(thumbnail._pixels, imageSize);
+			saveGameData(writeSaveData);
 		} else {
+			LString version;
+
+			_lua->getVersion(version);
+
+			int length = (int)version.size() + 1;
+
+			writeSaveData(&length, sizeof(length));
+			writeSaveData((void *)version.c_str(), length);
+
 			LABitmap halved(this);
 
 			halveBitmap(screen, &halved);
@@ -641,20 +661,20 @@ void EmiEngine::saveGame(CDrawContext *drawContext) {
 
 			writeSaveData(&imageSize, sizeof(imageSize));
 			writeSaveData(thumbnail._pixels, imageSize);
+
+			length = (int)_island.size() + 1;
+
+			writeSaveData(&length, sizeof(length));
+			writeSaveData((void *)_island.c_str(), length);
+
+			Room_v2::saveCurrentRoom(this, writeSaveData);
+			Actor::saveActors(this, writeSaveData);
+			TextEvent::saveAll(this, writeSaveData);
+			_sounds->saveSounds(writeSaveData);
+			_sounds->saveMusicState(writeSaveData);
+			_lua->saveLocks(writeSaveData);
+			lua_Save(writeSaveData);
 		}
-
-		length = (int)_island.size() + 1;
-
-		writeSaveData(&length, sizeof(length));
-		writeSaveData((void *)_island.c_str(), length);
-
-		Room_v2::saveCurrentRoom(this, writeSaveData);
-		Actor::saveActors(this, writeSaveData);
-		TextEvent::saveAll(this, writeSaveData);
-		_sounds->saveSounds(writeSaveData);
-		_sounds->saveMusicState(writeSaveData);
-		_lua->saveLocks(writeSaveData);
-		lua_Save(writeSaveData);
 	}
 
 	closeSaveFile(_saveFile);
@@ -683,23 +703,31 @@ void EmiEngine::loadGame(CDrawContext *drawContext) {
 	_libLoadRequest = 0;
 	_saveFile = static_cast<ZFile *>(openSaveFile(_libSaveGameFileName.c_str(), "rb"));
 
-	if (_saveFile) {
+	if (_saveFile && getGamePlatform() == Common::kPlatformPS2) {
+		int skippedSize = 0;
+
+		setSaveLoadIdle(false);
+
+		readSaveData(&skippedSize, sizeof(skippedSize));
+		_saveFile->seek(skippedSize, 1);
+		readSaveData(&skippedSize, sizeof(skippedSize));
+		_saveFile->seek(skippedSize, 1);
+
+		if (getMemoryCardId() >= kMemoryCardFirstId && restoreGameData(readSaveData))
+			_libJustLoaded = 1;
+	} else if (_saveFile) {
 		int tableSize = 0;
 		char text[kSavedTextBufferSize + 1];
 
 		readSaveData(&tableSize, sizeof(tableSize));
 		_saveFile->seek(tableSize, 1);
-		readSavedText(text, kSavedTextBufferSize);
+		readSavedText(readSaveData, text, kSavedTextBufferSize);
 
 		setSaveLoadIdle(false);
 		Lua_V2::static_NukeAllScriptLocks();
 
-		if (getGamePlatform() == Common::kPlatformPS2) {
-			_sounds->stopAllForLoad();
-		} else {
-			_sounds->stopAllMusic();
-			_sounds->releaseAllSounds();
-		}
+		_sounds->stopAllMusic();
+		_sounds->releaseAllSounds();
 
 		ResourceManager *resourceManager = _gameResourceManager;
 
@@ -717,7 +745,7 @@ void EmiEngine::loadGame(CDrawContext *drawContext) {
 
 			readSaveData(&imageSize, sizeof(imageSize));
 			_saveFile->seek(imageSize, 1);
-			readSavedText(text, kSavedTextBufferSize);
+			readSavedText(readSaveData, text, kSavedTextBufferSize);
 			_island = text;
 
 			if (!_island.empty())
@@ -729,11 +757,7 @@ void EmiEngine::loadGame(CDrawContext *drawContext) {
 			_sounds->restoreSounds(readSaveData);
 			_sounds->restoreMusicState(readSaveData);
 			_lua->restoreLocks(readSaveData);
-
-			// PS2 load keeps restored sounds unlocked
-			if (getGamePlatform() != Common::kPlatformPS2)
-				_sounds->releaseUnlockedSounds();
-
+			_sounds->releaseUnlockedSounds();
 			lua_Restore(readSaveData);
 			_lua->updateJoySelected();
 			_libJustLoaded = 1;
@@ -743,6 +767,78 @@ void EmiEngine::loadGame(CDrawContext *drawContext) {
 	closeSaveFile(_saveFile);
 	_saveFile = nullptr;
 	setSaveLoadIdle(true);
+}
+
+void EmiEngine::saveGameData(SaveRestoreAccess *accessFunc) {
+	LString version;
+
+	_lua->getVersion(version);
+	writeSavedText(accessFunc,version);
+	writeSavedText(accessFunc,_island);
+	Room_v2::saveCurrentRoom(this, accessFunc);
+	Actor::saveActors(this, accessFunc);
+	TextEvent::saveAll(this, accessFunc);
+	_sounds->saveSounds(accessFunc);
+	_sounds->saveMusicState(accessFunc);
+	_lua->saveLocks(accessFunc);
+	lua_Save(accessFunc);
+}
+
+void EmiEngine::clearGameState() {
+	Lua_V2::static_NukeAllScriptLocks();
+	_sounds->stopAllForLoad();
+	getOverworld()->clearActors();
+	Actor::freeAllActors(this);
+	Room_v2::loadRoom(this, nullptr);
+
+	if (!_island.empty())
+		_bundleServices->closeIslandBundles(_island.c_str());
+
+	_gameResourceManager->purgeAll();
+}
+
+bool EmiEngine::restoreGameData(SaveRestoreAccess *accessFunc) {
+	char text[kSavedTextBufferSize + 1];
+	LString currentVersion;
+
+	readSavedText(accessFunc,text, kSavedTextBufferSize);
+	_lua->getVersion(currentVersion);
+
+	if (currentVersion != text) {
+		warning("EmiEngine::restoreGameData(): the saved version '%s' differs from '%s'", text, currentVersion.c_str());
+
+		return false;
+	}
+
+	clearGameState();
+	readSavedText(accessFunc,text, kSavedTextBufferSize);
+	_island = text;
+
+	if (!_island.empty())
+		_bundleServices->openIslandBundles(_island.c_str());
+
+	Room_v2::restoreCurrentRoom(this, accessFunc);
+	Actor::restoreActors(this, accessFunc);
+	TextEvent::restoreAll(this, accessFunc);
+	_sounds->restoreSounds(accessFunc);
+	_sounds->restoreMusicState(accessFunc);
+	_lua->restoreLocks(accessFunc);
+	lua_Restore(accessFunc);
+	_lua->updateJoySelected();
+
+	return true;
+}
+
+bool EmiEngine::restoreGameDataFromRam(const byte *data, uint size) {
+	Common::MemoryReadStream reader(data, size);
+
+	_ps2StateReader = &reader;
+
+	bool restored = restoreGameData(Movie::readPs2State);
+
+	_ps2StateReader = nullptr;
+
+	return restored;
 }
 
 bool EmiEngine::isLegacySaveFile(const Common::String &fileName) {
@@ -916,18 +1012,22 @@ bool EmiEngine::readSaveStrings(Common::SeekableReadStream *stream, Common::Arra
 	return true;
 }
 
-Graphics::Surface *EmiEngine::readSaveThumbnail(Common::SeekableReadStream *stream, bool fullTexture) {
-	int imageWidth = fullTexture ? kThumbnailTextureWidth : kThumbnailImageWidth;
-	int imageHeight = fullTexture ? kThumbnailTextureHeight : kThumbnailImageHeight;
-	int32 versionLength = stream->readSint32LE();
+Graphics::Surface *EmiEngine::readSaveThumbnail(Common::SeekableReadStream *stream, bool isPs2) {
+	int imageWidth = isPs2 ? kThumbnailTextureWidth : kThumbnailImageWidth;
+	int imageHeight = isPs2 ? kThumbnailTextureHeight : kThumbnailImageHeight;
+	int bytesPerPixel = isPs2 ? 2 : 3;
 
-	if (stream->err() || stream->eos() || versionLength < 0 || versionLength > kSavedTextBufferSize)
-		return nullptr;
+	if (!isPs2) {
+		int32 versionLength = stream->readSint32LE();
 
-	stream->seek(versionLength, SEEK_CUR);
+		if (stream->err() || stream->eos() || versionLength < 0 || versionLength > kSavedTextBufferSize)
+			return nullptr;
+
+		stream->seek(versionLength, SEEK_CUR);
+	}
 
 	uint32 imageSize = stream->readUint32LE();
-	uint32 expectedSize = kThumbnailTextureWidth * kThumbnailTextureHeight * 3;
+	uint32 expectedSize = kThumbnailTextureWidth * kThumbnailTextureHeight * bytesPerPixel;
 
 	if (stream->err() || stream->eos() || imageSize != expectedSize)
 		return nullptr;
@@ -942,16 +1042,23 @@ Graphics::Surface *EmiEngine::readSaveThumbnail(Common::SeekableReadStream *stre
 
 	thumbnail->create(imageWidth, imageHeight, format);
 
+	LColorFormat imageFormat(15);
+
 	for (int y = 0; y < imageHeight; y++) {
-		const byte *source = &pixels[y * kThumbnailTextureWidth * 3];
+		const byte *source = &pixels[y * kThumbnailTextureWidth * bytesPerPixel];
 		uint32 *target = (uint32 *)thumbnail->getBasePtr(0, y);
 
-		for (int x = 0; x < imageWidth; x++)
-			target[x] = format.RGBToColor(source[3 * x], source[3 * x + 1], source[3 * x + 2]);
+		for (int x = 0; x < imageWidth; x++) {
+			if (isPs2) {
+				target[x] = format.RGBToColor(imageFormat.getRed(source + 2 * x), imageFormat.getGreen(source + 2 * x), imageFormat.getBlue(source + 2 * x));
+			} else {
+				target[x] = format.RGBToColor(source[3 * x], source[3 * x + 1], source[3 * x + 2]);
+			}
+		}
 	}
 
 	// The whole screen is squeezed into the texture: give it back the aspect ratio of the screen
-	if (fullTexture) {
+	if (isPs2) {
 		Graphics::Surface *scaled = thumbnail->scale(kThumbnailImageWidth, kThumbnailImageHeight, true);
 
 		thumbnail->free();

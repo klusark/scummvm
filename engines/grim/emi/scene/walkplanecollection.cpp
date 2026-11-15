@@ -26,6 +26,7 @@
 #include "engines/grim/emi/emiengine.h"
 #include "engines/grim/emi/core/lconsoleservices.h"
 #include "engines/grim/emi/core/lmemoryservices.h"
+#include "engines/grim/emi/math/singlemath.h"
 #include "engines/grim/emi/scene/walkplanecollection.h"
 
 namespace Grim {
@@ -311,7 +312,11 @@ bool WalkPlaneCollection::canWalkStraight(const float *from, const float *to) {
 	}
 
 	while (true) {
-		plane->intersection(start, to, exitPoint);
+		if (_engine->getGamePlatform() == Common::kPlatformPS2)
+			plane->findExitPs2(start, to, exitPoint);
+		else
+			plane->intersection(start, to, exitPoint);
+
 		plane->_enabled = false;
 		plane = planeAt(exitPoint, kGroundPlaneMask);
 
@@ -344,29 +349,29 @@ int WalkPlaneCollection::getSize() {
 	return size;
 }
 
-void WalkPlaneCollection::save(SaveRestoreAccess *access) {
+void WalkPlaneCollection::save(SaveRestoreAccess *accessFunc) {
 	int count = (int)_planes.size();
 	Common::List<WalkPlane_v2 *>::iterator planeIt;
 
-	access(&count, sizeof(count));
+	accessFunc(&count, sizeof(count));
 
 	for (planeIt = _planes.begin(); planeIt != _planes.end(); ++planeIt) {
 		int planeNumber = (*planeIt)->_number;
 
-		access(&planeNumber, sizeof(planeNumber));
-		(*planeIt)->serialize(access);
+		accessFunc(&planeNumber, sizeof(planeNumber));
+		(*planeIt)->serialize(accessFunc);
 	}
 }
 
-void WalkPlaneCollection::restore(SaveRestoreAccess *access) {
+void WalkPlaneCollection::restore(SaveRestoreAccess *accessFunc) {
 	int count = 0;
 
-	access(&count, sizeof(count));
+	accessFunc(&count, sizeof(count));
 
 	for (int i = 0; i < count; i++) {
 		int planeNumber = 0;
 
-		access(&planeNumber, sizeof(planeNumber));
+		accessFunc(&planeNumber, sizeof(planeNumber));
 
 		WalkPlane_v2 *plane = planeNumbered(planeNumber);
 
@@ -376,7 +381,7 @@ void WalkPlaneCollection::restore(SaveRestoreAccess *access) {
 			return;
 		}
 
-		plane->serialize(access);
+		plane->serialize(accessFunc);
 	}
 }
 
@@ -484,6 +489,20 @@ WalkPlane_v2 *WalkPlaneCollection::planeClosest(const float *point, int typeMask
 			projected[1] = point[1];
 			projected[2] = point[2];
 			plane->closestPoint(projected);
+
+			if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+				TruncFloat deltaY = TruncFloat(projected[1]) - TruncFloat(point[1]);
+				TruncFloat deltaX = TruncFloat(projected[0]) - TruncFloat(point[0]);
+				TruncFloat deltaZ = TruncFloat(projected[2]) - TruncFloat(point[2]);
+				TruncFloat distance = TruncFloat::multiplyAdd(deltaX * deltaX + deltaY * deltaY, deltaZ, deltaZ);
+
+				if (distance < TruncFloat(closestDistance)) {
+					closestDistance = distance.toFloat();
+					closest = plane;
+				}
+
+				continue;
+			}
 
 			double deltaX = (double)projected[0] - (double)point[0];
 			double deltaY = (double)projected[1] - (double)point[1];
