@@ -61,6 +61,8 @@ public:
 
 	static const float kDegreesToRadians;
 
+	static Actor *createActor(EmiEngine *engine, const char *newActorName);
+	virtual Puck_v2 *createPuck(float newReflectionAngle);
 	static int allocateActor(EmiEngine *engine, const char *newActorName);
 	static void freeActor(EmiEngine *engine, int actorId);
 	void allocateActorExtra();
@@ -95,12 +97,10 @@ public:
 	static void updateAllActors(EmiEngine *engine, float deltaTime);
 	void update(float deltaTime);
 	void updateAnimNodes();
+	virtual void updateMovement(float frameDelta, float scaledDelta);
 	void followPath(float deltaTime);
 	void updateWalk(float deltaTime);
 	bool alignToPuck(Puck_v2 *puck);
-	void followPathPs2(float deltaTime);
-	void updateWalkPs2(float deltaTime);
-	bool alignToPuckPs2(Puck_v2 *puck);
 	void turn(float degrees);
 	void forward();
 	static void updateSpeechOnly(EmiEngine *engine, float deltaTime);
@@ -124,14 +124,11 @@ public:
 	void setWalkDominate(bool dominate);
 	void leaveSector(WalkPlane_v2 *plane);
 	void actorWalkTo(float *target, const float *goal, Actor *other);
-	int buildAvoidingPath(Actor *other, float *path, int count, float *outPath);
+	virtual int buildAvoidingPath(Actor *other, float *path, int count, float *outPath);
 
 	static void getOuttaTheBox(float *point, const float *box, const float *transform);
 	static bool testCollision(EmiEngine *engine, float startX, float startY, float startZ, float endX, float endY, float endZ, float originX, float originY, float originZ, const float *box, const float *transform);
-	static int findClosestCandidate(float startX, float startY, float startZ, float goalX, float goalY, float goalZ, const ObjectCorners_v2 *corners);
-	int buildAvoidingPathPs2(Actor *other, float *path, int count, float *outPath);
-	static void getOuttaTheBoxPs2(float *point, const float *box, const float *transform);
-	static bool testCollisionPs2(EmiEngine *engine, float startX, float startY, float startZ, float endX, float endY, float endZ, float originX, float originY, float originZ, const float *box, const float *transform);
+	virtual int findClosestCandidate(float startX, float startY, float startZ, float goalX, float goalY, float goalZ, const ObjectCorners_v2 *corners);
 	static bool updatePositions(EmiEngine *engine);
 	bool resolveCollisions();
 
@@ -175,7 +172,7 @@ public:
 	int _id;
 	LString _actorName;
 
-private:
+protected:
 	EmiEngine *_engine;
 };
 

@@ -493,7 +493,7 @@ bool Actor::restore(SaveRestoreAccess *accessFunc) {
 		accessFunc(&_extra->_timeScale, sizeof(float));
 
 		if (hasPuck) {
-			Puck_v2 *puck = new Puck_v2(_engine, _extra->_reflectionAngle);
+			Puck_v2 *puck = createPuck(_extra->_reflectionAngle);
 			CVector puckVector;
 
 			_extra->_puck = puck;
@@ -582,7 +582,7 @@ void Actor::restoreActors(EmiEngine *engine, SaveRestoreAccess *accessFunc) {
 	accessFunc(&actorCount, sizeof(actorCount));
 
 	for (int i = 0; i < actorCount; i++) {
-		Actor *actor = new Actor(engine, "Restored");
+		Actor *actor = createActor(engine, "Restored");
 
 		actor->restore(accessFunc);
 	}

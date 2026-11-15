@@ -60,6 +60,7 @@ public:
 	WalkPlane_v2 *planeNamed(const LString &planeName);
 	WalkPlane_v2 *planeNumbered(int planeNumber);
 	WalkPlane_v2 *planeClosest(const float *point, int typeMask);
+	WalkPlane_v2 *createPlane(const float *vertices, int vertexCount);
 	void allActive();
 	char *parseCollection(LFile *file);
 

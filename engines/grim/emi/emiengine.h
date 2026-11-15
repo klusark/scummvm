@@ -229,6 +229,7 @@ protected:
 
 private:
 	friend class Actor;
+	friend class ActorPs2;
 	friend class ANode;
 	friend class AInst;
 	friend class Background;
@@ -251,6 +252,7 @@ private:
 	friend class Polyglot_v2;
 	friend class ProfilerTimer;
 	friend class Puck_v2;
+	friend class Puck_v2Ps2;
 	friend class RMesh;
 	friend class RMeshInstance;
 	friend class Room_v2;

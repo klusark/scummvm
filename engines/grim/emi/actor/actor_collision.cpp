@@ -23,6 +23,7 @@
 
 #include "engines/grim/grim.h"
 #include "engines/grim/emi/actor/actor.h"
+#include "engines/grim/emi/actor/actor_ps2.h"
 #include "engines/grim/emi/core/lconsoleservices.h"
 #include "engines/grim/emi/emiengine.h"
 #include "engines/grim/emi/lua_v2_opcodes/lua_v2.h"
@@ -38,16 +39,6 @@ static const float kCollisionFloatMax = 3.4028235e+38f;
 static const float kCollisionMargin = 0.01f;
 static const float kCollisionMinLength = 1e-20f;
 static const int kCollisionAnyPlane = -1;
-
-static float collisionRadiusPs2(const RPrimitive *prim, float scale) {
-	TruncFloat two(2.0f);
-	TruncFloat extentX = TruncFloat(prim->_box._max._x) - TruncFloat(prim->_box._min._x);
-	TruncFloat extentZ = TruncFloat(prim->_box._max._z) - TruncFloat(prim->_box._min._z);
-	TruncFloat quarterX = (extentX / two) * extentX / two;
-	TruncFloat quarterZ = (extentZ / two) * extentZ / two;
-
-	return (TruncFloat(scale) * TruncFloat::squareRoot(quarterX + quarterZ)).toFloat();
-}
 
 static double calcCollisionRadius(const RPrimitive *prim) {
 	double extentX = (double)prim->_box._max._x - prim->_box._min._x;
@@ -252,35 +243,6 @@ int Actor::findClosestCandidate(float startX, float startY, float startZ, float 
 	int found = -1;
 	float best = kCollisionFloatMax;
 
-	if (g_grim->getGamePlatform() == Common::kPlatformPS2) {
-		TruncFloat bestPs2(kCollisionFloatMax);
-
-		for (int i = 0; i < ObjectCorners_v2::kNumCorners; i++) {
-			if (!corners->valid[i])
-				continue;
-
-			TruncFloat cornerX(corners->corner[i][0]);
-			TruncFloat cornerY(corners->corner[i][1]);
-			TruncFloat cornerZ(corners->corner[i][2]);
-			TruncFloat startDeltaX = TruncFloat(startX) - cornerX;
-			TruncFloat startDeltaY = TruncFloat(startY) - cornerY;
-			TruncFloat startDeltaZ = TruncFloat(startZ) - cornerZ;
-			TruncFloat goalDeltaX = cornerX - TruncFloat(goalX);
-			TruncFloat goalDeltaY = cornerY - TruncFloat(goalY);
-			TruncFloat goalDeltaZ = cornerZ - TruncFloat(goalZ);
-			TruncFloat first = TruncFloat::multiplyAdd(startDeltaX * startDeltaX + startDeltaY * startDeltaY, startDeltaZ, startDeltaZ);
-			TruncFloat second = TruncFloat::multiplyAdd(goalDeltaX * goalDeltaX + goalDeltaY * goalDeltaY, goalDeltaZ, goalDeltaZ);
-			TruncFloat total = first + second;
-
-			if (total < bestPs2) {
-				found = i;
-				bestPs2 = total;
-			}
-		}
-
-		return found;
-	}
-
 	for (int i = 0; i < ObjectCorners_v2::kNumCorners; i++) {
 		if (!corners->valid[i])
 			continue;
@@ -337,9 +299,6 @@ int Actor::buildAvoidingPath(Actor *other, float *path, int count, float *outPat
 
 		return 0;
 	}
-
-	if (_engine->getGamePlatform() == Common::kPlatformPS2)
-		return buildAvoidingPathPs2(other, path, count, outPath);
 
 	double thisRadius = 0.5;
 
@@ -659,7 +618,8 @@ bool Actor::resolveCollisions() {
 	RPrimitiveInstance *instance = _instances[0];
 
 	if (!instance) {
-		warning("Actor::resolveCollisions(): missing primitive instance");
+		if (_engine->getGamePlatform() != Common::kPlatformPS2)
+			warning("Actor::resolveCollisions(): missing primitive instance");
 
 		return true;
 	}
@@ -699,7 +659,7 @@ bool Actor::resolveCollisions() {
 		centerX = (TruncFloat(offsetX) + TruncFloat(_world._pos._x)).toFloat();
 		centerY = (TruncFloat(offsetY) + TruncFloat(_world._pos._y)).toFloat();
 		centerZ = (TruncFloat(offsetZ) + TruncFloat(_world._pos._z)).toFloat();
-		radius = collisionRadiusPs2(prim, _extra->_collisionScale);
+		radius = ActorPs2::collisionRadius(prim, _extra->_collisionScale);
 	} else {
 		offsetX = (float)(((double)matrix[3] * prim->_center._y + (double)matrix[6] * prim->_center._z) + (double)matrix[0] * prim->_center._x);
 		offsetY = (float)(((double)matrix[4] * prim->_center._y + (double)matrix[7] * prim->_center._z) + (double)matrix[1] * prim->_center._x);
@@ -716,7 +676,7 @@ bool Actor::resolveCollisions() {
 
 	// The disasm handles the collision modes 1 and 2 of this actor in the same way
 	if (ps2 && _extra->_collisionMode == 1)
-		_engine->getConsoleServices()->logError("WARNING: No code for box->box or box->sphere collisions, only sphere->box, sphere->sphere! -- RTS\n");
+		_engine->getConsoleServices()->logDebug("WARNING: No code for box->box or box->sphere collisions, only sphere->box, sphere->sphere! -- RTS\n");
 
 	if (_extra->_collisionMode == 0)
 		return true;
@@ -741,7 +701,8 @@ bool Actor::resolveCollisions() {
 		RPrimitiveInstance *otherInstance = other->_instances[0];
 
 		if (!otherInstance) {
-			warning("Actor::resolveCollisions(): missing primitive instance");
+			if (_engine->getGamePlatform() != Common::kPlatformPS2)
+				warning("Actor::resolveCollisions(): missing primitive instance");
 
 			continue;
 		}
@@ -778,7 +739,7 @@ bool Actor::resolveCollisions() {
 			TruncFloat ps2OtherX = TruncFloat(otherOffset[0]) + TruncFloat(other->_world._pos._x);
 			TruncFloat ps2OtherY = TruncFloat(otherOffset[1]) + TruncFloat(other->_world._pos._y);
 			TruncFloat ps2OtherZ = TruncFloat(otherOffset[2]) + TruncFloat(other->_world._pos._z);
-			TruncFloat ps2OtherRadius(collisionRadiusPs2(otherPrim, otherExtra->_collisionScale));
+			TruncFloat ps2OtherRadius(ActorPs2::collisionRadius(otherPrim, otherExtra->_collisionScale));
 			TruncFloat ps2DeltaX = TruncFloat(centerX) - ps2OtherX;
 			TruncFloat ps2DeltaY = TruncFloat(centerY) - ps2OtherY;
 			TruncFloat ps2DeltaZ = TruncFloat(centerZ) - ps2OtherZ;
@@ -898,504 +859,6 @@ bool Actor::resolveCollisions() {
 	_prevPos._z = _pos._z;
 
 	return true;
-}
-
-void Actor::getOuttaTheBoxPs2(float *point, const float *box, const float *transform) {
-	TruncFloat zero(0.0f);
-	TruncFloat margin = TruncFloat::fromBits(0x3C23D70A);
-	TruncFloat deltaX = TruncFloat(point[0]) - TruncFloat(transform[9]);
-	TruncFloat deltaY = TruncFloat(point[1]) - TruncFloat(transform[10]);
-	TruncFloat deltaZ = TruncFloat(point[2]) - TruncFloat(transform[11]);
-	TruncFloat localX = TruncFloat::multiplyAdd(deltaX * TruncFloat(transform[0]) + deltaY * TruncFloat(transform[1]), deltaZ, TruncFloat(transform[2]));
-	TruncFloat localY = TruncFloat::multiplyAdd(deltaX * TruncFloat(transform[3]) + deltaY * TruncFloat(transform[4]), deltaZ, TruncFloat(transform[5]));
-	TruncFloat localZ = TruncFloat::multiplyAdd(deltaX * TruncFloat(transform[6]) + deltaY * TruncFloat(transform[7]), deltaZ, TruncFloat(transform[8]));
-
-	if (!(localX <= TruncFloat(box[3]) && localX >= TruncFloat(box[0]) && localY <= TruncFloat(box[4]) && localY >= TruncFloat(box[1]) && localZ <= TruncFloat(box[5]) && localZ >= TruncFloat(box[2])))
-		return;
-
-	TruncFloat outX = localX;
-	TruncFloat outY = localY;
-	TruncFloat outZ = localZ;
-	TruncFloat best = TruncFloat::fromBits(0x7F7FFFFF);
-	TruncFloat limit(box[5]);
-
-	if (limit > localZ) {
-		TruncFloat distance = limit - localZ;
-
-		if (distance < zero)
-			distance = -distance;
-
-		if (distance < best) {
-			outX = localX;
-			outY = localY;
-			outZ = margin + limit;
-			best = distance;
-		}
-	}
-
-	limit = TruncFloat(box[2]);
-
-	if (limit < localZ) {
-		TruncFloat distance = limit - localZ;
-
-		if (distance < zero)
-			distance = -distance;
-
-		if (distance < best) {
-			outX = localX;
-			outY = localY;
-			outZ = limit - margin;
-			best = distance;
-		}
-	}
-
-	limit = TruncFloat(box[3]);
-
-	if (limit > localX) {
-		TruncFloat distance = limit - localX;
-
-		if (distance < zero)
-			distance = -distance;
-
-		if (distance < best) {
-			outX = margin + limit;
-			outY = localY;
-			outZ = localZ;
-			best = distance;
-		}
-	}
-
-	limit = TruncFloat(box[0]);
-
-	if (limit < localX) {
-		TruncFloat distance = limit - localX;
-
-		if (distance < zero)
-			distance = -distance;
-
-		if (distance < best) {
-			outX = limit - margin;
-			outY = localY;
-			outZ = localZ;
-		}
-	}
-
-	float local[3];
-	float rotated[3];
-
-	local[0] = outX.toFloat();
-	local[1] = outY.toFloat();
-	local[2] = outZ.toFloat();
-
-	SingleMath::rotate(transform, local, rotated);
-
-	point[0] = (TruncFloat(rotated[0]) + TruncFloat(transform[9])).toFloat();
-	point[1] = (TruncFloat(rotated[1]) + TruncFloat(transform[10])).toFloat();
-	point[2] = (TruncFloat(rotated[2]) + TruncFloat(transform[11])).toFloat();
-}
-
-bool Actor::testCollisionPs2(EmiEngine *engine, float startX, float startY, float startZ, float endX, float endY, float endZ, float originX, float originY, float originZ, const float *box, const float *transform) {
-	TruncFloat best(1.0f);
-	TruncFloat startDeltaX = (TruncFloat(startX) - TruncFloat(originX)) - TruncFloat(transform[9]);
-	TruncFloat startDeltaY = (TruncFloat(startY) - TruncFloat(originY)) - TruncFloat(transform[10]);
-	TruncFloat startDeltaZ = (TruncFloat(startZ) - TruncFloat(originZ)) - TruncFloat(transform[11]);
-	TruncFloat localStartX = TruncFloat::multiplyAdd(startDeltaX * TruncFloat(transform[0]) + startDeltaY * TruncFloat(transform[1]), startDeltaZ, TruncFloat(transform[2]));
-	TruncFloat localStartY = TruncFloat::multiplyAdd(startDeltaX * TruncFloat(transform[3]) + startDeltaY * TruncFloat(transform[4]), startDeltaZ, TruncFloat(transform[5]));
-	TruncFloat localStartZ = TruncFloat::multiplyAdd(startDeltaX * TruncFloat(transform[6]) + startDeltaY * TruncFloat(transform[7]), startDeltaZ, TruncFloat(transform[8]));
-	TruncFloat endDeltaX = (TruncFloat(endX) - TruncFloat(originX)) - TruncFloat(transform[9]);
-	TruncFloat endDeltaY = (TruncFloat(endY) - TruncFloat(originY)) - TruncFloat(transform[10]);
-	TruncFloat endDeltaZ = (TruncFloat(endZ) - TruncFloat(originZ)) - TruncFloat(transform[11]);
-	TruncFloat localEndX = TruncFloat::multiplyAdd(endDeltaX * TruncFloat(transform[0]) + endDeltaY * TruncFloat(transform[1]), endDeltaZ, TruncFloat(transform[2]));
-	TruncFloat localEndY = TruncFloat::multiplyAdd(endDeltaX * TruncFloat(transform[3]) + endDeltaY * TruncFloat(transform[4]), endDeltaZ, TruncFloat(transform[5]));
-	TruncFloat localEndZ = TruncFloat::multiplyAdd(endDeltaX * TruncFloat(transform[6]) + endDeltaY * TruncFloat(transform[7]), endDeltaZ, TruncFloat(transform[8]));
-	TruncFloat directionX = localEndX - localStartX;
-	TruncFloat directionY = localEndY - localStartY;
-	TruncFloat directionZ = localEndZ - localStartZ;
-	TruncFloat limit(box[5]);
-
-	if (localStartZ > limit && localEndZ < limit) {
-		TruncFloat fraction = (limit - localStartZ) / directionZ;
-
-		if (fraction < best) {
-			TruncFloat hitX = localStartX + directionX * fraction;
-			TruncFloat hitY = localStartY + directionY * fraction;
-			TruncFloat hitZ = localStartZ + directionZ * fraction;
-
-			if (hitX > TruncFloat(box[0]) && hitX < TruncFloat(box[3])) {
-				engine->_hitPoint._x = hitX.toFloat();
-				engine->_hitPoint._y = hitY.toFloat();
-				engine->_hitPoint._z = hitZ.toFloat();
-				best = fraction;
-			}
-		}
-	}
-
-	limit = TruncFloat(box[2]);
-
-	if (localStartZ < limit && localEndZ > limit) {
-		TruncFloat fraction = (limit - localStartZ) / directionZ;
-
-		if (fraction < best) {
-			TruncFloat hitX = localStartX + directionX * fraction;
-			TruncFloat hitY = localStartY + directionY * fraction;
-			TruncFloat hitZ = localStartZ + directionZ * fraction;
-
-			if (hitX > TruncFloat(box[0]) && hitX < TruncFloat(box[3])) {
-				engine->_hitPoint._x = hitX.toFloat();
-				engine->_hitPoint._y = hitY.toFloat();
-				engine->_hitPoint._z = hitZ.toFloat();
-				best = fraction;
-			}
-		}
-	}
-
-	limit = TruncFloat(box[3]);
-
-	if (localStartX > limit && localEndX < limit) {
-		TruncFloat fraction = (limit - localStartX) / directionX;
-
-		if (fraction < best) {
-			TruncFloat hitX = localStartX + directionX * fraction;
-			TruncFloat hitY = localStartY + directionY * fraction;
-			TruncFloat hitZ = localStartZ + directionZ * fraction;
-
-			if (hitZ > TruncFloat(box[2]) && hitZ < TruncFloat(box[5])) {
-				engine->_hitPoint._x = hitX.toFloat();
-				engine->_hitPoint._y = hitY.toFloat();
-				engine->_hitPoint._z = hitZ.toFloat();
-				best = fraction;
-			}
-		}
-	}
-
-	limit = TruncFloat(box[0]);
-
-	if (localStartX < limit && localEndX > limit) {
-		TruncFloat fraction = (limit - localStartX) / directionX;
-
-		if (fraction < best) {
-			TruncFloat hitX = localStartX + directionX * fraction;
-			TruncFloat hitY = localStartY + directionY * fraction;
-			TruncFloat hitZ = localStartZ + directionZ * fraction;
-
-			if (hitZ > TruncFloat(box[2]) && hitZ < TruncFloat(box[5])) {
-				engine->_hitPoint._x = hitX.toFloat();
-				engine->_hitPoint._y = hitY.toFloat();
-				engine->_hitPoint._z = hitZ.toFloat();
-				best = fraction;
-			}
-		}
-	}
-
-	return best != TruncFloat(1.0f);
-}
-
-int Actor::buildAvoidingPathPs2(Actor *other, float *path, int count, float *outPath) {
-	int outCount = 0;
-	float startX = 0.0f;
-	float startY = 0.0f;
-	float startZ = 0.0f;
-	float endX = 0.0f;
-	float endY = 0.0f;
-	float endZ = 0.0f;
-	float goal[3];
-
-	goal[0] = 0.0f;
-	goal[1] = 0.0f;
-	goal[2] = 0.0f;
-
-	TruncFloat thisRadius = TruncFloat(0.5f) * TruncFloat(_extra->_collisionScale);
-
-	if (!_instances.empty() && _instances[0]) {
-		if (_instances[0]->_prim)
-			thisRadius = TruncFloat(collisionRadiusPs2(_instances[0]->_prim, _extra->_collisionScale));
-		else
-			warning("Actor::buildAvoidingPathPs2(): primitive instance without primitive");
-	}
-
-	TruncFloat otherRadius = TruncFloat(0.5f) * TruncFloat(other->_extra->_collisionScale);
-
-	if (!other->_instances.empty() && other->_instances[0]) {
-		if (other->_instances[0]->_prim)
-			otherRadius = TruncFloat(collisionRadiusPs2(other->_instances[0]->_prim, other->_extra->_collisionScale));
-		else
-			warning("Actor::buildAvoidingPathPs2(): primitive instance without primitive");
-	}
-
-	TruncFloat radius = thisRadius + otherRadius;
-	float radiusFloat = radius.toFloat();
-	float negativeRadius = (-radius).toFloat();
-	float box[6];
-
-	box[0] = negativeRadius;
-	box[1] = negativeRadius;
-	box[2] = negativeRadius;
-	box[3] = radiusFloat;
-	box[4] = radiusFloat;
-	box[5] = radiusFloat;
-
-	if ((other->_nodeFlags & kWorldValid) == 0)
-		other->updateWorldTransform();
-
-	if ((other->_nodeFlags & kPositionValid) == 0)
-		other->computeLocalPositionFromWorld();
-
-	float *lastPoint = &path[3 * count - 3];
-
-	getOuttaTheBoxPs2(lastPoint, box, other->_world._rot._m);
-
-	if ((other->_nodeFlags & kWorldValid) == 0)
-		other->updateWorldTransform();
-
-	if ((other->_nodeFlags & kPositionValid) == 0)
-		other->computeLocalPositionFromWorld();
-
-	getOuttaTheBoxPs2(path, box, other->_world._rot._m);
-
-	goal[0] = lastPoint[0];
-	goal[1] = lastPoint[1];
-	goal[2] = lastPoint[2];
-
-	bool locked = _room.lock();
-	Room_v2 *currentRoom = locked ? _room._typed : nullptr;
-	WalkPlaneCollection *planes = nullptr;
-
-	if (currentRoom)
-		planes = currentRoom->_walkPlanes;
-	else
-		warning("Actor::buildAvoidingPathPs2(): the room could not be locked");
-
-	if (locked)
-		_room.unlock();
-
-	if (!planes) {
-		warning("Actor::buildAvoidingPathPs2(): the room has no walk planes");
-
-		return 0;
-	}
-
-	if (!planes->planeAt(goal, kCollisionAnyPlane)) {
-		_engine->getConsoleServices()->logError("Actor::CheckPathForCollisions -- Destination not valid after collision adjustment.\n");
-
-		return 0;
-	}
-
-	int index = 0;
-	bool collided = false;
-
-	for (index = 0; index < count - 1; index++) {
-		startX = path[3 * index];
-		startY = path[3 * index + 1];
-		startZ = path[3 * index + 2];
-		endX = path[3 * index + 3];
-		endY = path[3 * index + 4];
-		endZ = path[3 * index + 5];
-
-		outPath[3 * outCount] = path[3 * index];
-		outPath[3 * outCount + 1] = path[3 * index + 1];
-		outPath[3 * outCount + 2] = path[3 * index + 2];
-		outCount++;
-
-		if ((other->_nodeFlags & kWorldValid) == 0)
-			other->updateWorldTransform();
-
-		if (testCollisionPs2(_engine, startX, startY, startZ, endX, endY, endZ, 0.0f, 0.0f, 0.0f, box, other->_world._rot._m)) {
-			collided = true;
-
-			break;
-		}
-	}
-
-	if (!collided) {
-		outPath[3 * outCount] = path[3 * index];
-		outPath[3 * outCount + 1] = path[3 * index + 1];
-		outPath[3 * outCount + 2] = path[3 * index + 2];
-
-		return outCount + 1;
-	}
-
-	ObjectCorners_v2 corners;
-
-	for (int i = 0; i < ObjectCorners_v2::kNumCorners; i++) {
-		corners.corner[i][0] = 0.0f;
-		corners.corner[i][1] = 0.0f;
-		corners.corner[i][2] = 0.0f;
-	}
-
-	float hit[3];
-	float rotated[3];
-
-	hit[0] = _engine->_hitPoint._x;
-	hit[1] = _engine->_hitPoint._y;
-	hit[2] = _engine->_hitPoint._z;
-
-	if ((other->_nodeFlags & kWorldValid) == 0)
-		other->updateWorldTransform();
-
-	SingleMath::rotate(other->_world._rot._m, hit, rotated);
-
-	hit[0] = (TruncFloat(rotated[0]) + TruncFloat(other->_world._pos._x)).toFloat();
-	hit[1] = (TruncFloat(rotated[1]) + TruncFloat(other->_world._pos._y)).toFloat();
-	hit[2] = (TruncFloat(rotated[2]) + TruncFloat(other->_world._pos._z)).toFloat();
-
-	WalkPlane_v2 *closestPlane = planes->planeClosest(hit, kCollisionAnyPlane);
-
-	if (closestPlane)
-		closestPlane->project(hit);
-	else
-		warning("Actor::buildAvoidingPathPs2(): no walk plane near the hit point");
-
-	corners.corner[0][0] = negativeRadius;
-	corners.corner[0][1] = 0.0f;
-	corners.corner[0][2] = negativeRadius;
-	corners.corner[1][0] = radiusFloat;
-	corners.corner[1][1] = 0.0f;
-	corners.corner[1][2] = negativeRadius;
-	corners.corner[2][0] = radiusFloat;
-	corners.corner[2][1] = 0.0f;
-	corners.corner[2][2] = radiusFloat;
-	corners.corner[3][0] = negativeRadius;
-	corners.corner[3][1] = 0.0f;
-	corners.corner[3][2] = radiusFloat;
-
-	for (int k = 0; k < ObjectCorners_v2::kNumCorners; k++) {
-		float *corner = corners.corner[k];
-
-		if ((other->_nodeFlags & kWorldValid) == 0)
-			other->updateWorldTransform();
-
-		SingleMath::rotate(other->_world._rot._m, corner, rotated);
-
-		corner[0] = (TruncFloat(rotated[0]) + TruncFloat(other->_world._pos._x)).toFloat();
-		corner[1] = hit[1];
-		corner[2] = (TruncFloat(rotated[2]) + TruncFloat(other->_world._pos._z)).toFloat();
-
-		corners.valid[k] = 0;
-		endX = corner[0];
-		endY = corner[1];
-		endZ = corner[2];
-
-		if ((other->_nodeFlags & kWorldValid) == 0)
-			other->updateWorldTransform();
-
-		if (!testCollisionPs2(_engine, startX, startY, startZ, endX, endY, endZ, 0.0f, 0.0f, 0.0f, box, other->_world._rot._m)
-			&& planes->buildPath(&path[3 * index], corner, false))
-			corners.valid[k] = 1;
-	}
-
-	int closest = findClosestCandidate(startX, startY, startZ, goal[0], goal[1], goal[2], &corners);
-
-	if (closest == -1) {
-		_engine->getConsoleServices()->logError("Actor::CheckPathForCollisions -- Cannot get around blocking object. Stopping.\n");
-
-		return outCount;
-	}
-
-	if (!planes->buildPath(&path[3 * index], corners.corner[closest], true)) {
-		_engine->getConsoleServices()->logError("Actor::CheckPathForCollisions -- Cannot get to best corner. Stopping.\n");
-
-		return outCount;
-	}
-
-	float (*pathPoints)[3];
-	int pathCount = planes->getPath(&pathPoints);
-
-	for (int j = 1; j < pathCount; j++) {
-		outPath[3 * outCount] = pathPoints[j][0];
-		outPath[3 * outCount + 1] = pathPoints[j][1];
-		outPath[3 * outCount + 2] = pathPoints[j][2];
-		outCount++;
-	}
-
-	corners.valid[closest] = 0;
-
-	if ((other->_nodeFlags & kWorldValid) == 0)
-		other->updateWorldTransform();
-
-	float *lastOutPoint = &outPath[3 * outCount - 3];
-	float *nextOutPoint = &outPath[3 * outCount];
-
-	if (!testCollisionPs2(_engine, lastOutPoint[0], lastOutPoint[1], lastOutPoint[2], goal[0], goal[1], goal[2], 0.0f, 0.0f, 0.0f, box, other->_world._rot._m)
-		&& planes->buildPath(lastOutPoint, goal, true)) {
-		pathCount = planes->getPath(&pathPoints);
-
-		for (int j = 1; j < pathCount; j++) {
-			outPath[3 * outCount] = pathPoints[j][0];
-			outPath[3 * outCount + 1] = pathPoints[j][1];
-			outPath[3 * outCount + 2] = pathPoints[j][2];
-			outCount++;
-		}
-
-		return outCount;
-	}
-
-	int previousCorner = (closest + 3) % 4;
-	int nextCorner = (closest + 5) % 4;
-	const float *previousPoint = corners.corner[previousCorner];
-	bool previousReachable = planes->buildPath(lastOutPoint, previousPoint, false);
-	const float *nextPoint = corners.corner[nextCorner];
-	bool nextReachable = planes->buildPath(lastOutPoint, nextPoint, false);
-	int current = nextCorner;
-	int direction = 1;
-
-	if (nextReachable) {
-		if (previousReachable) {
-			TruncFloat previousGoalX = TruncFloat(previousPoint[0]) - TruncFloat(goal[0]);
-			TruncFloat previousGoalY = TruncFloat(previousPoint[1]) - TruncFloat(goal[1]);
-			TruncFloat previousGoalZ = TruncFloat(previousPoint[2]) - TruncFloat(goal[2]);
-			TruncFloat previousLastX = TruncFloat(lastOutPoint[0]) - TruncFloat(previousPoint[0]);
-			TruncFloat previousLastY = TruncFloat(lastOutPoint[1]) - TruncFloat(previousPoint[1]);
-			TruncFloat previousLastZ = TruncFloat(lastOutPoint[2]) - TruncFloat(previousPoint[2]);
-			TruncFloat nextGoalX = TruncFloat(nextPoint[0]) - TruncFloat(goal[0]);
-			TruncFloat nextGoalY = TruncFloat(nextPoint[1]) - TruncFloat(goal[1]);
-			TruncFloat nextGoalZ = TruncFloat(nextPoint[2]) - TruncFloat(goal[2]);
-			TruncFloat nextLastX = TruncFloat(lastOutPoint[0]) - TruncFloat(nextPoint[0]);
-			TruncFloat nextLastY = TruncFloat(lastOutPoint[1]) - TruncFloat(nextPoint[1]);
-			TruncFloat nextLastZ = TruncFloat(lastOutPoint[2]) - TruncFloat(nextPoint[2]);
-			TruncFloat previousToGoal = TruncFloat::multiplyAdd(previousGoalX * previousGoalX + previousGoalY * previousGoalY, previousGoalZ, previousGoalZ);
-			TruncFloat previousToLast = TruncFloat::multiplyAdd(previousLastX * previousLastX + previousLastY * previousLastY, previousLastZ, previousLastZ);
-			TruncFloat nextToGoal = TruncFloat::multiplyAdd(nextGoalX * nextGoalX + nextGoalY * nextGoalY, nextGoalZ, nextGoalZ);
-			TruncFloat nextToLast = TruncFloat::multiplyAdd(nextLastX * nextLastX + nextLastY * nextLastY, nextLastZ, nextLastZ);
-			TruncFloat previousDistance = previousToLast + previousToGoal;
-			TruncFloat nextDistance = nextToLast + nextToGoal;
-
-			if (previousDistance < nextDistance) {
-				current = previousCorner;
-				direction = -1;
-			}
-		}
-	} else if (!previousReachable) {
-		_engine->getConsoleServices()->logError("Actor::CheckPathForCollisions -- Left and right points are OOB! Stopping.\n");
-		_engine->getConsoleServices()->logError("Actor::CheckPathForCollisions -- to fix this, expand the boxes or place the actor you are trying to walk around in a less congested area.\n");
-
-		return outCount;
-	} else {
-		current = previousCorner;
-		direction = -1;
-	}
-
-	for (;;) {
-		if ((other->_nodeFlags & kWorldValid) == 0)
-			other->updateWorldTransform();
-
-		bool blocked = testCollisionPs2(_engine, nextOutPoint[-3], nextOutPoint[-2], nextOutPoint[-1], goal[0], goal[1], goal[2], 0.0f, 0.0f, 0.0f, box, other->_world._rot._m);
-
-		if (!blocked || current == closest)
-			break;
-
-		outCount++;
-		nextOutPoint[0] = corners.corner[current][0];
-		nextOutPoint[1] = corners.corner[current][1];
-		nextOutPoint[2] = corners.corner[current][2];
-		nextOutPoint += 3;
-		current = (current + direction + 4) % 4;
-	}
-
-	outPath[3 * outCount] = goal[0];
-	outPath[3 * outCount + 1] = goal[1];
-	outPath[3 * outCount + 2] = goal[2];
-
-	return outCount + 1;
 }
 
 } // End of namespace Grim

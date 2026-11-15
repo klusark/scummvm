@@ -109,25 +109,21 @@ void Actor::updateSpeechOnly(EmiEngine *engine, float deltaTime) {
 	}
 }
 
+void Actor::updateMovement(float frameDelta, float scaledDelta) {
+	if ((_mode & 1) != 0)
+		followPath(scaledDelta);
+
+	if (_extra && _extra->_puck)
+		updateWalk(scaledDelta);
+}
+
 void Actor::update(float deltaTime) {
 	float frameDelta = deltaTime;
 
 	if (_extra)
 		deltaTime = deltaTime * _extra->_timeScale;
 
-	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
-		if ((_mode & 1) != 0)
-			followPathPs2(frameDelta);
-
-		if (_extra && _extra->_puck)
-			updateWalkPs2(frameDelta);
-	} else {
-		if ((_mode & 1) != 0)
-			followPath(deltaTime);
-
-		if (_extra && _extra->_puck)
-			updateWalk(deltaTime);
-	}
+	updateMovement(frameDelta, deltaTime);
 
 	removeFinishedChores();
 	updateWalkChores();

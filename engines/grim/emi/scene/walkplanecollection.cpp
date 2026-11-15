@@ -27,6 +27,7 @@
 #include "engines/grim/emi/core/lconsoleservices.h"
 #include "engines/grim/emi/core/lmemoryservices.h"
 #include "engines/grim/emi/math/singlemath.h"
+#include "engines/grim/emi/scene/walkplane_ps2.h"
 #include "engines/grim/emi/scene/walkplanecollection.h"
 
 namespace Grim {
@@ -299,7 +300,9 @@ bool WalkPlaneCollection::canWalkStraight(const float *from, const float *to) {
 	start[2] = from[2];
 
 	if (!plane) {
-		warning("WalkPlaneCollection::canWalkStraight(): the start point is not in any walkplane");
+		if (_engine->getGamePlatform() != Common::kPlatformPS2)
+			warning("WalkPlaneCollection::canWalkStraight(): the start point is not in any walkplane");
+
 		allActive();
 
 		return false;
@@ -312,10 +315,7 @@ bool WalkPlaneCollection::canWalkStraight(const float *from, const float *to) {
 	}
 
 	while (true) {
-		if (_engine->getGamePlatform() == Common::kPlatformPS2)
-			plane->findExitPs2(start, to, exitPoint);
-		else
-			plane->intersection(start, to, exitPoint);
+		plane->findExit(start, to, exitPoint);
 
 		plane->_enabled = false;
 		plane = planeAt(exitPoint, kGroundPlaneMask);
@@ -519,6 +519,13 @@ WalkPlane_v2 *WalkPlaneCollection::planeClosest(const float *point, int typeMask
 	return closest;
 }
 
+WalkPlane_v2 *WalkPlaneCollection::createPlane(const float *vertices, int vertexCount) {
+	if (_engine->getGamePlatform() == Common::kPlatformPS2)
+		return new WalkPlane_v2Ps2(_engine, vertices, vertexCount, this);
+
+	return new WalkPlane_v2(_engine, vertices, vertexCount, this);
+}
+
 void WalkPlaneCollection::allActive() {
 	Common::List<WalkPlane_v2 *>::iterator it;
 
@@ -534,7 +541,7 @@ void WalkPlaneCollection::addParsedPlane(const float *planeVertices, int vertexC
 		count = WalkPlane_v2::kMaxVertices;
 	}
 
-	WalkPlane_v2 *plane = new WalkPlane_v2(_engine, planeVertices, count, this);
+	WalkPlane_v2 *plane = createPlane(planeVertices, count);
 
 	_planes.push_back(plane);
 	plane->_name = planeName;

@@ -42,7 +42,7 @@ public:
 	};
 
 	WalkPlane_v2(EmiEngine *engine, const float *vertices, int vertexCount, WalkPlaneCollection *owner);
-	~WalkPlane_v2();
+	virtual ~WalkPlane_v2();
 
 	void *operator new(size_t size);
 	void operator delete(void *block);
@@ -53,26 +53,16 @@ public:
 	float *getGatePoint(float *out, WalkPlane_v2 *other, const float *from, const float *target);
 	void serialize(SaveRestoreAccess *accessFunc);
 	void setType(int newType);
-	bool within(const float *point, bool checkActive);
-	void closestPoint(float *point);
+	virtual bool within(const float *point, bool checkActive);
+	virtual void closestPoint(float *point);
 	float intersection(const float *pointA, const float *pointB, float *out);
-	void project(float *point);
-	float *getConstraintVector(Puck_v2 *puck);
-	void jumpOut(Puck_v2 *puck);
-
-	void computeEquationPs2();
-	bool withinPs2(const float *point, bool checkActive);
-	void projectPs2(float *point);
-	void closestPointPs2(float *point);
-	void clampToEdgesPs2(float *point);
-	void closestPointOnEdgePs2(float *point, const float *current, const float *previous);
-	float *getConstraintVectorPs2(Puck_v2 *puck);
-	void findExitPs2(const float *ahead, const float *back, float *out);
-	static bool closestSharedVertexPs2(WalkPlane_v2 *planeA, WalkPlane_v2 *planeB, float x, float y, float z, float *out);
-	static bool segmentCrossesPs2(const float *startA, const float *endA, const float *startB, const float *endB, float *ratio);
+	virtual void findExit(const float *ahead, const float *back, float *out);
+	virtual void project(float *point);
+	virtual float *getConstraintVector(Puck_v2 *puck);
+	virtual void jumpOut(Puck_v2 *puck);
 
 	static bool segmentIntersection(const float *startA, const float *endA, const float *startB, const float *endB, float *out);
-	static bool closestSharedVertex(WalkPlane_v2 *planeA, WalkPlane_v2 *planeB, float x, float y, float z, float *out);
+	virtual bool closestSharedVertex(WalkPlane_v2 *planeB, float x, float y, float z, float *out);
 
 	static const float kRadiansToDegrees;
 
@@ -97,12 +87,16 @@ public:
 	int _axisU;
 	int _axisV;
 
-private:
+protected:
 	void logConsoleError(const char *message);
+	void logConsoleStatus(const char *message);
+
+	float _constraintVector[3];
+
+private:
 	void solveMinorAxis(float *point);
 
 	EmiEngine *_engine;
-	float _constraintVector[3];
 };
 
 } // End of namespace Grim

@@ -22,6 +22,7 @@
 #include "common/textconsole.h"
 
 #include "engines/grim/emi/actor/actor.h"
+#include "engines/grim/emi/core/lconsoleservices.h"
 #include "engines/grim/emi/costume/choreinstance.h"
 #include "engines/grim/emi/emiengine.h"
 #include "engines/grim/emi/math/singlemath.h"
@@ -214,196 +215,6 @@ bool Actor::alignToPuck(Puck_v2 *puck) {
 	return previousSnapTurn;
 }
 
-void Actor::followPathPs2(float deltaTime) {
-	const float maxAngle = 3.4028235e38f;
-	const float limitAngle = 80.0000076f;
-
-	if (!_extra) {
-		warning("Actor::followPathPs2(): missing extra data");
-
-		return;
-	}
-
-	if ((_nodeFlags & kWorldValid) == 0)
-		updateWorldTransform();
-
-	float offset[3];
-
-	offset[0] = (TruncFloat(_world._pos._x) - TruncFloat(_extra->_walkTarget._x)).toFloat();
-	offset[1] = (TruncFloat(_world._pos._y) - TruncFloat(_extra->_walkTarget._y)).toFloat();
-	offset[2] = (TruncFloat(_world._pos._z) - TruncFloat(_extra->_walkTarget._z)).toFloat();
-
-	TruncFloat distance(SingleMath::length(offset));
-	TruncFloat rate(_extra->_walkRate);
-
-	if (rate < TruncFloat(0.0f))
-		rate = -rate;
-
-	TruncFloat scaled = TruncFloat(deltaTime) * rate;
-
-	scaled = TruncFloat(_extra->_timeScale) * scaled;
-
-	TruncFloat limit = TruncFloat(1.25f) * scaled;
-
-	if (distance < limit) {
-		while (distance < limit && _extra->_pathIndex < _extra->_numPathPoints) {
-			_extra->_pathIndex++;
-			setActorPosition(&_extra->_walkTarget._x);
-
-			if (_extra->_pathIndex < Extra_v2::kMaxPathPoints)
-				_extra->_walkTarget = _extra->_path[_extra->_pathIndex];
-			else
-				warning("Actor::followPathPs2(): path index out of range");
-
-			if ((_nodeFlags & kWorldValid) == 0)
-				updateWorldTransform();
-
-			offset[0] = (TruncFloat(_world._pos._x) - TruncFloat(_extra->_walkTarget._x)).toFloat();
-			offset[1] = (TruncFloat(_world._pos._y) - TruncFloat(_extra->_walkTarget._y)).toFloat();
-			offset[2] = (TruncFloat(_world._pos._z) - TruncFloat(_extra->_walkTarget._z)).toFloat();
-			distance = TruncFloat(SingleMath::length(offset));
-		}
-
-		if (_extra->_pathIndex == _extra->_numPathPoints) {
-			_mode &= ~1U;
-
-			if (ChoreInstance::isInstanceValid(_engine, _choreSlotIds[1]))
-				ChoreInstance::getInstance(_engine, _choreSlotIds[1])->stop();
-
-			_choreSlotIds[1] = 0;
-
-			return;
-		}
-	}
-
-	_mode |= 1U;
-
-	if (_extra->_puck)
-		_extra->_puck->pointAtPs2(&_extra->_walkTarget._x, TruncFloat(maxAngle));
-	else
-		warning("Actor::followPathPs2(): missing puck");
-
-	float sine;
-	float cosineLimit;
-	float cosineAlign;
-
-	SingleMath::sinCosDegrees(limitAngle, &sine, &cosineLimit);
-
-	TruncFloat alignAngle = TruncFloat(SingleMath::kDegreesToRadians) * TruncFloat(_extra->_alignOff);
-
-	alignAngle = TruncFloat(SingleMath::kRadiansToDegrees) * alignAngle;
-	SingleMath::sinCosDegrees(alignAngle.toFloat(), &sine, &cosineAlign);
-
-	if (!(TruncFloat(cosineAlign) <= TruncFloat(cosineLimit)))
-		forward();
-}
-
-void Actor::updateWalkPs2(float deltaTime) {
-	Puck_v2 *puck = _extra->_puck;
-	int turnDirection = _extra->_turnDir;
-
-	if (turnDirection != 0 && (_mode & 1) == 0) {
-		TruncFloat turn = TruncFloat(deltaTime) * TruncFloat(_extra->_timeScale);
-
-		turn = turn * TruncFloat(_extra->_turnRate);
-		turn = turn * TruncFloat::fromInt(turnDirection);
-		puck->rotatePs2(-turn);
-	}
-
-	if (_extra->_walking) {
-		TruncFloat distance = TruncFloat(_extra->_walkRate) * TruncFloat(_extra->_timeScale);
-
-		distance = TruncFloat(deltaTime) * distance;
-
-		puck->forwardPs2(distance);
-		_extra->_walking = true;
-	}
-
-	_extra->_aligned = alignToPuckPs2(puck);
-
-	if (_extra->_turnDir == 0 && !_extra->_aligned) {
-		if (TruncFloat(_extra->_alignOff) > TruncFloat(180.0f))
-			_extra->_turnDir = 1;
-		else
-			_extra->_turnDir = -1;
-	}
-
-	if ((puck->_nodeFlags & kPositionValid) == 0)
-		puck->computeLocalPositionFromWorld();
-
-	setLocalPosition(puck->_pos);
-}
-
-bool Actor::alignToPuckPs2(Puck_v2 *puck) {
-	if ((_nodeFlags & kEulerValid) == 0)
-		computeLocalMatrixFromWorld();
-
-	float savedX = _eulerDeg._x;
-	TruncFloat savedY(_eulerDeg._y);
-	float savedZ = _eulerDeg._z;
-	TruncFloat full(360.0f);
-
-	if ((puck->_nodeFlags & kEulerValid) == 0)
-		puck->computeLocalMatrixFromWorld();
-
-	TruncFloat difference(puck->_eulerDeg._y);
-
-	while (difference < savedY)
-		difference = difference + full;
-
-	difference = difference - savedY;
-
-	while (!(difference < full))
-		difference = difference - full;
-
-	TruncFloat sum = difference + TruncFloat(_extra->_offsetYaw);
-
-	if (sum < TruncFloat(0.05f) || !(sum <= TruncFloat(359.95f))) {
-		_extra->_snapTurn = false;
-		_extra->_alignOff = 0.0f;
-
-		return true;
-	}
-
-	_extra->_alignOff = sum.toFloat();
-
-	TruncFloat turnStep = full;
-
-	if (!_extra->_snapTurn) {
-		turnStep = TruncFloat(_extra->_turnRate) * TruncFloat(_extra->_timeScale);
-		turnStep = turnStep * TruncFloat(_engine->getFrameTime());
-	}
-
-	bool reversed = false;
-	TruncFloat angle = sum;
-
-	if (!(angle <= TruncFloat(180.0f))) {
-		reversed = true;
-		angle = full - angle;
-	}
-
-	if (!(angle <= turnStep + TruncFloat(0.01f))) {
-		TruncFloat remaining = angle - turnStep;
-
-		angle = turnStep + TruncFloat(0.1f) * remaining;
-	}
-
-	TruncFloat step = reversed ? angle * TruncFloat(-1.0f) : angle * TruncFloat(1.0f);
-
-	_eulerDeg._x = savedX;
-	_eulerDeg._y = (savedY + step).toFloat();
-	_eulerDeg._z = savedZ;
-
-	_nodeFlags = (_nodeFlags & ~kQuaternionValid) | kEulerValid | kLocalSet;
-	updateLocalState();
-
-	bool previousSnapTurn = _extra->_snapTurn;
-
-	_extra->_snapTurn = false;
-
-	return previousSnapTurn;
-}
-
 void Actor::turn(float degrees) {
 	if (!_extra) {
 		warning("Actor::turn(): missing extra data");
@@ -478,7 +289,7 @@ void Actor::enablePuck(bool enable) {
 			const float maxAngle = 3.4028235e38f;
 			float target[3];
 
-			Puck_v2 *newPuck = new Puck_v2(_engine, _extra->_reflectionAngle);
+			Puck_v2 *newPuck = createPuck(_extra->_reflectionAngle);
 
 			newPuck->_actorName = _actorName;
 
@@ -685,6 +496,8 @@ void Actor::actorWalkTo(float *target, const float *goal, Actor *other) {
 
 		if (plane)
 			plane->closestPoint(target);
+		else if (_engine->getGamePlatform() == Common::kPlatformPS2)
+			_engine->getConsoleServices()->logDebug("Actor::WalkTo: Couldn't find closest plane to destination point.");
 		else if (_engine->isDemo())
 			warning("Actor::actorWalkTo(): could not find a walk plane close to the destination");
 
@@ -728,11 +541,15 @@ void Actor::actorWalkTo(float *target, const float *goal, Actor *other) {
 
 			if (newCount > 1)
 				_mode |= 1U;
+			else if (_engine->getGamePlatform() == Common::kPlatformPS2)
+				_engine->getConsoleServices()->logStatus("WalkActorTo generated no waypoints!\n");
 		}
 
 		_extra->_goal._x = goal[0];
 		_extra->_goal._y = goal[1];
 		_extra->_goal._z = goal[2];
+	} else if (_engine->getGamePlatform() == Common::kPlatformPS2) {
+		_engine->getConsoleServices()->logDebug("Actor::WalkTo: Fail: Actor not using the walk system.\n");
 	} else if (_engine->isDemo()) {
 		warning("Actor::actorWalkTo(): the actor is not using the walk system");
 	}

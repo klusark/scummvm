@@ -1368,7 +1368,7 @@ bool Room_v2::loadBinary(const char *path) {
 					return failBinaryLoad(file, "invalid sector vertices");
 			}
 
-			WalkPlane_v2 *plane = new WalkPlane_v2(_engine, vertices, vertexCount, _walkPlanes);
+			WalkPlane_v2 *plane = _walkPlanes->createPlane(vertices, vertexCount);
 			int planeType;
 			byte activeByte;
 			float tolerance;

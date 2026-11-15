@@ -19,10 +19,10 @@
  *
  */
 
-#include "engines/grim/emi/actor/puck_v2.h"
+#include "engines/grim/emi/actor/puck_ps2.h"
 #include "engines/grim/emi/emiengine.h"
 #include "engines/grim/emi/math/singlemath.h"
-#include "engines/grim/emi/scene/walkplane_v2.h"
+#include "engines/grim/emi/scene/walkplane_ps2.h"
 
 namespace Grim {
 
@@ -30,19 +30,25 @@ static const float kEdgeEpsilonPs2 = 9.99999975e-06f;
 static const float kMinLengthPs2 = 9.99999968e-21f;
 static const float kRatioLimitPs2 = 1.00999999f;
 static const float kProbeDistancePs2 = 0.100000001f;
+static const float kJumpOutDistancePs2 = -10.0f;
 
-bool WalkPlane_v2::closestSharedVertexPs2(WalkPlane_v2 *planeA, WalkPlane_v2 *planeB, float x, float y, float z, float *out) {
+WalkPlane_v2Ps2::WalkPlane_v2Ps2(EmiEngine *engine, const float *vertices, int vertexCount, WalkPlaneCollection *owner) : WalkPlane_v2(engine, vertices, vertexCount, owner) {
+	if (_numVerts >= 2)
+		computeEquation();
+}
+
+bool WalkPlane_v2Ps2::closestSharedVertex(WalkPlane_v2 *planeB, float x, float y, float z, float *out) {
 	TruncFloat best(3.40282347e+38f);
 	TruncFloat pointY(y);
 	TruncFloat pointZ(z);
-	WalkPlane_v2 *planes[2] = { planeA, planeB };
-	WalkPlane_v2 *others[2] = { planeB, planeA };
+	WalkPlane_v2 *planes[2] = { this, planeB };
+	WalkPlane_v2 *others[2] = { planeB, this };
 
 	for (int pass = 0; pass < 2; pass++) {
 		for (int i = 0; i < planes[pass]->_numVerts; i++) {
 			wpVertex *vertex = planes[pass]->_verts[i];
 
-			if (!others[pass]->withinPs2(&vertex->x, false))
+			if (!others[pass]->within(&vertex->x, false))
 				continue;
 
 			TruncFloat deltaX = TruncFloat(vertex->x) - TruncFloat(x);
@@ -62,7 +68,7 @@ bool WalkPlane_v2::closestSharedVertexPs2(WalkPlane_v2 *planeA, WalkPlane_v2 *pl
 	return best != TruncFloat(3.40282347e+38f);
 }
 
-void WalkPlane_v2::computeEquationPs2() {
+void WalkPlane_v2Ps2::computeEquation() {
 	const wpVertex *first = _verts[0];
 	const wpVertex *second = _verts[1];
 	const wpVertex *last = _verts[_numVerts - 1];
@@ -91,7 +97,7 @@ void WalkPlane_v2::computeEquationPs2() {
 	_d = (-TruncFloat::multiplyAdd(normalX * TruncFloat(first->x) + normalY * TruncFloat(first->y), normalZ, TruncFloat(first->z))).toFloat();
 }
 
-void WalkPlane_v2::projectPs2(float *point) {
+void WalkPlane_v2Ps2::project(float *point) {
 	TruncFloat product = TruncFloat(point[0]) * TruncFloat(_normal[0]);
 	TruncFloat accumulator = -TruncFloat(_d) - product;
 
@@ -99,7 +105,7 @@ void WalkPlane_v2::projectPs2(float *point) {
 	point[1] = (accumulator / TruncFloat(_normal[1])).toFloat();
 }
 
-bool WalkPlane_v2::withinPs2(const float *point, bool checkActive) {
+bool WalkPlane_v2Ps2::within(const float *point, bool checkActive) {
 	if (checkActive && (!_enabled || !_active))
 		return false;
 
@@ -151,7 +157,7 @@ bool WalkPlane_v2::withinPs2(const float *point, bool checkActive) {
 	return true;
 }
 
-void WalkPlane_v2::closestPointOnEdgePs2(float *point, const float *current, const float *previous) {
+void WalkPlane_v2Ps2::closestPointOnEdge(float *point, const float *current, const float *previous) {
 	TruncFloat zero(0.0f);
 	TruncFloat edgeX = TruncFloat(current[0]) - TruncFloat(previous[0]);
 	TruncFloat edgeZ = TruncFloat(current[2]) - TruncFloat(previous[2]);
@@ -205,7 +211,7 @@ void WalkPlane_v2::closestPointOnEdgePs2(float *point, const float *current, con
 	}
 }
 
-void WalkPlane_v2::clampToEdgesPs2(float *point) {
+void WalkPlane_v2Ps2::clampToEdges(float *point) {
 	if (_numVerts <= 0)
 		return;
 
@@ -214,16 +220,16 @@ void WalkPlane_v2::clampToEdgesPs2(float *point) {
 	for (int i = 0; i < _numVerts; i++) {
 		const float *current = &_verts[i]->x;
 
-		closestPointOnEdgePs2(point, current, previous);
+		closestPointOnEdge(point, current, previous);
 		previous = current;
 	}
 }
 
-void WalkPlane_v2::closestPointPs2(float *point) {
+void WalkPlane_v2Ps2::closestPoint(float *point) {
 	TruncFloat zero(0.0f);
 	TruncFloat epsilon(kEdgeEpsilonPs2);
 
-	projectPs2(point);
+	project(point);
 
 	if (_numVerts <= 0)
 		return;
@@ -285,7 +291,7 @@ void WalkPlane_v2::closestPointPs2(float *point) {
 					point[1] = previous[1];
 					point[2] = previous[2];
 				} else {
-					projectPs2(point);
+					project(point);
 				}
 			}
 		}
@@ -294,7 +300,7 @@ void WalkPlane_v2::closestPointPs2(float *point) {
 	}
 }
 
-bool WalkPlane_v2::segmentCrossesPs2(const float *startA, const float *endA, const float *startB, const float *endB, float *ratio) {
+bool WalkPlane_v2Ps2::segmentCrosses(const float *startA, const float *endA, const float *startB, const float *endB, float *ratio) {
 	TruncFloat zero(0.0f);
 	TruncFloat epsilon(kEdgeEpsilonPs2);
 	TruncFloat limit(kRatioLimitPs2);
@@ -349,7 +355,7 @@ bool WalkPlane_v2::segmentCrossesPs2(const float *startA, const float *endA, con
 	return true;
 }
 
-void WalkPlane_v2::findExitPs2(const float *ahead, const float *back, float *out) {
+void WalkPlane_v2Ps2::findExit(const float *ahead, const float *back, float *out) {
 	TruncFloat zero(0.0f);
 	float startA[2];
 	float endA[2];
@@ -374,7 +380,7 @@ void WalkPlane_v2::findExitPs2(const float *ahead, const float *back, float *out
 		edgeEnd[0] = previous[0];
 		edgeEnd[1] = previous[2];
 
-		if (segmentCrossesPs2(startA, endA, edgeStart, edgeEnd, &ratio) && !(TruncFloat(ratio) <= best)) {
+		if (segmentCrosses(startA, endA, edgeStart, edgeEnd, &ratio) && !(TruncFloat(ratio) <= best)) {
 			_hitEdge = i;
 			best = TruncFloat(ratio);
 		}
@@ -395,14 +401,15 @@ void WalkPlane_v2::findExitPs2(const float *ahead, const float *back, float *out
 		out[2] = (TruncFloat(startA[1]) + best * deltaZ).toFloat();
 	}
 
-	projectPs2(out);
+	project(out);
 }
 
-float *WalkPlane_v2::getConstraintVectorPs2(Puck_v2 *puck) {
+float *WalkPlane_v2Ps2::getConstraintVector(Puck_v2 *basePuck) {
+	Puck_v2Ps2 *puck = static_cast<Puck_v2Ps2 *>(basePuck);
 	TruncFloat zero(0.0f);
 	TruncFloat epsilon(kEdgeEpsilonPs2);
 
-	puck->updateWorldPs2();
+	puck->updateWorld();
 
 	TruncFloat probe(kProbeDistancePs2);
 	TruncFloat forwardX(puck->_world._rot._m[6]);
@@ -421,7 +428,7 @@ float *WalkPlane_v2::getConstraintVectorPs2(Puck_v2 *puck) {
 	ahead[1] = (TruncFloat(puck->_pos._y) + stepY).toFloat();
 	ahead[2] = (TruncFloat(puck->_pos._z) + stepZ).toFloat();
 
-	puck->updateWorldPs2();
+	puck->updateWorld();
 
 	TruncFloat backward(-1.0f);
 
@@ -439,10 +446,10 @@ float *WalkPlane_v2::getConstraintVectorPs2(Puck_v2 *puck) {
 	back[1] = (TruncFloat(puck->_pos._y) + stepY).toFloat();
 	back[2] = (TruncFloat(puck->_pos._z) + stepZ).toFloat();
 
-	findExitPs2(ahead, back, exitPoint);
+	findExit(ahead, back, exitPoint);
 
 	if (_hitEdge == -1) {
-		logConsoleError("GetConstraintVector confused.\n");
+		logConsoleStatus("GetConstraintVector confused.\n");
 
 		return nullptr;
 	}
@@ -485,6 +492,76 @@ float *WalkPlane_v2::getConstraintVectorPs2(Puck_v2 *puck) {
 	_constraintVector[2] = (lineZ - TruncFloat(exitPoint[2])).toFloat();
 
 	return _constraintVector;
+}
+
+void WalkPlane_v2Ps2::jumpOut(Puck_v2 *puck) {
+	float position[3] = { 0.0f, 0.0f, 0.0f };
+	float ahead[3] = { 0.0f, 0.0f, 0.0f };
+	float hit[3] = { 0.0f, 0.0f, 0.0f };
+
+	if (_numVerts != 4) {
+		logConsoleStatus("WalkPlane::JumpOut requires that the plane be a square!\n");
+
+		return;
+	}
+
+	if ((puck->_nodeFlags & CNode::kPositionValid) == 0)
+		puck->computeLocalPositionFromWorld();
+
+	position[0] = puck->_pos._x;
+	position[1] = puck->_pos._y;
+	position[2] = puck->_pos._z;
+
+	if ((puck->_nodeFlags & CNode::kWorldValid) == 0)
+		puck->updateWorldTransform();
+
+	TruncFloat distance(kJumpOutDistancePs2);
+
+	ahead[0] = (TruncFloat(puck->_world._rot._m[6]) * distance + TruncFloat(position[0])).toFloat();
+	ahead[1] = (TruncFloat(puck->_world._rot._m[7]) * distance + TruncFloat(position[1])).toFloat();
+	ahead[2] = (TruncFloat(puck->_world._rot._m[8]) * distance + TruncFloat(position[2])).toFloat();
+
+	findExit(position, ahead, hit);
+
+	int edge = _hitEdge;
+
+	if (edge == -1) {
+		logConsoleStatus("Leave sector confused.\n");
+
+		return;
+	}
+
+	const float *current = &_verts[edge]->x;
+	const float *previous = &_verts[edge > 0 ? edge - 1 : _numVerts - 1]->x;
+	TruncFloat zero(0.0f);
+	TruncFloat deltaX = TruncFloat(previous[0]) - TruncFloat(current[0]);
+	TruncFloat magnitude = deltaX;
+	TruncFloat ratio;
+
+	if (deltaX < zero)
+		magnitude = -deltaX;
+
+	if (magnitude <= TruncFloat(kEdgeEpsilonPs2))
+		deltaX = zero;
+
+	if (zero == deltaX)
+		ratio = (TruncFloat(hit[2]) - TruncFloat(current[2])) / (TruncFloat(previous[2]) - TruncFloat(current[2]));
+	else
+		ratio = (TruncFloat(hit[0]) - TruncFloat(current[0])) / deltaX;
+
+	TruncFloat remaining = TruncFloat(1.0f) - ratio;
+
+	_hitEdge = (edge + 2) % _numVerts;
+
+	const float *newCurrent = &_verts[_hitEdge]->x;
+	const float *newPrevious = &_verts[_hitEdge > 0 ? _hitEdge - 1 : _numVerts - 1]->x;
+	CVector newPosition;
+
+	newPosition._x = (TruncFloat(newCurrent[0]) + remaining * (TruncFloat(newPrevious[0]) - TruncFloat(newCurrent[0]))).toFloat();
+	newPosition._y = (TruncFloat(newCurrent[1]) + remaining * (TruncFloat(newPrevious[1]) - TruncFloat(newCurrent[1]))).toFloat();
+	newPosition._z = (TruncFloat(newCurrent[2]) + remaining * (TruncFloat(newPrevious[2]) - TruncFloat(newCurrent[2]))).toFloat();
+
+	puck->setLocalPosition(newPosition);
 }
 
 } // End of namespace Grim

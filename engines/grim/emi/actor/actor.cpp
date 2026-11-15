@@ -23,6 +23,7 @@
 #include "common/textconsole.h"
 
 #include "engines/grim/emi/actor/actor.h"
+#include "engines/grim/emi/actor/actor_ps2.h"
 #include "engines/grim/emi/animation/anode.h"
 #include "engines/grim/emi/graphics/cdcvertexarray.h"
 #include "engines/grim/emi/graphics/cdrawcontext.h"
@@ -128,8 +129,19 @@ Actor::~Actor() {
 	// The disasm leaves the actor in the overworld list and in the selected/speaker slots
 }
 
+Actor *Actor::createActor(EmiEngine *engine, const char *newActorName) {
+	if (engine->getGamePlatform() == Common::kPlatformPS2)
+		return new ActorPs2(engine, newActorName);
+
+	return new Actor(engine, newActorName);
+}
+
+Puck_v2 *Actor::createPuck(float newReflectionAngle) {
+	return new Puck_v2(_engine, newReflectionAngle);
+}
+
 int Actor::allocateActor(EmiEngine *engine, const char *newActorName) {
-	Actor *actor = new Actor(engine, newActorName);
+	Actor *actor = createActor(engine, newActorName);
 
 	return actor->_id;
 }

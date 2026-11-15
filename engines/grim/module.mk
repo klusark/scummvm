@@ -27,6 +27,7 @@ MODULE_OBJS := \
 	emi/actor/actor_collision.o \
 	emi/actor/actor_draw.o \
 	emi/actor/actor_lookat.o \
+	emi/actor/actor_ps2.o \
 	emi/actor/actor_save.o \
 	emi/actor/actor_shadow.o \
 	emi/actor/actor_speech.o \

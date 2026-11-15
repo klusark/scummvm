@@ -19,10 +19,12 @@
  *
  */
 
-#include "engines/grim/emi/actor/puck_v2.h"
+#include "common/textconsole.h"
+
+#include "engines/grim/emi/actor/puck_ps2.h"
 #include "engines/grim/emi/emiengine.h"
 #include "engines/grim/emi/math/singlemath.h"
-#include "engines/grim/emi/scene/walkplane_v2.h"
+#include "engines/grim/emi/scene/walkplane_ps2.h"
 #include "engines/grim/emi/scene/walkplanecollection.h"
 
 namespace Grim {
@@ -36,7 +38,10 @@ static const float kMinLengthPs2 = 9.99999968e-21f;
 static const float kAngleScalePs2 = 57.2957764f;
 static const float kNeighborDistancePs2 = 0.00999999978f;
 
-void Puck_v2::updateWorldPs2() {
+Puck_v2Ps2::Puck_v2Ps2(EmiEngine *engine, float newReflectionAngle) : Puck_v2(engine, newReflectionAngle) {
+}
+
+void Puck_v2Ps2::updateWorld() {
 	if ((_nodeFlags & kWorldValid) != 0)
 		return;
 
@@ -54,7 +59,23 @@ void Puck_v2::updateWorldPs2() {
 	_nodeFlags |= kWorldValid;
 }
 
-void Puck_v2::rotatePs2(TruncFloat angle) {
+void Puck_v2Ps2::rotate(float angle) {
+	rotateTrunc(TruncFloat(angle));
+}
+
+float Puck_v2Ps2::pointAt(const float *target, float maxAngle) {
+	return pointAtTrunc(target, TruncFloat(maxAngle)).toFloat();
+}
+
+float Puck_v2Ps2::getYawToPoint(const float *target) {
+	return getYawToPointTrunc(target).toFloat();
+}
+
+bool Puck_v2Ps2::forward(float distance, int allowLeft, int allowRight) {
+	return forwardTrunc(TruncFloat(distance));
+}
+
+void Puck_v2Ps2::rotateTrunc(TruncFloat angle) {
 	if ((_nodeFlags & kEulerValid) == 0)
 		computeLocalMatrixFromWorld();
 
@@ -68,7 +89,7 @@ void Puck_v2::rotatePs2(TruncFloat angle) {
 	updateLocalState();
 }
 
-TruncFloat Puck_v2::getYawToPointPs2(const float *target) {
+TruncFloat Puck_v2Ps2::getYawToPointTrunc(const float *target) {
 	TruncFloat zero(0.0f);
 	TruncFloat full(360.0f);
 
@@ -84,7 +105,7 @@ TruncFloat Puck_v2::getYawToPointPs2(const float *target) {
 		yaw = yaw - full;
 
 	if ((_nodeFlags & kWorldValid) == 0)
-		updateWorldPs2();
+		updateWorld();
 
 	TruncFloat directionX = TruncFloat(target[0]) - TruncFloat(_world._pos._x);
 	TruncFloat directionZ = TruncFloat(target[2]) - TruncFloat(_world._pos._z);
@@ -115,18 +136,18 @@ TruncFloat Puck_v2::getYawToPointPs2(const float *target) {
 	return difference * TruncFloat(reversed ? -1.0f : 1.0f);
 }
 
-TruncFloat Puck_v2::pointAtPs2(const float *target, TruncFloat maxAngle) {
+TruncFloat Puck_v2Ps2::pointAtTrunc(const float *target, TruncFloat maxAngle) {
 	TruncFloat angle = maxAngle;
 
-	if (!(maxAngle < getYawToPointPs2(target)))
-		angle = getYawToPointPs2(target);
+	if (!(maxAngle < getYawToPointTrunc(target)))
+		angle = getYawToPointTrunc(target);
 
-	rotatePs2(angle);
+	rotateTrunc(angle);
 
 	return angle;
 }
 
-bool Puck_v2::constrainPs2(const float *vector) {
+bool Puck_v2Ps2::constrain(const float *vector) {
 	TruncFloat zero(0.0f);
 
 	if (vector) {
@@ -149,9 +170,9 @@ bool Puck_v2::constrainPs2(const float *vector) {
 	}
 
 	if ((_nodeFlags & kWorldValid) == 0)
-		updateWorldPs2();
+		updateWorld();
 
-	TruncFloat dot = TruncFloat::multiplyAdd(TruncFloat(_world._rot._m[6]) * TruncFloat(_constraint[0]) + TruncFloat(_world._rot._m[7]) * TruncFloat(_constraint[1]), TruncFloat(_world._rot._m[8]), TruncFloat(_constraint[2]));
+	TruncFloat dot =TruncFloat::multiplyAdd(TruncFloat(_world._rot._m[6]) * TruncFloat(_constraint[0]) + TruncFloat(_world._rot._m[7]) * TruncFloat(_constraint[1]), TruncFloat(_world._rot._m[8]), TruncFloat(_constraint[2]));
 	TruncFloat magnitude = dot;
 
 	if (dot < zero)
@@ -183,7 +204,7 @@ bool Puck_v2::constrainPs2(const float *vector) {
 	return true;
 }
 
-void Puck_v2::closestPointOnConstraintLinePs2(float *out, const float *point) {
+void Puck_v2Ps2::closestPointOnConstraintLine(float *out, const float *point) {
 	TruncFloat zero(0.0f);
 	TruncFloat pointX = TruncFloat(point[0]) - TruncFloat(_lineA[0]);
 	TruncFloat pointY = zero - TruncFloat(_lineA[1]);
@@ -200,7 +221,7 @@ void Puck_v2::closestPointOnConstraintLinePs2(float *out, const float *point) {
 	out[2] = (TruncFloat(_lineA[2]) + lineZ * ratio).toFloat();
 }
 
-bool Puck_v2::setPlanePs2(WalkPlane_v2 *plane, const float *point) {
+bool Puck_v2Ps2::setPlane(WalkPlane_v2 *plane, const float *point) {
 	bool changed = _plane != plane;
 	float position[3];
 
@@ -208,7 +229,7 @@ bool Puck_v2::setPlanePs2(WalkPlane_v2 *plane, const float *point) {
 	position[0] = point[0];
 	position[1] = point[1];
 	position[2] = point[2];
-	_plane->projectPs2(position);
+	_plane->project(position);
 
 	CVector newPosition;
 
@@ -223,17 +244,17 @@ bool Puck_v2::setPlanePs2(WalkPlane_v2 *plane, const float *point) {
 		return false;
 	}
 
-	float *vector = plane->getConstraintVectorPs2(this);
+	float *vector = plane->getConstraintVector(this);
 
 	if (vector) {
-		constrainPs2(vector);
+		constrain(vector);
 		_constrained = true;
 	}
 
 	return true;
 }
 
-bool Puck_v2::tryNeighborPlanesPs2() {
+bool Puck_v2Ps2::tryNeighborPlanes() {
 	for (uint i = 0; i < _plane->_neighbors.size(); i++) {
 		WalkPlane_v2 *neighbor = _planes->planeNumbered(_plane->_neighbors[i]);
 		float probe[3];
@@ -242,13 +263,19 @@ bool Puck_v2::tryNeighborPlanesPs2() {
 		probe[1] = _pos._y;
 		probe[2] = _pos._z;
 
-		if (!neighbor || !neighbor->_enabled)
+		if (!neighbor) {
+			warning("Puck_v2Ps2::tryNeighborPlanes(): missing neighbor plane");
+
+			continue;
+		}
+
+		if (!neighbor->_enabled)
 			continue;
 
 		if (!neighbor->_active || (neighbor->_type & kPlaneTypeWalk) == 0)
 			continue;
 
-		neighbor->clampToEdgesPs2(probe);
+		static_cast<WalkPlane_v2Ps2 *>(neighbor)->clampToEdges(probe);
 
 		TruncFloat deltaY = TruncFloat(probe[1]) - TruncFloat(_pos._y);
 		TruncFloat deltaX = TruncFloat(probe[0]) - TruncFloat(_pos._x);
@@ -256,7 +283,7 @@ bool Puck_v2::tryNeighborPlanesPs2() {
 		TruncFloat distance = TruncFloat::multiplyAdd(deltaX * deltaX + deltaY * deltaY, deltaZ, deltaZ);
 
 		if (distance < TruncFloat(kNeighborDistancePs2)) {
-			setPlanePs2(neighbor, probe);
+			setPlane(neighbor, probe);
 
 			return true;
 		}
@@ -273,30 +300,30 @@ bool Puck_v2::tryNeighborPlanesPs2() {
 	if (!found)
 		return false;
 
-	setPlanePs2(found, position);
+	setPlane(found, position);
 
 	return true;
 }
 
-void Puck_v2::clampToPlanePs2(const float *target) {
+void Puck_v2Ps2::clampToPlane(const float *target) {
 	float position[3];
 
 	position[0] = target[0];
 	position[1] = target[1];
 	position[2] = target[2];
-	_plane->clampToEdgesPs2(position);
-	_plane->projectPs2(position);
-	setPlanePs2(_plane, position);
+	static_cast<WalkPlane_v2Ps2 *>(_plane)->clampToEdges(position);
+	_plane->project(position);
+	setPlane(_plane, position);
 }
 
-bool Puck_v2::finishMovePs2(const float *target) {
+bool Puck_v2Ps2::finishMove(const float *target) {
 	float position[3];
 
 	position[0] = target[0];
 	position[1] = target[1];
 	position[2] = target[2];
 
-	if (_plane->withinPs2(position, true)) {
+	if (_plane->within(position, true)) {
 		CVector newPosition;
 
 		newPosition._x = position[0];
@@ -313,17 +340,17 @@ bool Puck_v2::finishMovePs2(const float *target) {
 
 	_plane->_enabled = true;
 
-	if (found && (found->_type & kPlaneTypeConstraint) == kPlaneTypeConstraint) {
-		setPlanePs2(found, position);
+	if (found && (found->_type & kPlaneTypeConstraint) != kPlaneTypeConstraint) {
+		setPlane(found, position);
 
 		return true;
 	}
 
-	clampToPlanePs2(position);
+	clampToPlane(position);
 	_plane->_enabled = false;
 
-	while (tryNeighborPlanesPs2() && !_constrained) {
-		clampToPlanePs2(position);
+	while (tryNeighborPlanes() && !_constrained) {
+		clampToPlane(position);
 		_plane->_enabled = false;
 	}
 
@@ -332,14 +359,14 @@ bool Puck_v2::finishMovePs2(const float *target) {
 	return true;
 }
 
-bool Puck_v2::forwardPs2(TruncFloat distance) {
+bool Puck_v2Ps2::forwardTrunc(TruncFloat distance) {
 	float target[3] = { 0.0f, 0.0f, 0.0f };
 
-	if (_constrained && !constrainPs2(nullptr))
+	if (_constrained && !constrain(nullptr))
 		return false;
 
 	if ((_nodeFlags & kWorldValid) == 0)
-		updateWorldPs2();
+		updateWorld();
 
 	if (_plane) {
 		float ahead[3];
@@ -347,10 +374,10 @@ bool Puck_v2::forwardPs2(TruncFloat distance) {
 		ahead[0] = (TruncFloat(_world._pos._x) + TruncFloat(_world._rot._m[6])).toFloat();
 		ahead[1] = (TruncFloat(_world._pos._y) + TruncFloat(_world._rot._m[7])).toFloat();
 		ahead[2] = (TruncFloat(_world._pos._z) + TruncFloat(_world._rot._m[8])).toFloat();
-		_plane->projectPs2(ahead);
+		_plane->project(ahead);
 
 		if ((_nodeFlags & kWorldValid) == 0)
-			updateWorldPs2();
+			updateWorld();
 
 		TruncFloat directionX = TruncFloat(ahead[0]) - TruncFloat(_world._pos._x);
 		TruncFloat directionY = TruncFloat(ahead[1]) - TruncFloat(_world._pos._y);
@@ -370,23 +397,23 @@ bool Puck_v2::forwardPs2(TruncFloat distance) {
 		TruncFloat stepZ = directionZ * distance;
 
 		if ((_nodeFlags & kWorldValid) == 0)
-			updateWorldPs2();
+			updateWorld();
 
-		target[0] = (TruncFloat(_world._pos._x) + stepX).toFloat();
+		target[0] =(TruncFloat(_world._pos._x) + stepX).toFloat();
 		target[1] = (TruncFloat(_world._pos._y) + stepY).toFloat();
 		target[2] = (TruncFloat(_world._pos._z) + stepZ).toFloat();
 
 		if (_constrained) {
 			float closest[3];
 
-			closestPointOnConstraintLinePs2(closest, target);
+			closestPointOnConstraintLine(closest, target);
 			target[0] = closest[0];
 			target[1] = closest[1];
 			target[2] = closest[2];
-			_plane->projectPs2(target);
+			_plane->project(target);
 		}
 
-		return finishMovePs2(target);
+		return finishMove(target);
 	}
 
 	TruncFloat stepX = TruncFloat(_world._rot._m[6]) * distance;
@@ -394,7 +421,7 @@ bool Puck_v2::forwardPs2(TruncFloat distance) {
 	TruncFloat stepZ = TruncFloat(_world._rot._m[8]) * distance;
 
 	if ((_nodeFlags & kWorldValid) == 0)
-		updateWorldPs2();
+		updateWorld();
 
 	CVector newPosition;
 

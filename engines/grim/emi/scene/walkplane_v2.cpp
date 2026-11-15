@@ -133,9 +133,6 @@ WalkPlane_v2::WalkPlane_v2(EmiEngine *engine, const float *vertices, int vertexC
 
 	_d = (float)-(((double)_normal[2] * first->z + (double)_normal[1] * first->y) + (double)_normal[0] * first->x);
 
-	if (_engine->getGamePlatform() == Common::kPlatformPS2)
-		computeEquationPs2();
-
 	if (_engine->isDemo()) {
 		// The demo works on the two axes left after dropping the dominant normal component
 		float dominant = _normal[0];
@@ -168,6 +165,15 @@ void WalkPlane_v2::logConsoleError(const char *message) {
 		warning("%s", message);
 }
 
+void WalkPlane_v2::logConsoleStatus(const char *message) {
+	LConsoleServices *console = _engine->getConsoleServices();
+
+	if (console)
+		console->logStatus("%s", message);
+	else
+		warning("%s", message);
+}
+
 WalkPlane_v2::~WalkPlane_v2() {
 	if (_collection) {
 		for (int i = 0; i < _numVerts; i++)
@@ -188,7 +194,8 @@ void WalkPlane_v2::operator delete(void *block) {
 }
 
 int WalkPlane_v2::getSize() {
-	return (int)(_name.size() + sizeof(WalkPlane_v2) + _neighbors.size() * sizeof(int));
+	// The virtual table pointer is not counted
+	return (int)(_name.size() + sizeof(WalkPlane_v2) - sizeof(void *) + _neighbors.size() * sizeof(int));
 }
 
 bool WalkPlane_v2::addNeighbor(int planeNumber) {
@@ -222,7 +229,7 @@ bool WalkPlane_v2::touches(WalkPlane_v2 *other, bool both) {
 float *WalkPlane_v2::getGatePoint(float *out, WalkPlane_v2 *other, const float *from, const float *target) {
 	float result[3] = { 0.0f, 0.0f, 0.0f };
 
-	closestSharedVertex(this, other, target[0], target[1], target[2], result);
+	closestSharedVertex(other, target[0], target[1], target[2], result);
 
 	out[0] = result[0];
 	out[1] = result[1];
@@ -380,9 +387,6 @@ void WalkPlane_v2::setType(int newType) {
 }
 
 bool WalkPlane_v2::within(const float *point, bool checkActive) {
-	if (_engine->getGamePlatform() == Common::kPlatformPS2)
-		return withinPs2(point, checkActive);
-
 	if (checkActive && (!_enabled || !_active))
 		return false;
 
@@ -467,12 +471,6 @@ bool WalkPlane_v2::within(const float *point, bool checkActive) {
 }
 
 void WalkPlane_v2::closestPoint(float *point) {
-	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
-		closestPointPs2(point);
-
-		return;
-	}
-
 	if (_engine->isDemo())
 		solveMinorAxis(point);
 	else
@@ -769,13 +767,11 @@ float WalkPlane_v2::intersection(const float *pointA, const float *pointB, float
 	return (float)-(180.2f - (double)angle);
 }
 
+void WalkPlane_v2::findExit(const float *ahead, const float *back, float *out) {
+	intersection(ahead, back, out);
+}
+
 void WalkPlane_v2::project(float *point) {
-	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
-		projectPs2(point);
-
-		return;
-	}
-
 	if (_engine->isDemo()) {
 		double distance = ((double)_normal[0] * point[0] + (double)_normal[1] * point[1] + (double)_normal[2] * point[2]) + _d;
 
@@ -820,9 +816,6 @@ void WalkPlane_v2::solveMinorAxis(float *point) {
 }
 
 float *WalkPlane_v2::getConstraintVector(Puck_v2 *puck) {
-	if (_engine->getGamePlatform() == Common::kPlatformPS2)
-		return getConstraintVectorPs2(puck);
-
 	float position[3] = { 0.0f, 0.0f, 0.0f };
 	float behind[3] = { 0.0f, 0.0f, 0.0f };
 
@@ -1057,10 +1050,8 @@ void WalkPlane_v2::jumpOut(Puck_v2 *puck) {
 	puck->setLocalPosition(newPosition);
 }
 
-bool WalkPlane_v2::closestSharedVertex(WalkPlane_v2 *planeA, WalkPlane_v2 *planeB, float x, float y, float z, float *out) {
-	if (planeA->_engine->getGamePlatform() == Common::kPlatformPS2)
-		return closestSharedVertexPs2(planeA, planeB, x, y, z, out);
-
+bool WalkPlane_v2::closestSharedVertex(WalkPlane_v2 *planeB, float x, float y, float z, float *out) {
+	WalkPlane_v2 *planeA = this;
 	float best = kMaxFloat;
 
 	for (int i = 0; i < planeA->_numVerts; i++) {

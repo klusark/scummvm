@@ -39,24 +39,12 @@ public:
 
 	void reset();
 	void validate(WalkPlaneCollection *collection);
-	void rotate(float angle);
-	float pointAt(const float *target, float maxAngle);
-	float getYawToPoint(const float *target);
+	virtual void rotate(float angle);
+	virtual float pointAt(const float *target, float maxAngle);
+	virtual float getYawToPoint(const float *target);
 	float *closestPointOnConstraintLine(float *out, const float *point);
-	bool forward(float distance, int allowLeft, int allowRight);
-	bool constrain(const float *vector);
-
-	void updateWorldPs2();
-	void rotatePs2(TruncFloat angle);
-	TruncFloat getYawToPointPs2(const float *target);
-	TruncFloat pointAtPs2(const float *target, TruncFloat maxAngle);
-	bool forwardPs2(TruncFloat distance);
-	bool constrainPs2(const float *vector);
-	void closestPointOnConstraintLinePs2(float *out, const float *point);
-	bool finishMovePs2(const float *target);
-	bool setPlanePs2(WalkPlane_v2 *plane, const float *point);
-	bool tryNeighborPlanesPs2();
-	void clampToPlanePs2(const float *target);
+	virtual bool forward(float distance, int allowLeft, int allowRight);
+	virtual bool constrain(const float *vector);
 
 	float _reflectionAngle;
 	float _startStep;

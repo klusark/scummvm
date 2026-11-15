@@ -96,12 +96,6 @@ void Puck_v2::validate(WalkPlaneCollection *collection) {
 }
 
 void Puck_v2::rotate(float angle) {
-	if (_engine->getGamePlatform() == Common::kPlatformPS2) {
-		rotatePs2(TruncFloat(angle));
-
-		return;
-	}
-
 	if (_engine->isDemo() && fabs((double)angle) <= kDemoMinRotation)
 		return;
 
@@ -114,9 +108,6 @@ void Puck_v2::rotate(float angle) {
 }
 
 float Puck_v2::pointAt(const float *target, float maxAngle) {
-	if (_engine->getGamePlatform() == Common::kPlatformPS2)
-		return pointAtPs2(target, TruncFloat(maxAngle)).toFloat();
-
 	float angle;
 
 	if (getYawToPoint(target) > maxAngle)
@@ -130,9 +121,6 @@ float Puck_v2::pointAt(const float *target, float maxAngle) {
 }
 
 float Puck_v2::getYawToPoint(const float *target) {
-	if (_engine->getGamePlatform() == Common::kPlatformPS2)
-		return getYawToPointPs2(target).toFloat();
-
 	if ((_nodeFlags & kEulerValid) == 0)
 		computeLocalMatrixFromWorld();
 
@@ -224,9 +212,6 @@ float *Puck_v2::closestPointOnConstraintLine(float *out, const float *point) {
 }
 
 bool Puck_v2::forward(float distance, int allowLeft, int allowRight) {
-	if (_engine->getGamePlatform() == Common::kPlatformPS2)
-		return forwardPs2(TruncFloat(distance));
-
 	float target[3] = { 0.0f, 0.0f, 0.0f };
 	float hit[3] = { 0.0f, 0.0f, 0.0f };
 
@@ -486,9 +471,6 @@ bool Puck_v2::forward(float distance, int allowLeft, int allowRight) {
 }
 
 bool Puck_v2::constrain(const float *vector) {
-	if (_engine->getGamePlatform() == Common::kPlatformPS2)
-		return constrainPs2(vector);
-
 	if (vector) {
 		_constraint[0] = vector[0];
 		_constraint[1] = vector[1];
