@@ -919,8 +919,34 @@ struct luaL_reg monkeyMainOpcodes[] = {
 	{ "SetResidualVMPreference", LUA_OPCODE(Lua_V2, SetResidualVMPreference) }
 };
 
+// Grim's builtins that Monkey4.exe does not have: EMI's scripts never call them, and most of
+// them work on Grim's objects (iMuse, bitmaps, object states, Grim's shadows and costumes)
+static const char *const grimOnlyOpcodes[] = {
+	"ActivateActorShadow", "ActorPuckOrient", "ActorToClean", "AddShadowPlane", "AttachToResources",
+	"BlastImage", "BlastRect", "CheckForFile", "CleanBuffer", "CompleteActorChore", "DetachFromResources",
+	"DriveActorTo", "EnableDebugKeys", "Enumerate3DDevices", "EnumerateVideoDevices", "FlushControls",
+	"ForceRefresh", "FreeImage", "FreeObjectState", "GetActorCostume", "GetActorCostumeDepth",
+	"GetActorNodeLocation", "GetActorRect", "GetCameraActor", "GetImage", "GetSaveGameImage", "GetShrinkPos",
+	"GetVideoDevices", "ImFadeParam", "ImGetParam", "ImPause", "ImResume", "ImSetParam", "ImSetSequence",
+	"ImSetVoiceEffect", "ImStartSound", "ImStopAllSounds", "ImStopSound", "IrisDown", "IrisUp",
+	"Is3DHardwareEnabled", "IsActorChoring", "IsFullscreenMoviePlaying", "KillActorShadows", "LoadCostume",
+	"LockFont", "NewObjectState", "NukeResources", "PlaySoundAt", "PopActorCostume", "PreRender",
+	"PrintActorCostumes", "PrintLine", "PushActorCostume", "PutActorAtInterest", "ResetTextures",
+	"RestoreIMuse", "RotateVector", "SaveIMuse", "SendObjectToBack", "SendObjectToFront", "SetActiveShadow",
+	"SetActorChoreLooping", "SetActorClipActive", "SetActorClipPlane", "SetActorColormap", "SetActorConstrain",
+	"SetActorCostume", "SetActorFrustrumCull", "SetActorInvClipNode", "SetActorScale", "SetActorShadowPlane",
+	"SetActorShadowPoint", "SetActorShadowValid", "SetCameraInterest", "SetCameraRoll", "SetEmergencyFont",
+	"SetHardwareState", "SetLightIntensity", "SetObjectType", "SetShadowColor", "SetSoundPosition",
+	"SetVideoDevices", "ShrinkBoxes", "StartFullscreenMovie", "StopActorChore", "UnShrinkBoxes",
+};
+
 void Lua_V2::registerOpcodes() {
 	Lua_V1::registerOpcodes();
+
+	for (const char *name : grimOnlyOpcodes) {
+		lua_pushnil();
+		lua_setglobal(name);
+	}
 
 	// Register main opcodes functions
 	luaL_openlib(monkeyMainOpcodes, ARRAYSIZE(monkeyMainOpcodes));
