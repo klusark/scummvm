@@ -110,6 +110,15 @@ jobs:
           # ANGLE is only used if SDL has EGL support
           grep -E 'SDL_VIDEO_OPENGL_(EGL|ES2)' "$DEPS/include/SDL2/SDL_config.h"
           grep -q '#define SDL_VIDEO_OPENGL_EGL 1' "$DEPS/include/SDL2/SDL_config.h"
+      - name: Build zlib
+        run: |
+          # The static bundle links with libz.a from the static libraries prefix
+          curl -sSfL -o zlib.tar.gz https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
+          echo '9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23  zlib.tar.gz' | shasum -a 256 -c
+          tar xzf zlib.tar.gz
+          cd zlib-1.3.1
+          CFLAGS="-arch ${{ matrix.arch }}" ./configure --static --prefix="$DEPS"
+          make -j "$NUM_CPUS" install
       - name: Configure ScummVM
         run: |
           cd scummvm
