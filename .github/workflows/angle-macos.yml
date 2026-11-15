@@ -1,6 +1,6 @@
 name: ANGLE macOS test
 # Builds ANGLE and a minimal static ScummVM bundle on macOS, then runs it
-# with OpenGL ES through ANGLE and with native OpenGL to compare.
+# with default settings, with OpenGL ES through ANGLE and with native OpenGL.
 on:
   workflow_dispatch:
     inputs:
@@ -141,11 +141,15 @@ jobs:
           make bundle
           ls -l ScummVM.app/Contents/Frameworks
           codesign --verify --deep --verbose=2 ScummVM.app
-      - name: Run with OpenGL ES (ANGLE) and with OpenGL
+      - name: Run by default, with OpenGL ES (ANGLE) and with OpenGL
         run: |
           mkdir -p results
-          for impl in gles2 gl; do
-            printf '[scummvm]\ngfx_mode=opengl\nopengl_implementation=%s\n' "$impl" > "results/$impl.ini"
+          for impl in default gles2 gl; do
+            if [ "$impl" = default ]; then
+              printf '[scummvm]\ngfx_mode=opengl\n' > "results/$impl.ini"
+            else
+              printf '[scummvm]\ngfx_mode=opengl\nopengl_implementation=%s\n' "$impl" > "results/$impl.ini"
+            fi
             scummvm/ScummVM.app/Contents/MacOS/scummvm \
               --config="$PWD/results/$impl.ini" \
               --logfile="$PWD/results/log-$impl.txt" -d5 \
@@ -168,7 +172,7 @@ jobs:
             echo "## ${{ matrix.name }}"
             echo '```'
             cat results/status.txt 2>/dev/null || true
-            for impl in gles2 gl; do
+            for impl in default gles2 gl; do
               echo "--- $impl"
               grep -hE 'context initialized|OpenGL (version|vendor|renderer)|falling back|WARNING|ERROR' \
                 "results/log-$impl.txt" 2>/dev/null || echo "(no log)"
@@ -178,8 +182,11 @@ jobs:
           cat "$GITHUB_STEP_SUMMARY"
       - name: Check ScummVM used ANGLE
         run: |
-          grep -q 'OpenGL: GLES2 context initialized' results/log-gles2.txt
-          grep -q 'OpenGL renderer: ANGLE' results/log-gles2.txt
+          # ANGLE is the default on macOS when shipped in the bundle
+          for impl in default gles2; do
+            grep -q 'OpenGL: GLES2 context initialized' "results/log-$impl.txt"
+            grep -q 'OpenGL renderer: ANGLE' "results/log-$impl.txt"
+          done
           grep -q 'OpenGL: GL context initialized' results/log-gl.txt
       - name: Package bundle
         if: always()

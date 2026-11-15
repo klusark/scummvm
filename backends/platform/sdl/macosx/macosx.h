@@ -64,6 +64,7 @@ protected:
 
 #ifdef BACKEND_SDL_SELECTABLE_GLES
 	bool requestOpenGLESContext() override;
+	bool preferOpenGLES() override;
 	void resetOpenGLContextRequest() override;
 #endif
 };

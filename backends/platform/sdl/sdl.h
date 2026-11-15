@@ -151,12 +151,18 @@ protected:
 
 #if defined(BACKEND_SDL_SELECTABLE_GLES)
 	/**
-	 * Request an OpenGL ES 2 context instead of an OpenGL one when the user
-	 * selected it using the opengl_implementation setting.
+	 * Request an OpenGL ES 2 context instead of an OpenGL one depending on
+	 * the opengl_implementation setting (auto, gl or gles2).
 	 *
 	 * @return true if an OpenGL ES context has been requested
 	 */
 	virtual bool requestOpenGLESContext();
+
+	/**
+	 * Whether OpenGL ES should be used instead of OpenGL when the user
+	 * didn't choose (opengl_implementation is auto).
+	 */
+	virtual bool preferOpenGLES();
 
 	/**
 	 * Go back to SDL default OpenGL context settings.

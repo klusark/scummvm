@@ -104,19 +104,30 @@ void OSystem_MacOSX::init() {
 }
 
 #ifdef BACKEND_SDL_SELECTABLE_GLES
+// ANGLE libraries shipped in the bundle
+static bool getANGLELibrariesPaths(Common::String &eglPath, Common::String &glesPath) {
+	Common::String frameworksPath = getFrameworksAppBundlePathMacOSX();
+	if (frameworksPath.empty())
+		return false;
+
+	eglPath = frameworksPath + "/libEGL.dylib";
+	glesPath = frameworksPath + "/libGLESv2.dylib";
+	return access(eglPath.c_str(), R_OK) == 0 && access(glesPath.c_str(), R_OK) == 0;
+}
+
+bool OSystem_MacOSX::preferOpenGLES() {
+	// Apple's OpenGL is deprecated, use ANGLE over Metal when it's shipped
+	Common::String eglPath, glesPath;
+	return getANGLELibrariesPaths(eglPath, glesPath);
+}
+
 bool OSystem_MacOSX::requestOpenGLESContext() {
 	if (!OSystem_POSIX::requestOpenGLESContext())
 		return false;
 
-	// OpenGL ES is provided by ANGLE libraries shipped in the bundle.
-	// SDL looks for them using their bare names which won't find them there.
-	Common::String frameworksPath = getFrameworksAppBundlePathMacOSX();
-	if (frameworksPath.empty())
-		return true;
-
-	Common::String eglPath = frameworksPath + "/libEGL.dylib";
-	Common::String glesPath = frameworksPath + "/libGLESv2.dylib";
-	if (access(eglPath.c_str(), R_OK) != 0 || access(glesPath.c_str(), R_OK) != 0)
+	// SDL looks for the libraries using their bare names which won't find them in the bundle
+	Common::String eglPath, glesPath;
+	if (!getANGLELibrariesPaths(eglPath, glesPath))
 		return true;
 
 #if SDL_VERSION_ATLEAST(3, 0, 0)

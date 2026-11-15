@@ -424,10 +424,17 @@ void OSystem_SDL::initBackend() {
 
 #if defined(BACKEND_SDL_SELECTABLE_GLES)
 bool OSystem_SDL::requestOpenGLESContext() {
-	// OpenGL ES is provided by ANGLE on these platforms. As it's not always
-	// available nor better than the native OpenGL driver, only use it when
-	// the user asks for it.
-	if (!ConfMan.hasKey("opengl_implementation") || ConfMan.get("opengl_implementation") != "gles2") {
+	// OpenGL ES is provided by ANGLE on these platforms.
+	// The user can force it (gles2) or the native OpenGL driver (gl),
+	// otherwise (auto) the platform decides.
+	Common::String implementation = "auto";
+	if (ConfMan.hasKey("opengl_implementation"))
+		implementation = ConfMan.get("opengl_implementation");
+
+	if (implementation == "auto") {
+		if (!preferOpenGLES())
+			return false;
+	} else if (implementation != "gles2") {
 		return false;
 	}
 
@@ -437,6 +444,11 @@ bool OSystem_SDL::requestOpenGLESContext() {
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 	return true;
+}
+
+bool OSystem_SDL::preferOpenGLES() {
+	// The native OpenGL driver is preferred by default
+	return false;
 }
 
 void OSystem_SDL::resetOpenGLContextRequest() {
