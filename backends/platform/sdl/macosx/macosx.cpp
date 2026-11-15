@@ -52,6 +52,8 @@
 
 // For querying number of MIDI devices
 #include <pthread.h>
+#include <stdlib.h>	// for setenv
+#include <unistd.h>	// for access
 #include <CoreMIDI/CoreMIDI.h>
 
 void *coreMIDIthread(void *threadarg) {
@@ -100,6 +102,46 @@ void OSystem_MacOSX::init() {
 	// Invoke parent implementation of this method
 	OSystem_POSIX::init();
 }
+
+#ifdef BACKEND_SDL_SELECTABLE_GLES
+bool OSystem_MacOSX::requestOpenGLESContext() {
+	if (!OSystem_POSIX::requestOpenGLESContext())
+		return false;
+
+	// OpenGL ES is provided by ANGLE libraries shipped in the bundle.
+	// SDL looks for them using their bare names which won't find them there.
+	Common::String frameworksPath = getFrameworksAppBundlePathMacOSX();
+	if (frameworksPath.empty())
+		return true;
+
+	Common::String eglPath = frameworksPath + "/libEGL.dylib";
+	Common::String glesPath = frameworksPath + "/libGLESv2.dylib";
+	if (access(eglPath.c_str(), R_OK) != 0 || access(glesPath.c_str(), R_OK) != 0)
+		return true;
+
+#if SDL_VERSION_ATLEAST(3, 0, 0)
+	SDL_SetHint(SDL_HINT_EGL_LIBRARY, eglPath.c_str());
+	SDL_SetHint(SDL_HINT_OPENGL_LIBRARY, glesPath.c_str());
+#else
+	setenv("SDL_VIDEO_EGL_DRIVER", eglPath.c_str(), 1);
+	setenv("SDL_VIDEO_GL_DRIVER", glesPath.c_str(), 1);
+#endif
+	return true;
+}
+
+void OSystem_MacOSX::resetOpenGLContextRequest() {
+	OSystem_POSIX::resetOpenGLContextRequest();
+
+	// The OpenGL library hint is also used to load the desktop OpenGL library
+#if SDL_VERSION_ATLEAST(3, 0, 0)
+	SDL_ResetHint(SDL_HINT_EGL_LIBRARY);
+	SDL_ResetHint(SDL_HINT_OPENGL_LIBRARY);
+#else
+	unsetenv("SDL_VIDEO_EGL_DRIVER");
+	unsetenv("SDL_VIDEO_GL_DRIVER");
+#endif
+}
+#endif
 
 void OSystem_MacOSX::initBackend() {
 #ifdef USE_TRANSLATION

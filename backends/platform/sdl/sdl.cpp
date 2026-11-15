@@ -300,9 +300,20 @@ void OSystem_SDL::initBackend() {
 #endif
 	debug(1, "Using SDL Video Driver \"%s\"", sdlDriverName);
 
+#if defined(BACKEND_SDL_SELECTABLE_GLES)
+	const bool requestedGLES = requestOpenGLESContext();
+#endif
+
 #if defined(USE_OPENGL_GAME) || defined(USE_OPENGL_SHADERS)
 	debug(2, "SDL Video Detecting OpenGL Features...");
 	detectOpenGLFeaturesSupport();
+#if defined(BACKEND_SDL_SELECTABLE_GLES)
+	if (requestedGLES && _oglType == OpenGL::kContextNone) {
+		warning("Could not create an OpenGL ES context, falling back to OpenGL");
+		resetOpenGLContextRequest();
+		detectOpenGLFeaturesSupport();
+	}
+#endif
 	debug(2, "SDL Video Detecting Anti-aliasing Support...");
 	detectAntiAliasingSupport();
 	debug(2, "SDL Video OpenGL Feature Detection Complete");
@@ -411,6 +422,29 @@ void OSystem_SDL::initBackend() {
 	dynamic_cast<SdlGraphicsManager *>(_graphicsManager)->activateManager();
 }
 
+#if defined(BACKEND_SDL_SELECTABLE_GLES)
+bool OSystem_SDL::requestOpenGLESContext() {
+	// OpenGL ES is provided by ANGLE on these platforms. As it's not always
+	// available nor better than the native OpenGL driver, only use it when
+	// the user asks for it.
+	if (!ConfMan.hasKey("opengl_implementation") || ConfMan.get("opengl_implementation") != "gles2") {
+		return false;
+	}
+
+	// Use EGL even if the native driver can create OpenGL ES contexts
+	SDL_SetHint(SDL_HINT_OPENGL_ES_DRIVER, "1");
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+	return true;
+}
+
+void OSystem_SDL::resetOpenGLContextRequest() {
+	SDL_SetHint(SDL_HINT_OPENGL_ES_DRIVER, "0");
+	SDL_GL_ResetAttributes();
+}
+#endif
+
 #if defined(USE_OPENGL_GAME) || defined(USE_OPENGL_SHADERS)
 void OSystem_SDL::detectOpenGLFeaturesSupport() {
 	_oglType = OpenGL::kContextNone;
@@ -458,6 +492,7 @@ void OSystem_SDL::detectOpenGLFeaturesSupport() {
 	}
 	SDL_GLContext glContext = SDL_GL_CreateContext(window);
 	if (!glContext) {
+		_oglType = OpenGL::kContextNone;
 		SDL_DestroyWindow(window);
 		return;
 	}

@@ -272,6 +272,7 @@ _morphospath="PROGDIR:"
 _staticlibpath=
 _xcodetoolspath=
 _sparklepath=
+_anglepath=
 _pkgconfig=pkg-config
 _sdlconfig=sdl2-config
 _prefer_sdl3=no
@@ -1195,6 +1196,8 @@ Optional Libraries:
 
   --with-sparkle-prefix=DIR prefix where sparkle is installed
                             (macOS/Windows only - optional)
+  --with-angle-prefix=DIR   directory containing ANGLE EGL and GLESv2 libraries
+                            to ship in packages (macOS/Windows only - optional)
   --disable-sparkle         disable sparkle automatic update support
                             [macOS/Windows only - autodetect]
 
@@ -1586,6 +1589,10 @@ for ac_option in $@; do
 	--with-sparkle-prefix=*)
 		arg=`echo $ac_option | cut -d '=' -f 2`
 		_sparklepath=$arg
+		;;
+	--with-angle-prefix=*)
+		arg=`echo $ac_option | cut -d '=' -f 2`
+		_anglepath=$arg
 		;;
 	--with-readline-prefix=*)
 		arg=`echo $ac_option | cut -d '=' -f 2`
@@ -6845,10 +6852,15 @@ if test "$_opengl_mode" != none ; then
 				*)
 					# SDL2 supports both OpenGL + OpenGL ES contexts.
 					# However, macOS only allows OpenGL context creation at
-					# this time, thus we limit us to OpenGL on that platform.
+					# this time, thus we limit us to OpenGL on that platform
+					# unless ANGLE is shipped to provide OpenGL ES.
 					case $_host_os in
 						darwin*)
-							_opengl_mode=gl
+							if test -n "$_anglepath" ; then
+								test "$_opengl_mode" = "auto" && _opengl_mode=any
+							else
+								_opengl_mode=gl
+							fi
 							;;
 						morphos)
 							_opengl_glad=no
@@ -8056,6 +8068,7 @@ MORPHOSPATH=$_morphospath
 STATICLIBPATH=$_staticlibpath
 XCODETOOLSPATH=$_xcodetoolspath
 SPARKLEPATH=$_sparklepath
+ANGLEPATH=$_anglepath
 SDLCONFIG=$_sdlconfig
 
 ABI := $ABI

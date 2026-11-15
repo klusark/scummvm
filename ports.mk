@@ -149,6 +149,11 @@ ifdef USE_SPARKLE
 	rm -f $(bundle_name)/Contents/Frameworks/Sparkle.framework/XPCServices
 	rm -rf $(bundle_name)/Contents/Frameworks/Sparkle.framework/Versions/Current/XPCServices/
 endif
+ifdef ANGLEPATH
+# ANGLE libraries are loaded at runtime by SDL when OpenGL ES is requested
+	mkdir -p $(bundle_name)/Contents/Frameworks
+	cp $(ANGLEPATH)/libEGL.dylib $(ANGLEPATH)/libGLESv2.dylib $(bundle_name)/Contents/Frameworks/
+endif
 ifdef MACOSX_LEOPARD_OR_BELOW
 	cp $(srcdir)/icons/scummvm_legacy.icns $(bundle_name)/Contents/Resources/scummvm.icns
 else

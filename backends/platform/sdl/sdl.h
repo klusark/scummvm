@@ -36,6 +36,11 @@
 #define USE_MULTIPLE_RENDERERS
 #endif
 
+// On these platforms, OpenGL ES can be provided by ANGLE and selected at runtime
+#if defined(USE_OPENGL) && !defined(USE_GLES_MODE) && SDL_VERSION_ATLEAST(2, 0, 0) && (defined(WIN32) || defined(MACOSX))
+#define BACKEND_SDL_SELECTABLE_GLES
+#endif
+
 #ifdef USE_DISCORD
 class DiscordPresence;
 #endif
@@ -143,6 +148,21 @@ protected:
 	SdlWindow *_window;
 
 	SdlGraphicsManager::State _gfxManagerState;
+
+#if defined(BACKEND_SDL_SELECTABLE_GLES)
+	/**
+	 * Request an OpenGL ES 2 context instead of an OpenGL one when the user
+	 * selected it using the opengl_implementation setting.
+	 *
+	 * @return true if an OpenGL ES context has been requested
+	 */
+	virtual bool requestOpenGLESContext();
+
+	/**
+	 * Go back to SDL default OpenGL context settings.
+	 */
+	virtual void resetOpenGLContextRequest();
+#endif
 
 #if defined(USE_OPENGL_GAME) || defined(USE_OPENGL_SHADERS)
 	// Graphics capabilities

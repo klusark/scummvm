@@ -61,6 +61,11 @@ protected:
 	// Override createAudioCDManager() to get our Mac-specific
 	// version.
 	AudioCDManager *createAudioCDManager() override;
+
+#ifdef BACKEND_SDL_SELECTABLE_GLES
+	bool requestOpenGLESContext() override;
+	void resetOpenGLContextRequest() override;
+#endif
 };
 
 #endif

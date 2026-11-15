@@ -116,12 +116,19 @@ ifdef USE_SPARKLE
 	sed -e '/WinSparkle\.dll/ s/^;//' -i $(WIN32PATH)/ScummVM.iss
 endif
 endif
+ifdef ANGLEPATH
+	cp $(ANGLEPATH)/libEGL.dll $(ANGLEPATH)/libGLESv2.dll $(WIN32PATH)
+endif
 
 win32dist-mingw: win32-data
 ifneq (,$(findstring peldd,$(LDD)))
 	$(LDD) $(WIN32PATH)/$(EXECUTABLE) | xargs -I files cp -vu files $(WIN32PATH)
 else
 	ldd $(WIN32PATH)/$(EXECUTABLE) | grep -i mingw | cut -d">" -f2 | cut -d" " -f2 | sort -u | xargs -I files cp -vu files $(WIN32PATH)
+endif
+ifdef ANGLEPATH
+# ANGLE libraries are loaded at runtime by SDL when OpenGL ES is requested
+	cp $(ANGLEPATH)/libEGL.dll $(ANGLEPATH)/libGLESv2.dll $(WIN32PATH)
 endif
 
 .PHONY: win32-data win32dist win32dist-mingw

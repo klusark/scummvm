@@ -65,6 +65,13 @@ Common::String getResourceAppBundlePathMacOSX() {
 	return Common::String([bundlePath fileSystemRepresentation]);
 }
 
+Common::String getFrameworksAppBundlePathMacOSX() {
+	NSString *frameworksPath = [[NSBundle mainBundle] privateFrameworksPath];
+	if (frameworksPath == nil)
+		return Common::String();
+	return Common::String([frameworksPath fileSystemRepresentation]);
+}
+
 Common::String getAppSupportPathMacOSX() {
 	// See comments in getDesktopPathMacOSX() as we use the same methods
 	NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
