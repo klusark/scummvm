@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "common/events.h"
 #include "common/memstream.h"
 #include "common/stream.h"
@@ -801,15 +802,30 @@ void Movie::drawFramePs2(EmiEngine *engine, const Graphics::Surface &frame, Grap
 	int height = drawContext->_displayMode.height;
 	const Graphics::Surface *output = &frame;
 
-	// 640x448 frames are centered on taller screens, with black borders
-	if (frame.w <= width && frame.h <= height && (frame.w != width || frame.h != height)) {
+	bool stretch = ConfMan.getBool("emi_ps2_stretch_movies");
+
+	// Without stretching, smaller frames are centered with black borders
+	if ((frame.w != width || frame.h != height) && (stretch || (frame.w <= width && frame.h <= height))) {
+		int bytesPerPixel = frame.format.bytesPerPixel;
+
 		if (!screen.getPixels() || screen.w != width || screen.h != height || screen.format != frame.format) {
 			screen.free();
 			screen.create(width, height, frame.format);
 			screen.fillRect(Common::Rect(width, height), frame.format.RGBToColor(0, 0, 0));
 		}
 
-		screen.copyRectToSurface(frame, (width - frame.w) / 2, (height - frame.h) / 2, Common::Rect(frame.w, frame.h));
+		if (stretch) {
+			for (int y = 0; y < height; y++) {
+				const byte *source = (const byte *)frame.getBasePtr(0, y * frame.h / height);
+				byte *destination = (byte *)screen.getBasePtr(0, y);
+
+				for (int x = 0; x < width; x++)
+					memcpy(destination + x * bytesPerPixel, source + (x * frame.w / width) * bytesPerPixel, bytesPerPixel);
+			}
+		} else {
+			screen.copyRectToSurface(frame, (width - frame.w) / 2, (height - frame.h) / 2, Common::Rect(frame.w, frame.h));
+		}
+
 		output = &screen;
 	}
 

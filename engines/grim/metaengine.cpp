@@ -164,6 +164,17 @@ static const ADExtraGuiOptionsMap gameGuiOptions[] = {
 			0
 		}
 	},
+	{
+		GAMEOPTION_EMI_PS2_STRETCH_MOVIES,
+		{
+			_s("Stretch movies to fill the screen"),
+			_s("Stretch the movies over the whole screen, as the original game does. Otherwise they get centered at their own size."),
+			"emi_ps2_stretch_movies",
+			true,
+			0,
+			0
+		}
+	},
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
 

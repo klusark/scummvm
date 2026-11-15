@@ -132,6 +132,7 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 	// Set default settings
 	ConfMan.registerDefault("grim_3d_acceleration", false);
 	ConfMan.registerDefault("grim_remaster_bugfixes", true);
+	ConfMan.registerDefault("emi_ps2_stretch_movies", true);
 
 	_showFps = ConfMan.getBool("show_fps");
 
