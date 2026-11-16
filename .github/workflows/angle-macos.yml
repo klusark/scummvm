@@ -141,6 +141,8 @@ jobs:
           grep -E 'USE_OPENGL|USE_GLES_MODE' config.h
           # macOS used to force desktop OpenGL only: runtime detection is needed for ANGLE
           ! grep -q '#define USE_GLES_MODE' config.h
+          # USE_ANGLE lifts the forced desktop OpenGL mode on macOS
+          grep -q '#define USE_ANGLE' config.h
           grep '^ANGLEPATH' config.mk
       - name: Build ScummVM bundle
         run: |

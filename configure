@@ -6858,6 +6858,7 @@ if test "$_opengl_mode" != none ; then
 						darwin*)
 							if test -n "$_anglepath" ; then
 								test "$_opengl_mode" = "auto" && _opengl_mode=any
+								add_line_to_config_h "#define USE_ANGLE"
 							else
 								_opengl_mode=gl
 							fi

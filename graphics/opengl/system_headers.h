@@ -24,13 +24,10 @@
 
 #include "common/scummsys.h"
 
-// On macOS we only support GL contexts. The reason is that Apple's GL interface
-// uses "void *" for GLhandleARB which is not type compatible with GLint. This
-// kills our aliasing trick for extension functions and thus would force us to
-// supply two different Shader class implementations or introduce other
-// wrappers. macOS only supports GL contexts right now anyway (at least
-// according to SDL2 sources), thus it is not much of an issue.
-#if defined(MACOSX) && (!defined(USE_GLES_MODE) || USE_GLES_MODE != 0)
+// On macOS we only support GL contexts, as macOS doesn't provide OpenGL ES.
+// When ANGLE is shipped, it provides OpenGL ES and the context type is
+// selected at runtime.
+#if defined(MACOSX) && !defined(USE_ANGLE) && (!defined(USE_GLES_MODE) || USE_GLES_MODE != 0)
 //#warning "Only forced OpenGL mode is supported on macOS. Overriding settings."
 #undef USE_GLES_MODE
 #define USE_GLES_MODE 0
