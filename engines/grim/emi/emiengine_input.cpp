@@ -150,7 +150,7 @@ int EmiEngine::mapPadButton(int button) {
 }
 
 void EmiEngine::handleKeyPress(const Common::KeyState &key, bool repeat) {
-	int virtualKey = KeyGenerator::keyCodeToVirtualKey(key.keycode);
+	int virtualKey = KeyGenerator::keyCodeToVirtualKey(key.keycode, (key.flags & Common::KBD_NUM) != 0);
 
 	if (virtualKey != 0) {
 		int keyFlags = 0;
@@ -172,7 +172,7 @@ void EmiEngine::handleKeyPress(const Common::KeyState &key, bool repeat) {
 }
 
 void EmiEngine::handleKeyRelease(const Common::KeyState &key) {
-	int virtualKey = KeyGenerator::keyCodeToVirtualKey(key.keycode);
+	int virtualKey = KeyGenerator::keyCodeToVirtualKey(key.keycode, (key.flags & Common::KBD_NUM) != 0);
 
 	if (virtualKey == 0)
 		return;

@@ -114,7 +114,38 @@ void KeyGenerator::keyUp(int vk, int keyFlags, int timestamp) {
 	postEvent(_engine, event);
 }
 
-int KeyGenerator::keyCodeToVirtualKey(Common::KeyCode keyCode) {
+int KeyGenerator::keyCodeToVirtualKey(Common::KeyCode keyCode, bool numLockOn) {
+	// The exe takes the virtual key straight from the window message, so with Num Lock off
+	// the keypad gives the navigation keys
+	if (!numLockOn) {
+		switch (keyCode) {
+		case Common::KEYCODE_KP0:
+			return 0x2D;
+		case Common::KEYCODE_KP1:
+			return 0x23;
+		case Common::KEYCODE_KP2:
+			return 0x28;
+		case Common::KEYCODE_KP3:
+			return 0x22;
+		case Common::KEYCODE_KP4:
+			return 0x25;
+		case Common::KEYCODE_KP5:
+			return 0x0C;
+		case Common::KEYCODE_KP6:
+			return 0x27;
+		case Common::KEYCODE_KP7:
+			return 0x24;
+		case Common::KEYCODE_KP8:
+			return 0x26;
+		case Common::KEYCODE_KP9:
+			return 0x21;
+		case Common::KEYCODE_KP_PERIOD:
+			return 0x2E;
+		default:
+			break;
+		}
+	}
+
 	if (keyCode >= Common::KEYCODE_0 && keyCode <= Common::KEYCODE_9)
 		return 0x30 + (keyCode - Common::KEYCODE_0);
 

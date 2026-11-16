@@ -44,7 +44,7 @@ public:
 	void keyDown(int vk, int keyFlags, int timestamp);
 	void keyUp(int vk, int keyFlags, int timestamp);
 
-	static int keyCodeToVirtualKey(Common::KeyCode keyCode);
+	static int keyCodeToVirtualKey(Common::KeyCode keyCode, bool numLockOn);
 
 	uint _modifiers;
 };
