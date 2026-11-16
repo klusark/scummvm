@@ -167,12 +167,24 @@ jobs:
             sleep 30
             screencapture -x "results/screenshot-$impl.png" || echo "screencapture failed"
             if kill -0 "$pid" 2>/dev/null; then
-              kill "$pid"
               echo "$impl: still running after 30s" >> results/status.txt
+              # Record where it is, in case it hangs
+              sample "$pid" 5 -file "results/sample-$impl.txt" >/dev/null 2>&1 || echo "sample failed"
+              kill "$pid"
+              sleep 5
+              kill -9 "$pid" 2>/dev/null && echo "$impl: had to be killed with SIGKILL" >> results/status.txt || true
             else
               wait "$pid" && rc=0 || rc=$?
               echo "$impl: exited early with code $rc" >> results/status.txt
             fi
+          done
+      - name: Dump logs
+        if: always()
+        run: |
+          for f in results/*.txt; do
+            echo "::group::$f"
+            cat "$f"
+            echo "::endgroup::"
           done
       - name: Report
         if: always()
