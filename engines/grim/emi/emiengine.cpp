@@ -429,6 +429,10 @@ void EmiEngine::destroyDemoReplay() {
 }
 
 void EmiEngine::setReplayRequest(int mode, const char *name) {
+	// Recording demos is a developer feature: a stray key press must not start it
+	if (mode == DemoReplay::kModeRecord && !ConfMan.getBool("game_devel_mode"))
+		return;
+
 	_replayRequest = mode;
 
 	if (name)
