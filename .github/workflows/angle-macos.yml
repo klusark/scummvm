@@ -32,11 +32,15 @@ jobs:
             arch: arm64
             # Same minimum as the buildbot arm64 toolchain
             deploymentTarget: '14.0'
+            # Apple Silicon runners provide a Metal device
+            requireMetal: true
           - name: macOS x86_64
             platform: macos-15-intel
             arch: x86_64
             # ANGLE needs at least macOS 10.15
             deploymentTarget: '10.15'
+            # Intel runners may not have a Metal device: falling back to OpenGL is accepted
+            requireMetal: false
     env:
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deploymentTarget }}
       DEPS: ${{ github.workspace }}/deps
@@ -203,12 +207,20 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           cat "$GITHUB_STEP_SUMMARY"
-      - name: Check ScummVM used ANGLE
+      - name: Check ScummVM used ANGLE over Metal
         run: |
-          # ANGLE is the default on macOS when shipped in the bundle
+          # ANGLE over Metal is the default on macOS when shipped in the bundle
           for impl in default gles2; do
-            grep -q 'OpenGL: GLES2 context initialized' "results/log-$impl.txt"
-            grep -q 'OpenGL renderer: ANGLE' "results/log-$impl.txt"
+            if grep -q 'OpenGL renderer: ANGLE.*Metal' "results/log-$impl.txt"; then
+              grep -q 'OpenGL: GLES2 context initialized' "results/log-$impl.txt"
+            elif [ '${{ matrix.requireMetal }}' != 'true' ] && \
+                grep -q 'falling back to OpenGL' "results/log-$impl.txt" && \
+                grep -q 'OpenGL: GL context initialized' "results/log-$impl.txt"; then
+              echo "::warning::$impl: no Metal device, fell back to OpenGL"
+            else
+              echo "::error::$impl: ScummVM didn't use ANGLE over Metal"
+              exit 1
+            fi
           done
           grep -q 'OpenGL: GL context initialized' results/log-gl.txt
       - name: Package bundle
