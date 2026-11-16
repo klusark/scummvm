@@ -40,7 +40,6 @@ public:
 	virtual int logWarning(const char *format, ...);
 	virtual int logError(const char *format, ...);
 	virtual int logDebug(const char *format, ...);
-	virtual int logToFile(const char *format, ...);
 
 protected:
 	enum {

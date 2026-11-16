@@ -20,7 +20,6 @@
  */
 
 #include "common/debug.h"
-#include "common/file.h"
 #include "common/str.h"
 #include "common/textconsole.h"
 
@@ -56,8 +55,6 @@ int LConsoleServices::logMessage(int level, const char *format, va_list args) {
 		warning("LConsoleServices::logMessage(): message too long");
 		message = Common::String(message.c_str(), kMaxMessageLength);
 	}
-
-	logToFile("%s", message.c_str());
 
 	while (!message.empty() && message.lastChar() == '\n')
 		message.deleteLastChar();
@@ -110,25 +107,6 @@ int LConsoleServices::logDebug(const char *format, ...) {
 	va_end(args);
 
 	return length;
-}
-
-int LConsoleServices::logToFile(const char *format, ...) {
-	va_list args;
-
-	if (!_engine->_logToFileEnabled)
-		return 0;
-
-	Common::DumpFile file;
-	if (file.open(Common::Path(_engine->_logToFileName))) {
-		va_start(args, format);
-		Common::String text = Common::String::vformat(format, args);
-		va_end(args);
-
-		file.writeString(text);
-		file.close();
-	}
-
-	return 0;
 }
 
 } // End of namespace Grim

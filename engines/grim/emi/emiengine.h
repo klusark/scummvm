@@ -348,8 +348,6 @@ private:
 	uint _consoleCount;
 	uint _consoleArraySize;
 	CGrimeConsole *_grimeConsole;
-	bool _logToFileEnabled;
-	char _logToFileName[32];
 	Common::Array<LFileServices *> _fileServicesStack;
 	LFileServices *_fileServices;
 	CPathingFileServices *_pathingFileServices;

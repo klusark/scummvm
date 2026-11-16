@@ -33,6 +33,7 @@ public:
 	static bool advanceCheck(int *pos, int *total);
 	inline static bool advanceCheck() { return advanceCheck(NULL, NULL); }
 	static void clear();
+	static bool hasUpdatedGameData();
 
 private:
 	static void init();
@@ -44,6 +45,7 @@ private:
 		int numSums;
 	};
 	static bool checkMD5(const MD5Sum &sums, const char *md5);
+	static bool fileMatches(const MD5Sum &sums);
 
 	static bool _initted;
 	static Common::Array<MD5Sum> *_files;

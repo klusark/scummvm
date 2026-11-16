@@ -291,6 +291,7 @@ protected:
 	GrimGameType _gameType;
 	Common::Platform _gamePlatform;
 	Common::Language _gameLanguage;
+	int _updatedGameData;
 
 	// sputMain and grimlib modules
 	int initializeModule(int module, SysStruct *hs);
@@ -313,6 +314,7 @@ protected:
 	bool checkGameData(const char *gameName);
 	Common::Error runGrime();
 	void mountPatchArchives();
+	bool hasUpdatedGameData();
 	void createImuse();
 	void createModules();
 	void destroyModules();

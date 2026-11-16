@@ -35,6 +35,9 @@ namespace Grim {
 const char *gfupd101[] = {
 	"bc57c4db2ab814f3bb115ec5702b62f4"
 };
+const char *patch05[] = {
+	"cfdf16aaad85fb1a31acc762eb66a2b1"
+};
 const char *year4mus[] = {
 	"939e041887c1b14f99ad951ac8e3cb25", //english unpatched
 	"aae53e089eeb9707cc96afece1f58f15"  //Russian(7Wolf)
@@ -174,6 +177,9 @@ const char *data000[] = {
 	"7c9886667636aa77fe1ab9bada257595", //Chinese unpatched
 	"57cd60851d144c3a0b4115441e3ddba9", //Russian(7Wolf)
 	"589cf4fc8c582003557aa8b8a16f4f61"  //russian(Fargus)
+};
+const char *data000PrePatched[] = {
+	"2069b8bf113119910df8219e787e7e94" //english pre-patched
 };
 const char *credits[] = {
 	"6dcecad8f01657184f8576aab8fb3f00", //english unpatched
@@ -475,7 +481,9 @@ void MD5Check::init() {
 			}
 			MD5SUM("grimdemo.mus", grimdemo)
 		} else if (!g_grim->isRemastered()) {
-			MD5SUM("gfupd101.exe", gfupd101)
+			const char *updateFilename = g_grim->getUpdateFilename();
+			if (updateFilename)
+				MD5SUM(updateFilename, gfupd101)
 			MD5SUM("year4mus.lab", year4mus)
 			MD5SUM("year3mus.lab", year3mus)
 			MD5SUM("year2mus.lab", year2mus)
@@ -582,6 +590,27 @@ bool MD5Check::checkMD5(const MD5Sum &sums, const char *md5) {
 		}
 	}
 	return false;
+}
+
+bool MD5Check::fileMatches(const MD5Sum &sums) {
+	Common::File file;
+
+	if (!file.open(sums.filename))
+		return false;
+
+	Common::String md5 = Common::computeStreamMD5AsString(file);
+
+	return checkMD5(sums, md5.c_str());
+}
+
+bool MD5Check::hasUpdatedGameData() {
+	// Installation with the official update applied: its Data005.lab and Patch05.bin
+	if (fileMatches(MD5Sum("data005.lab", data005, ARRAYSIZE(data005))) &&
+			fileMatches(MD5Sum("patch05.bin", patch05, ARRAYSIZE(patch05))))
+		return true;
+
+	// Pressing that already contains the update data
+	return fileMatches(MD5Sum("data000.lab", data000PrePatched, ARRAYSIZE(data000PrePatched)));
 }
 
 bool MD5Check::checkFiles() {

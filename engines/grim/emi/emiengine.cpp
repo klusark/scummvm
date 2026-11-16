@@ -75,7 +75,6 @@ EmiEngine::EmiEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, Com
 		GrimEngine(syst, gameFlags, gameType, platform, language),
 		_memoryServices(new LMemoryServices()),
 		_consoleServices(nullptr), _consoles(nullptr), _consoleCount(0), _consoleArraySize(0), _grimeConsole(nullptr),
-		_logToFileEnabled(false), _logToFileName(),
 		_fileServicesStack(), _fileServices(nullptr), _pathingFileServices(nullptr), _zFileServices(nullptr),
 		_bundleServices(nullptr),
 		_defaultResourceManager(), _resourceManager(&_defaultResourceManager), _gameResourceManager(nullptr),

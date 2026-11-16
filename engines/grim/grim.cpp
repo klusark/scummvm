@@ -128,11 +128,13 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 	_gameFlags = gameFlags;
 	_gamePlatform = platform;
 	_gameLanguage = language;
+	_updatedGameData = -1;
 
 	// Set default settings
 	ConfMan.registerDefault("grim_3d_acceleration", false);
 	ConfMan.registerDefault("grim_remaster_bugfixes", true);
 	ConfMan.registerDefault("emi_ps2_stretch_movies", true);
+	ConfMan.registerDefault("game_devel_mode", false);
 	ConfMan.registerDefault("emi_ps2_tank_controls", false);
 
 	_showFps = ConfMan.getBool("show_fps");
@@ -174,10 +176,17 @@ GrimEngine::~GrimEngine() {
 }
 
 const char *GrimEngine::getUpdateFilename() {
-	if (!(getGameFlags() & ADGF_DEMO) && !isRemastered())
+	if (!(getGameFlags() & ADGF_DEMO) && !isRemastered() && !hasUpdatedGameData())
 		return "gfupd101.exe";
 	else
 		return nullptr;
+}
+
+bool GrimEngine::hasUpdatedGameData() {
+	if (_updatedGameData < 0)
+		_updatedGameData = MD5Check::hasUpdatedGameData() ? 1 : 0;
+
+	return _updatedGameData != 0;
 }
 
 Common::Error GrimEngine::run() {
