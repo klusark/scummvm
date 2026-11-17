@@ -708,6 +708,26 @@ void SputText::drawTextEvent(SputTextEvent *event, int markDirty) {
 	event->params.fgColor = foreground;
 }
 
+// NukeResources (the change of the year) frees every font. The game has no text on the screen then, but a scripted
+// test run (--autorun) shows its progress as text objects, which were left with a font that is gone and crashed when
+// they were drawn: they go on with the system font.
+void SputText::fontFreed(BlastTextFont *font) {
+	if (!font || font == _font)
+		return;
+
+	for (SputTextEvent *event = _textQueue; event; event = event->next) {
+		if (event->params.font == font)
+			event->params.font = _font;
+	}
+
+	if (_printLineParams.font == font)
+		_printLineParams.font = _font;
+	if (_defaultTextParams.font == font)
+		_defaultTextParams.font = _font;
+	if (_blastTextParams.font == font)
+		_blastTextParams.font = _font;
+}
+
 SputTextEvent *SputText::findSerialNumber(int serial) {
 	SputTextEvent *event = _textQueue;
 

@@ -1141,6 +1141,25 @@ void Res::freeAll() {
 	}
 }
 
+int Res::freeUnreferenced(int tag) {
+	int freed = 0;
+	ResNode *node = _nodeHead;
+
+	while (node) {
+		ResNode *next = node->next;
+
+		if (node->tag == tag && !node->refs && !(node->flags & 8)) {
+			unlinkNode(node);
+			freeNode(node);
+			freed++;
+		}
+
+		node = next;
+	}
+
+	return freed;
+}
+
 int Res::countDependents(void *handle) {
 	int count = 0;
 	ResNode *node = checkAllocatedRes(handle);

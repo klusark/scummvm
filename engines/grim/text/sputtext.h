@@ -100,6 +100,8 @@ public:
 	const char *extractSayLineData(const char *msgId, char *translation);
 	void drawTextEvent(SputTextEvent *event, int markDirty);
 	SputTextEvent *findSerialNumber(int serial);
+	/** A font is about to be freed: the texts that use it go on with the system font */
+	void fontFreed(BlastTextFont *font);
 	int getTextObjectParams(TextParams *params, lua_Object tableObj, SputTextEvent *event);
 	int getCoordsFromTable(lua_Object tableObj);
 	void getHdClip(StdRect *clip, int coords);

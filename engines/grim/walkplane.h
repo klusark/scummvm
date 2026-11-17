@@ -152,6 +152,7 @@ public:
 	void tightenPathRemastered();
 
 	WalkPlane *getHead() const { return _wpHead; }
+	int getTotVerts() const { return _totVerts; }
 	Puck *getPuckHead() const { return _puckHead; }
 	const char *getCurCollection() const { return _curCollection; }
 

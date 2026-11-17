@@ -150,6 +150,8 @@ public:
 	void touch(void *handle);
 	void resolveToSerialNumber(ResRef *ref);
 	void freeAll();
+	/** Frees the resources of a tag that nothing refers to; returns how many */
+	int freeUnreferenced(int tag);
 	int countDependents(void *handle);
 	int initLists(int tag, const char *name);
 	void setMemoryLimitMB(int megabytes);

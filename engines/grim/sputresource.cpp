@@ -35,6 +35,8 @@
 #include "engines/grim/render/sputrender.h"
 #include "engines/grim/sputresource.h"
 #include "engines/grim/sputroom.h"
+#include "engines/grim/text/sputtext.h"
+#include "engines/grim/walkplane.h"
 #include "engines/grim/text/text.h"
 #include "engines/grim/wuregistry.h"
 
@@ -105,6 +107,16 @@ int SputResource::stopPurge(int state) {
 }
 
 void *SputResource::alloc(int resType, const char *name) {
+	// The vertices of the walk planes of all the sets in memory share one table of 1024. The original frees sets with
+	// the purge below, by the bytes its whole memory manager has allocated; here only the resources are counted
+	// (Res::totalAllocated), the purge comes much later, and in a long session without a load (a scripted run of the
+	// whole game) the table filled up: the sectors of a newly loaded set were left out (the security hall of year 2
+	// had no detector). The sets that nothing refers to are freed before the table gets that full.
+	if (resType == kSputTagSet && !_loaderLocked && g_grim->_walkSystem && g_grim->_walkSystem->getTotVerts() > 640 && !_res->loaded(resType, name)) {
+		int freed = _res->freeUnreferenced(kSputTagSet);
+		debug(1, "SputResource::alloc(): %d walk vertices in use, %d sets freed before loading %s", g_grim->_walkSystem->getTotVerts(), freed, name);
+	}
+
 	void *handle = _res->getResource(resType, name);
 
 	if (handle && _res->totalAllocated() > _totalAllowedLimit && !_loaderLocked) {
@@ -651,6 +663,9 @@ int SputResource::loadResFont(ResHandlerMsg *msg) {
 	}
 	case 2: {
 		BlastTextFont *font = static_cast<BlastTextFont *>(msg->data);
+
+		if (g_grim->_sputText)
+			g_grim->_sputText->fontFreed(font);
 
 		_text->freeFont(font);
 
