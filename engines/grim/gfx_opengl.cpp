@@ -322,11 +322,11 @@ void GfxOpenGL::getScreenBoundingBox(const Mesh *model, int *x1, int *y1, int *x
 
 		for (int j = 0; j < model->_faces[i].getNumVertices(); j++) {
 			GLdouble modelView[16], projection[16];
-			GLint viewPort[4];
+			// The text placed with the box is in game coordinates, whatever the size of the viewport
+			const GLint viewPort[4] = { 0, 0, _gameWidth, _gameHeight };
 
 			glGetDoublev(GL_MODELVIEW_MATRIX, modelView);
 			glGetDoublev(GL_PROJECTION_MATRIX, projection);
-			glGetIntegerv(GL_VIEWPORT, viewPort);
 
 			pVertices = model->_vertices + 3 * model->_faces[i].getVertex(j);
 
@@ -388,11 +388,11 @@ void GfxOpenGL::getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, in
 	GLdouble bottom = -1000;
 
 	GLdouble modelView[16], projection[16];
-	GLint viewPort[4];
+	// The text placed with the box is in game coordinates, whatever the size of the viewport
+	const GLint viewPort[4] = { 0, 0, _gameWidth, _gameHeight };
 
 	glGetDoublev(GL_MODELVIEW_MATRIX, modelView);
 	glGetDoublev(GL_PROJECTION_MATRIX, projection);
-	glGetIntegerv(GL_VIEWPORT, viewPort);
 
 	for (uint i = 0; i < model->_numFaces; i++) {
 		uint16 *indices = (uint16 *)model->_faces[i]._indexes;
@@ -461,10 +461,10 @@ void GfxOpenGL::getActorScreenBBox(const Actor *actor, Common::Point &p1, Common
 
 	// Get the current OpenGL state
 	GLdouble modelView[16], projection[16];
-	GLint viewPort[4];
+	// The text placed with the box is in game coordinates, whatever the size of the viewport
+	const GLint viewPort[4] = { 0, 0, _gameWidth, _gameHeight };
 	glGetDoublev(GL_MODELVIEW_MATRIX, modelView);
 	glGetDoublev(GL_PROJECTION_MATRIX, projection);
-	glGetIntegerv(GL_VIEWPORT, viewPort);
 
 	// Set values outside of the screen range
 	p1.x = 1000;

@@ -282,11 +282,11 @@ void GfxTinyGL::getScreenBoundingBox(const Mesh *model, int *x1, int *y1, int *x
 
 		for (int j = 0; j < model->_faces[i].getNumVertices(); j++) {
 			TGLfloat modelView[16], projection[16];
-			TGLint viewPort[4];
+			// The text placed with the box is in game coordinates, whatever the size of the viewport
+			const TGLint viewPort[4] = { 0, 0, _gameWidth, _gameHeight };
 
 			tglGetFloatv(TGL_MODELVIEW_MATRIX, modelView);
 			tglGetFloatv(TGL_PROJECTION_MATRIX, projection);
-			tglGetIntegerv(TGL_VIEWPORT, viewPort);
 
 			pVertices = model->_vertices + 3 * model->_faces[i].getVertex(j);
 
@@ -348,11 +348,11 @@ void GfxTinyGL::getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, in
 	TGLfloat bottom = -1000;
 
 	TGLfloat modelView[16], projection[16];
-	TGLint viewPort[4];
+	// The text placed with the box is in game coordinates, whatever the size of the viewport
+	const TGLint viewPort[4] = { 0, 0, _gameWidth, _gameHeight };
 
 	tglGetFloatv(TGL_MODELVIEW_MATRIX, modelView);
 	tglGetFloatv(TGL_PROJECTION_MATRIX, projection);
-	tglGetIntegerv(TGL_VIEWPORT, viewPort);
 
 	for (uint i = 0; i < model->_numFaces; i++) {
 		uint16 *indices = (uint16 *)model->_faces[i]._indexes;
@@ -421,10 +421,10 @@ void GfxTinyGL::getActorScreenBBox(const Actor *actor, Common::Point &p1, Common
 
 	// Get the current OpenGL state
 	TGLfloat modelView[16], projection[16];
-	TGLint viewPort[4];
+	// The text placed with the box is in game coordinates, whatever the size of the viewport
+	const TGLint viewPort[4] = { 0, 0, _gameWidth, _gameHeight };
 	tglGetFloatv(TGL_MODELVIEW_MATRIX, modelView);
 	tglGetFloatv(TGL_PROJECTION_MATRIX, projection);
-	tglGetIntegerv(TGL_VIEWPORT, viewPort);
 
 	// Set values outside of the screen range
 	p1.x = 1000;
