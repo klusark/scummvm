@@ -381,13 +381,132 @@ static void io_write() {
 	pushresult(status);
 }
 
+static const char *const weekdayNames[] = {
+	"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+};
+
+static const char *const monthNames[] = {
+	"January", "February", "March", "April", "May", "June",
+	"July", "August", "September", "October", "November", "December"
+};
+
+static int32 dayOfYear(const TimeDate &t) {
+	static const int32 monthStarts[] = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 };
+	int32 year = 1900 + t.tm_year;
+	int32 day = monthStarts[t.tm_mon] + t.tm_mday - 1;
+
+	if (t.tm_mon > 1 && ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0))
+		day++;
+
+	return day;
+}
+
+// The formats of the C locale
+static Common::String formatDate(const char *format, const TimeDate &t) {
+	Common::String result;
+	int32 hour12 = (t.tm_hour % 12 == 0) ? 12 : t.tm_hour % 12;
+	int32 yearDay = dayOfYear(t);
+
+	while (*format) {
+		if (*format != '%') {
+			result += *format++;
+			continue;
+		}
+
+		format++;
+
+		switch (*format) {
+		case 'a':
+			result += Common::String(weekdayNames[t.tm_wday], 3);
+			break;
+		case 'A':
+			result += weekdayNames[t.tm_wday];
+			break;
+		case 'b':
+			result += Common::String(monthNames[t.tm_mon], 3);
+			break;
+		case 'B':
+			result += monthNames[t.tm_mon];
+			break;
+		case 'c':
+			result += formatDate("%x %X", t);
+			break;
+		case 'd':
+			result += Common::String::format("%02d", t.tm_mday);
+			break;
+		case 'H':
+			result += Common::String::format("%02d", t.tm_hour);
+			break;
+		case 'I':
+			result += Common::String::format("%02d", hour12);
+			break;
+		case 'j':
+			result += Common::String::format("%03d", yearDay + 1);
+			break;
+		case 'm':
+			result += Common::String::format("%02d", t.tm_mon + 1);
+			break;
+		case 'M':
+			result += Common::String::format("%02d", t.tm_min);
+			break;
+		case 'p':
+			result += (t.tm_hour < 12) ? "AM" : "PM";
+			break;
+		case 'S':
+			result += Common::String::format("%02d", t.tm_sec);
+			break;
+		case 'U':
+			result += Common::String::format("%02d", (yearDay + 7 - t.tm_wday) / 7);
+			break;
+		case 'w':
+			result += Common::String::format("%d", t.tm_wday);
+			break;
+		case 'W':
+			result += Common::String::format("%02d", (yearDay + 7 - (t.tm_wday + 6) % 7) / 7);
+			break;
+		case 'x':
+			result += formatDate("%m/%d/%y", t);
+			break;
+		case 'X':
+			result += formatDate("%H:%M:%S", t);
+			break;
+		case 'y':
+			result += Common::String::format("%02d", t.tm_year % 100);
+			break;
+		case 'Y':
+			result += Common::String::format("%d", 1900 + t.tm_year);
+			break;
+		case 'Z':
+			break;
+		case '%':
+			result += '%';
+			break;
+		case 0:
+			return result;
+		default:
+			result += '%';
+			result += *format;
+			break;
+		}
+
+		format++;
+	}
+
+	return result;
+}
+
 static void io_date() {
 	TimeDate t;
-	char b[BUFSIZ];
+	const char *format = luaL_opt_string(1, "%c");
 
 	g_system->getTimeAndDate(t);
-	snprintf(b, BUFSIZ, "%02d.%02d.%d %02d:%02d.%02d", t.tm_mday, t.tm_mon + 1, 1900 + t.tm_year, t.tm_hour, t.tm_min, t.tm_sec);
-	lua_pushstring(b);
+
+	Common::String text = formatDate(format, t);
+
+	if (text.empty() || text.size() >= 512)
+		lua_error("invalid `date' format");
+
+	lua_pushstring(text.c_str());
 }
 
 static void io_exit() {
@@ -433,7 +552,17 @@ static void io_remove() {
 }
 
 static void io_setlocale() {
-	warning("io_setlocale(): not implemented");
+	float category = luaL_opt_number(2, 0.0f);
+
+	luaL_arg_check(category > -1.0f && category < 6.0f, 2, "invalid option");
+
+	const char *name = luaL_check_string(1);
+
+	// Only the C locale exists
+	if (!strcmp(name, "C") || !*name)
+		lua_pushstring("C");
+	else
+		lua_pushnil();
 }
 
 static void io_execute() {
@@ -444,7 +573,10 @@ static void io_rename() {
 	if (luaIsEmi)
 		return;
 
-	warning("io_rename(): not implemented");
+	Common::String newName = luaL_check_string(2);
+	Common::String oldName = luaL_check_string(1);
+
+	pushresult(g_system->getSavefileManager()->renameSavefile(oldName, newName));
 }
 
 static void io_tmpname() {
@@ -452,7 +584,10 @@ static void io_tmpname() {
 }
 
 static void io_getenv() {
-	warning("io_getenv(): not implemented");
+	luaL_check_string(1);
+
+	// There is no environment to read
+	lua_pushnil();
 }
 
 static void io_debug() {
