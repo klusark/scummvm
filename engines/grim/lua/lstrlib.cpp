@@ -9,6 +9,7 @@
 
 #include "common/util.h"
 
+#include "engines/grim/lua_v1_opcodes/lua_v1.h"
 #include "engines/grim/lua/lauxlib.h"
 #include "engines/grim/lua/lua.h"
 #include "engines/grim/lua/lualib.h"
@@ -475,7 +476,7 @@ static void str_format() {
 			case 'u':
 			case 'x':
 			case 'X':
-				snprintf(buff, 1000, form, (int)luaL_check_number(arg));
+				snprintf(buff, 1000, form, luaFtolSse(luaL_check_number(arg)));
 				break;
 			case 'e':
 			case 'E':

@@ -44,7 +44,12 @@ int32 luaO_equalObj(TObject *t1, TObject *t2) {
 	case LUA_T_NIL:
 		return 1;
 	case LUA_T_NUMBER:
-		return nvalue(t1) == nvalue(t2);
+	case LUA_T_TASK:
+		if (luaIsRemastered)
+			return nvalue(t1) == nvalue(t2);
+
+		// The compare of the game takes a NaN as equal to any number
+		return !(nvalue(t1) < nvalue(t2)) && !(nvalue(t1) > nvalue(t2));
 	case LUA_T_USERDATA:
 		return (t1->value.ud.id == t2->value.ud.id && t1->value.ud.tag == t2->value.ud.tag);
 	case LUA_T_STRING:
@@ -57,8 +62,6 @@ int32 luaO_equalObj(TObject *t1, TObject *t2) {
 		return fvalue(t1) == fvalue(t2);
 	case LUA_T_CLOSURE:
 		return t1->value.cl == t2->value.cl;
-	case LUA_T_TASK:
-		return nvalue(t1) == nvalue(t2);
 	default:
 #ifdef LUA_DEBUG
 		LUA_INTERNALERROR("internal error in `lua_equalObj'");

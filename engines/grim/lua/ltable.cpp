@@ -6,6 +6,7 @@
 #define FORBIDDEN_SYMBOL_EXCEPTION_setjmp
 #define FORBIDDEN_SYMBOL_EXCEPTION_longjmp
 
+#include "engines/grim/lua_v1_opcodes/lua_v1.h"
 #include "engines/grim/lua/lauxlib.h"
 #include "engines/grim/lua/lmem.h"
 #include "engines/grim/lua/lobject.h"
@@ -26,7 +27,8 @@ static intptr hashindex(TObject *ref) {
 
 	switch (ttype(ref)) {
 	case LUA_T_NUMBER:
-		h = (intptr)nvalue(ref);
+	case LUA_T_TASK:
+		h = luaFtolSse(nvalue(ref));
 		break;
 	case LUA_T_USERDATA:
 		h = (intptr)ref->value.ud.id;
@@ -45,9 +47,6 @@ static intptr hashindex(TObject *ref) {
 		break;
 	case LUA_T_CLOSURE:
 		h = (intptr)clvalue(ref);
-		break;
-	case LUA_T_TASK:
-		h = (intptr)nvalue(ref);
 		break;
 	default:
 		lua_error("unexpected type to index table");
