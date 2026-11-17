@@ -272,94 +272,65 @@ void GfxBase::prepareMovieFrame(Graphics::Surface *frame, const byte *palette) {
 	}
 }
 
-void GfxBase::extendScreenBounds(const Math::Matrix4 &mvpMatrix, const Math::Vector3d &point, double &left, double &top, double &right, double &bottom) const {
+// Rect::extend() would pull the (0, 0) corner of an empty bbox into it
+static void extendRect(Common::Rect &bbox, const Common::Rect &rect) {
+	if (rect.isEmpty())
+		return;
+	if (bbox.isEmpty())
+		bbox = rect;
+	else
+		bbox.extend(rect);
+}
+
+void GfxBase::addToScreenRect(const Math::Matrix4 &mvpMatrix, const Math::Vector3d &point, Common::Rect &rect) const {
 	Math::Vector4d v = mvpMatrix * Math::Vector4d(point.x(), point.y(), point.z(), 1.0f);
+	// The original engines leave out points behind the camera
+	if (v.w() <= 0.0f)
+		return;
 	v /= v.w();
 
-	double winX = (1 + v.x()) / 2.0 * _gameWidth;
-	double winY = (1 - v.y()) / 2.0 * _gameHeight;
+	// Points close to the camera can project outside of what a Rect holds
+	const double limit = std::numeric_limits<int16>::max() - 1;
+	int16 x = (int16)CLIP((1 + v.x()) / 2.0 * _gameWidth, -limit, limit);
+	int16 y = (int16)CLIP((1 - v.y()) / 2.0 * _gameHeight, -limit, limit);
 
-	left = MIN(left, winX);
-	right = MAX(right, winX);
-	top = MIN(top, winY);
-	bottom = MAX(bottom, winY);
+	// The rectangle includes the column and row of the point
+	extendRect(rect, Common::Rect(x, y, x + 1, y + 1));
 }
 
-void GfxBase::clipScreenBounds(double left, double top, double right, double bottom, int *x1, int *y1, int *x2, int *y2) const {
-	if (left < 0)
-		left = 0;
-	if (right >= _gameWidth)
-		right = _gameWidth - 1;
-	if (top < 0)
-		top = 0;
-	if (bottom >= _gameHeight)
-		bottom = _gameHeight - 1;
-
-	if (top >= _gameHeight || left >= _gameWidth || bottom < 0 || right < 0) {
-		*x1 = -1;
-		*y1 = -1;
-		*x2 = -1;
-		*y2 = -1;
+void GfxBase::extendScreenBoundingBox(const Mesh *mesh, Common::Rect &bbox) {
+	if (_currentShadowArray)
 		return;
-	}
-
-	*x1 = (int)left;
-	*y1 = (int)top;
-	*x2 = (int)right;
-	*y2 = (int)bottom;
-}
-
-void GfxBase::getScreenBoundingBox(const Mesh *mesh, int *x1, int *y1, int *x2, int *y2) {
-	if (_currentShadowArray) {
-		*x1 = -1;
-		*y1 = -1;
-		*x2 = -1;
-		*y2 = -1;
-		return;
-	}
 
 	Math::Matrix4 mvpMatrix = getActorMVPMatrix();
-	double top = 1000;
-	double right = -1000;
-	double left = 1000;
-	double bottom = -1000;
-
+	Common::Rect rect;
 	for (int i = 0; i < mesh->_numFaces; i++) {
 		for (int j = 0; j < mesh->_faces[i].getNumVertices(); j++) {
 			const float *pVertices = mesh->_vertices + 3 * mesh->_faces[i].getVertex(j);
-			extendScreenBounds(mvpMatrix, Math::Vector3d(pVertices[0], pVertices[1], pVertices[2]), left, top, right, bottom);
+			addToScreenRect(mvpMatrix, Math::Vector3d(pVertices[0], pVertices[1], pVertices[2]), rect);
 		}
 	}
 
-	clipScreenBounds(left, top, right, bottom, x1, y1, x2, y2);
+	extendRect(bbox, rect.findIntersectingRect(Common::Rect(_gameWidth, _gameHeight)));
 }
 
-void GfxBase::getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, int *x2, int *y2) {
-	if (_currentShadowArray) {
-		*x1 = -1;
-		*y1 = -1;
-		*x2 = -1;
-		*y2 = -1;
+void GfxBase::extendScreenBoundingBox(const EMIModel *model, Common::Rect &bbox) {
+	if (_currentShadowArray)
 		return;
-	}
 
 	Math::Matrix4 mvpMatrix = getActorMVPMatrix();
-	double top = 1000;
-	double right = -1000;
-	double left = 1000;
-	double bottom = -1000;
-
+	Common::Rect rect;
 	for (uint i = 0; i < model->_numFaces; i++) {
 		uint16 *indices = (uint16 *)model->_faces[i]._indexes;
 
 		for (uint j = 0; j < model->_faces[i]._faceLength * 3; j++)
-			extendScreenBounds(mvpMatrix, model->_drawVertices[indices[j]], left, top, right, bottom);
+			addToScreenRect(mvpMatrix, model->_drawVertices[indices[j]], rect);
 	}
 
-	clipScreenBounds(left, top, right, bottom, x1, y1, x2, y2);
+	extendRect(bbox, rect.findIntersectingRect(Common::Rect(_gameWidth, _gameHeight)));
 }
 
-void GfxBase::getActorScreenBBox(const Actor *actor, Common::Point &p1, Common::Point &p2) {
+Common::Rect GfxBase::getActorScreenBBox(const Actor *actor) {
 	// Get the actor's bounding box information (describes a 3D box)
 	Math::Vector3d bboxPos, bboxSize;
 	actor->getBBoxInfo(bboxPos, bboxSize);
@@ -368,47 +339,24 @@ void GfxBase::getActorScreenBBox(const Actor *actor, Common::Point &p1, Common::
 	Math::Matrix4 m = actor->getFinalMatrix();
 	bboxPos = bboxPos + actor->getWorldPos();
 
-	Math::Matrix4 mvpMatrix = getProjection() * getModelView();
-
-	// Set values outside of the screen range
-	p1.x = 1000;
-	p1.y = 1000;
-	p2.x = -1000;
-	p2.y = -1000;
-
 	// Project all of the points in the 3D bounding box
+	Math::Matrix4 mvpMatrix = getProjection() * getModelView();
+	Common::Rect rect;
 	for (int x = 0; x < 2; x++) {
 		for (int y = 0; y < 2; y++) {
 			for (int z = 0; z < 2; z++) {
 				Math::Vector3d added(bboxSize.x() * 0.5f * (x * 2 - 1), bboxSize.y() * 0.5f * (y * 2 - 1), bboxSize.z() * 0.5f * (z * 2 - 1));
 				m.transform(&added, false);
-				Math::Vector3d p = bboxPos + added;
-
-				Math::Vector4d v = mvpMatrix * Math::Vector4d(p.x(), p.y(), p.z(), 1.0f);
-				if (v.w() == 0.0)
-					return;
-				v /= v.w();
-
-				double winX = (1 + v.x()) / 2.0 * _gameWidth;
-				double winY = (1 + v.y()) / 2.0 * _gameHeight;
-
-				// Find the points
-				if (winX < p1.x)
-					p1.x = winX;
-				if (winY < p1.y)
-					p1.y = winY;
-				if (winX > p2.x)
-					p2.x = winX;
-				if (winY > p2.y)
-					p2.y = winY;
+				addToScreenRect(mvpMatrix, bboxPos + added, rect);
 			}
 		}
 	}
 
-	// Swap the p1/p2 y coorindates
-	int16 tmp = p1.y;
-	p1.y = _gameHeight - p2.y;
-	p2.y = _gameHeight - tmp;
+	// EMI uses the off screen text position when the box does not overlap the screen.
+	// The box is not clipped, the text is centered on all of it.
+	if (!rect.intersects(Common::Rect(_gameWidth, _gameHeight)))
+		return Common::Rect();
+	return rect;
 }
 
 }

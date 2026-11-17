@@ -22,6 +22,8 @@
 #ifndef GRIM_EMI_MESH_COMPONENT_H
 #define GRIM_EMI_MESH_COMPONENT_H
 
+#include "common/rect.h"
+
 #include "engines/grim/costume/component.h"
 
 namespace Grim {
@@ -37,7 +39,7 @@ public:
 	int update(uint time) override;
 	void reset() override;
 	void draw() override;
-	void getBoundingBox(int *x1, int *y1, int *x2, int *y2) const;
+	void extendScreenBoundingBox(Common::Rect &bbox) const;
 
 public:
 	EMICostume *_costume;

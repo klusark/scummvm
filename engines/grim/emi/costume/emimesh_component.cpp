@@ -23,6 +23,7 @@
 #include "engines/grim/emi/modelemi.h"
 #include "engines/grim/resource.h"
 #include "engines/grim/costume.h"
+#include "engines/grim/gfx_base.h"
 
 namespace Grim {
 
@@ -85,7 +86,7 @@ void EMIMeshComponent::draw() {
 	//translateObject(true);
 }
 
-void EMIMeshComponent::getBoundingBox(int *x1, int *y1, int *x2, int *y2) const {
+void EMIMeshComponent::extendScreenBoundingBox(Common::Rect &bbox) const {
 	// If the object was drawn by being a component
 	// of it's parent then don't draw it
 
@@ -93,7 +94,7 @@ void EMIMeshComponent::getBoundingBox(int *x1, int *y1, int *x2, int *y2) const 
 		return;
 
 	if (_obj)
-		_obj->getBoundingBox(x1, y1, x2, y2);
+		g_driver->extendScreenBoundingBox(_obj, bbox);
 }
 
 } // end of namespace Grim

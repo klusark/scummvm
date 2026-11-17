@@ -109,9 +109,15 @@ public:
 	 */
 	virtual void flipBuffer(bool opportunistic = false) = 0;
 
-	void getScreenBoundingBox(const Mesh *mesh, int *x1, int *y1, int *x2, int *y2);
-	void getScreenBoundingBox(const EMIModel *mesh, int *x1, int *y1, int *x2, int *y2);
-	void getActorScreenBBox(const Actor *actor, Common::Point &p1, Common::Point &p2);
+	/**
+	 * Extends bbox by the screen rectangle the mesh or model covers, if it is on screen
+	 */
+	void extendScreenBoundingBox(const Mesh *mesh, Common::Rect &bbox);
+	void extendScreenBoundingBox(const EMIModel *model, Common::Rect &bbox);
+	/**
+	 * The screen rectangle the bounding box of the actor covers, empty when off screen
+	 */
+	Common::Rect getActorScreenBBox(const Actor *actor);
 	virtual void startActorDraw(const Actor *act) = 0;
 	virtual void finishActorDraw() = 0;
 	virtual void setShadow(Shadow *shadow) = 0;
@@ -280,13 +286,9 @@ protected:
 	virtual void turnOffLight(int lightId) = 0;
 
 	/**
-	 * Projects the point with mvpMatrix to game screen coordinates and extends the bounds to include it
+	 * Projects the point with mvpMatrix and extends rect to include it, unless it is behind the camera
 	 */
-	void extendScreenBounds(const Math::Matrix4 &mvpMatrix, const Math::Vector3d &point, double &left, double &top, double &right, double &bottom) const;
-	/**
-	 * Clips the bounds to the screen, or sets them all to -1 when they are off screen
-	 */
-	void clipScreenBounds(double left, double top, double right, double bottom, int *x1, int *y1, int *x2, int *y2) const;
+	void addToScreenRect(const Math::Matrix4 &mvpMatrix, const Math::Vector3d &point, Common::Rect &rect) const;
 
 	static const unsigned int _numSpecialtyTextures = 22;
 	Texture _specialtyTextures[_numSpecialtyTextures];
