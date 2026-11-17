@@ -19,6 +19,8 @@
  *
  */
 
+#include "common/config-manager.h"
+#include "common/fs.h"
 #include "common/savefile.h"
 #include "common/system.h"
 
@@ -371,20 +373,58 @@ void Lua_V1::SetOffscreenTextPos() {
 		sputText->_offscreenTextPos = 450;
 }
 
+static Common::SeekableReadStream *openTextFile(const char *filename) {
+	Common::SeekableReadStream *file = g_system->getSavefileManager()->openForLoading(filename);
+
+	if (!file) {
+		Common::FSDirectory gameDirectory(ConfMan.getPath("path"));
+
+		file = gameDirectory.createReadStreamForMember(Common::Path(filename, '/'));
+	}
+
+	return file;
+}
+
+// Reads a line as fgets does on a text file: the line break is kept and a carriage return before it is dropped
+static void readTextLine(Common::SeekableReadStream *file, char *buffer, int size) {
+	int length = 0;
+
+	while (length < size - 1) {
+		byte character = file->readByte();
+
+		if (file->eos())
+			break;
+
+		if (character == '\r' && file->pos() < file->size()) {
+			byte next = file->readByte();
+
+			if (next == '\n')
+				character = next;
+			else
+				file->seek(-1, SEEK_CUR);
+		}
+
+		buffer[length++] = (char)character;
+
+		if (character == '\n')
+			break;
+	}
+
+	buffer[length] = 0;
+}
+
 void Lua_V1::TextFileGetLine() {
 	char textBuf[512];
 	lua_Object nameObj = lua_getparam(1);
 	lua_Object posObj = lua_getparam(2);
 	Common::SeekableReadStream *file;
 
-	if (lua_isnil(nameObj) || lua_isnil(posObj)) {
+	if (lua_isnil(nameObj) || lua_isnil(posObj) || !lua_isstring(nameObj)) {
 		lua_pushnil();
 		return;
 	}
 
-	const char *filename = lua_getstring(nameObj);
-	Common::SaveFileManager *saveFileMan = g_system->getSavefileManager();
-	file = saveFileMan->openForLoading(filename);
+	file = openTextFile(lua_getstring(nameObj));
 	if (!file) {
 		lua_pushnil();
 		return;
@@ -396,7 +436,7 @@ void Lua_V1::TextFileGetLine() {
 		file->seek(pos, SEEK_SET);
 
 	memset(textBuf, 0, sizeof(textBuf));
-	file->readLine(textBuf, sizeof(textBuf));
+	readTextLine(file, textBuf, sizeof(textBuf));
 	delete file;
 
 	lua_pushstring(textBuf);
@@ -406,14 +446,12 @@ void Lua_V1::TextFileGetLineCount() {
 	char textBuf[512];
 	lua_Object nameObj = lua_getparam(1);
 
-	if (lua_isnil(nameObj)) {
+	if (lua_isnil(nameObj) || !lua_isstring(nameObj)) {
 		lua_pushnil();
 		return;
 	}
 
-	const char *filename = luaL_check_string(1);
-	Common::SaveFileManager *saveFileMan = g_system->getSavefileManager();
-	Common::SeekableReadStream *file = saveFileMan->openForLoading(filename);
+	Common::SeekableReadStream *file = openTextFile(lua_getstring(nameObj));
 	if (!file) {
 		lua_pushnil();
 		return;
