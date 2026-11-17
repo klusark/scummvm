@@ -681,9 +681,9 @@ void GfxOpenGLS::getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, i
 	}
 
 	*x1 = (int)left;
-	*y1 = (int)(_gameHeight - bottom);
+	*y1 = (int)top;
 	*x2 = (int)right;
-	*y2 = (int)(_gameHeight - top);
+	*y2 = (int)bottom;
 }
 
 void GfxOpenGLS::getActorScreenBBox(const Actor *actor, Common::Point &p1, Common::Point &p2) {
