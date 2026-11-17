@@ -58,11 +58,7 @@ int IMuse::scriptParse(int cmd, int a, int b) {
 			scriptSetState(a);
 			return 0;
 		case IMUSE_C_SCRIPT_SET_SEQUENCE:
-			if (_demo)
-				return scriptSetSequence(a);
-
-			scriptSetSequence(a);
-			return 0;
+			return scriptSetSequence(a);
 		case IMUSE_C_SCRIPT_CUE_POINT:
 			scriptSetCuePoint(a);
 			return 0;
@@ -125,7 +121,7 @@ void IMuse::scriptRefresh() {
 	imFlushSounds();
 }
 
-// The demo returns the current state/sequence/attribute value from these functions
+// Only the demo hands the result of the state function back to the scripts
 int IMuse::scriptSetState(int stateId) {
 	const IMuseStateTable *stateTable = _demo ? _grimDemoStateMusicTable : _grimStateMusicTable;
 	int stateTableSize = _demo ? ARRAYSIZE(_grimDemoStateMusicTable) : ARRAYSIZE(_grimStateMusicTable);

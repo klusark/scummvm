@@ -938,7 +938,8 @@ int IMuse::cacheGetSoundId(const char *soundName) {
 		if (soundKey == 10000)
 			return 10000;
 
-		if (soundKey <= 1111)
+		// The classic library compares the key as a signed number, so a negative one is not a sound
+		if (soundKey <= 1111 || (!_remastered && (intptr)soundKey < 0))
 			return 0;
 
 		isLuaSoundId = soundKey < 1367;
@@ -986,22 +987,13 @@ int IMuse::cacheGetSoundId(const char *soundName) {
 					sound = &_soundCache[loadSlot];
 					Common::strlcpy(sound->soundFilename, soundName, sizeof(sound->soundFilename));
 
+					// Only the first slot is looked at when searching for a free id
 					int slotCounter = _currentSoundSlot;
-					bool collision;
-					do {
-						collision = false;
-						int candidateId = abs(slotCounter) % 256 + 1111;
-						for (int i = 0; i < IMUSE_MAX_CACHED_SOUNDS; i++) {
-							if (_soundCache[i].soundFilename[0] && _soundCache[i].luaSoundId == candidateId) {
-								collision = true;
-								slotCounter++;
-								break;
-							}
-						}
-					} while (collision);
+					while (_soundCache[0].soundFilename[0] && _soundCache[0].luaSoundId == slotCounter % 256 + 1111)
+						slotCounter++;
 
 					_currentSoundSlot = slotCounter;
-					sound->luaSoundId = abs(slotCounter) % 256 + 1111;
+					sound->luaSoundId = slotCounter % 256 + 1111;
 					++_currentSoundSlot;
 
 					allocated = true;
