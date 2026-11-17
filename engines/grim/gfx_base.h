@@ -94,6 +94,10 @@ public:
 
 	virtual Math::Matrix4 getModelView() = 0;
 	virtual Math::Matrix4 getProjection() = 0;
+	/**
+	 * The projection and modelview matrices the meshes of the current actor are drawn with
+	 */
+	virtual Math::Matrix4 getActorMVPMatrix() = 0;
 
 	virtual void clearScreen() = 0;
 	virtual void clearDepthBuffer() = 0;
@@ -106,12 +110,14 @@ public:
 	virtual void flipBuffer(bool opportunistic = false) = 0;
 
 	/**
-	 * FIXME: The implementations of these functions (for Grim and EMI, respectively)
-	 * are very similar. Needs refactoring. See issue #789.
+	 * Extends bbox by the screen rectangle the mesh or model covers, if it is on screen
 	 */
-	virtual void getScreenBoundingBox(const Mesh *mesh, int *x1, int *y1, int *x2, int *y2) = 0;
-	virtual void getScreenBoundingBox(const EMIModel *mesh, int *x1, int *y1, int *x2, int *y2) = 0;
-	virtual void getActorScreenBBox(const Actor *actor, Common::Point &p1, Common::Point &p2) = 0;
+	void extendScreenBoundingBox(const Mesh *mesh, Common::Rect &bbox);
+	void extendScreenBoundingBox(const EMIModel *model, Common::Rect &bbox);
+	/**
+	 * The screen rectangle the bounding box of the actor covers, empty when off screen
+	 */
+	Common::Rect getActorScreenBBox(const Actor *actor);
 	virtual void startActorDraw(const Actor *act) = 0;
 	virtual void finishActorDraw() = 0;
 	virtual void setShadow(Shadow *shadow) = 0;
@@ -278,6 +284,11 @@ protected:
 	Bitmap *createScreenshotBitmap(Graphics::Surface *src, int w, int h, bool flipOrientation);
 	virtual void setupLight(Light *light, int lightId) = 0;
 	virtual void turnOffLight(int lightId) = 0;
+
+	/**
+	 * Projects the point with mvpMatrix and extends rect to include it, unless it is behind the camera
+	 */
+	void addToScreenRect(const Math::Matrix4 &mvpMatrix, const Math::Vector3d &point, Common::Rect &rect) const;
 
 	static const unsigned int _numSpecialtyTextures = 22;
 	Texture _specialtyTextures[_numSpecialtyTextures];

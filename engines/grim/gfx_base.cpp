@@ -36,11 +36,13 @@
  */
 
 #include "engines/grim/gfx_base.h"
+#include "engines/grim/actor.h"
 #include "engines/grim/savegame.h"
 #include "engines/grim/bitmap.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/model.h"
 #include "engines/grim/set.h"
+#include "engines/grim/emi/modelemi.h"
 
 #include "graphics/surface.h"
 
@@ -268,6 +270,93 @@ void GfxBase::prepareMovieFrame(Graphics::Surface *frame, const byte *palette) {
 		converted->free();
 		delete converted;
 	}
+}
+
+// Rect::extend() would pull the (0, 0) corner of an empty bbox into it
+static void extendRect(Common::Rect &bbox, const Common::Rect &rect) {
+	if (rect.isEmpty())
+		return;
+	if (bbox.isEmpty())
+		bbox = rect;
+	else
+		bbox.extend(rect);
+}
+
+void GfxBase::addToScreenRect(const Math::Matrix4 &mvpMatrix, const Math::Vector3d &point, Common::Rect &rect) const {
+	Math::Vector4d v = mvpMatrix * Math::Vector4d(point.x(), point.y(), point.z(), 1.0f);
+	// The original engines leave out points behind the camera
+	if (v.w() <= 0.0f)
+		return;
+	v /= v.w();
+
+	// Points close to the camera can project outside of what a Rect holds
+	const double limit = std::numeric_limits<int16>::max() - 1;
+	int16 x = (int16)CLIP((1 + v.x()) / 2.0 * _gameWidth, -limit, limit);
+	int16 y = (int16)CLIP((1 - v.y()) / 2.0 * _gameHeight, -limit, limit);
+
+	// The rectangle includes the column and row of the point
+	extendRect(rect, Common::Rect(x, y, x + 1, y + 1));
+}
+
+void GfxBase::extendScreenBoundingBox(const Mesh *mesh, Common::Rect &bbox) {
+	if (_currentShadowArray)
+		return;
+
+	Math::Matrix4 mvpMatrix = getActorMVPMatrix();
+	Common::Rect rect;
+	for (int i = 0; i < mesh->_numFaces; i++) {
+		for (int j = 0; j < mesh->_faces[i].getNumVertices(); j++) {
+			const float *pVertices = mesh->_vertices + 3 * mesh->_faces[i].getVertex(j);
+			addToScreenRect(mvpMatrix, Math::Vector3d(pVertices[0], pVertices[1], pVertices[2]), rect);
+		}
+	}
+
+	extendRect(bbox, rect.findIntersectingRect(Common::Rect(_gameWidth, _gameHeight)));
+}
+
+void GfxBase::extendScreenBoundingBox(const EMIModel *model, Common::Rect &bbox) {
+	if (_currentShadowArray)
+		return;
+
+	Math::Matrix4 mvpMatrix = getActorMVPMatrix();
+	Common::Rect rect;
+	for (uint i = 0; i < model->_numFaces; i++) {
+		uint16 *indices = (uint16 *)model->_faces[i]._indexes;
+
+		for (uint j = 0; j < model->_faces[i]._faceLength * 3; j++)
+			addToScreenRect(mvpMatrix, model->_drawVertices[indices[j]], rect);
+	}
+
+	extendRect(bbox, rect.findIntersectingRect(Common::Rect(_gameWidth, _gameHeight)));
+}
+
+Common::Rect GfxBase::getActorScreenBBox(const Actor *actor) {
+	// Get the actor's bounding box information (describes a 3D box)
+	Math::Vector3d bboxPos, bboxSize;
+	actor->getBBoxInfo(bboxPos, bboxSize);
+
+	// Translate the bounding box to the actor's position
+	Math::Matrix4 m = actor->getFinalMatrix();
+	bboxPos = bboxPos + actor->getWorldPos();
+
+	// Project all of the points in the 3D bounding box
+	Math::Matrix4 mvpMatrix = getProjection() * getModelView();
+	Common::Rect rect;
+	for (int x = 0; x < 2; x++) {
+		for (int y = 0; y < 2; y++) {
+			for (int z = 0; z < 2; z++) {
+				Math::Vector3d added(bboxSize.x() * 0.5f * (x * 2 - 1), bboxSize.y() * 0.5f * (y * 2 - 1), bboxSize.z() * 0.5f * (z * 2 - 1));
+				m.transform(&added, false);
+				addToScreenRect(mvpMatrix, bboxPos + added, rect);
+			}
+		}
+	}
+
+	// EMI uses the off screen text position when the box does not overlap the screen.
+	// The box is not clipped, the text is centered on all of it.
+	if (!rect.intersects(Common::Rect(_gameWidth, _gameHeight)))
+		return Common::Rect();
+	return rect;
 }
 
 }

@@ -58,6 +58,7 @@ public:
 
 	Math::Matrix4 getModelView() override;
 	Math::Matrix4 getProjection() override;
+	Math::Matrix4 getActorMVPMatrix() override;
 
 	void clearScreen() override;
 	void clearDepthBuffer() override;
@@ -67,9 +68,6 @@ public:
 	 */
 	void flipBuffer(bool opportunistic = false) override;
 
-	void getScreenBoundingBox(const Mesh *mesh, int *x1, int *y1, int *x2, int *y2) override;
-	void getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, int *x2, int *y2) override;
-	void getActorScreenBBox(const Actor *actor, Common::Point &p1, Common::Point &p2) override;
 	void startActorDraw(const Actor *actor) override;
 
 	void finishActorDraw() override;

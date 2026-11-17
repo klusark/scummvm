@@ -22,6 +22,8 @@
 #ifndef GRIM_MODEL_COMPONENT_H
 #define GRIM_MODEL_COMPONENT_H
 
+#include "common/rect.h"
+
 #include "engines/grim/costume/component.h"
 
 namespace Grim {
@@ -49,7 +51,7 @@ public:
 	int getNumNodes();
 	Model *getModel() { return _obj; }
 	void draw() override;
-	void getBoundingBox(int *x1, int *y1, int *x2, int *y2);
+	void extendScreenBoundingBox(Common::Rect &bbox);
 
 protected:
 	Model *_obj;
