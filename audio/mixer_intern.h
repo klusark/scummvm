@@ -69,6 +69,12 @@ private:
 	const uint _outBytesPerSample;
 	const bool _clamp;
 	bool _mixerReady;
+	/** The engine mixes the sound itself, see simulateStep() */
+	bool _simulated = false;
+	uint64 _simFramesDone = 0;
+
+	/** Mixes all channels into samples, the mutex must be held */
+	int mixLocked(byte *samples, uint len);
 	uint32 _handleSeed;
 
 	struct SoundTypeSettings {
@@ -163,6 +169,15 @@ public:
 	 * @return number of sample pairs processed (which can still be silence!)
 	 */
 	int mixCallback(byte *samples, uint len);
+
+	/**
+	 * Makes the engine drive the mixer: the audio device gets silence and simulateStep() mixes (and throws away) the
+	 * sound for simulated time, so that sounds end when the simulated clock says so, however fast the engine runs.
+	 */
+	void setSimulated(bool simulated);
+
+	/** Mixes the sound up to totalMs milliseconds of simulated time since setSimulated(true) */
+	void simulateStep(uint32 totalMs);
 
 	/**
 	 * Set the internal 'is ready' flag of the mixer.
