@@ -192,7 +192,7 @@ static uint convertVolumeFromMixer(uint volume) {
 }
 
 static uint convertTalkSpeedToGUI(uint talkSpeed) {
-	return CLIP<uint>(talkSpeed * 255 / 10, 0, 255);
+	return CLIP<uint>((talkSpeed * 255 + 9) / 10, 0, 255);
 }
 
 static uint convertTalkSpeedFromGUI(uint talkSpeed) {
@@ -318,15 +318,11 @@ static void writeMappedText(const WuRegistryMapping *mapping, const char *text) 
 	switch (mapping->kind) {
 	case kMapString:
 	case kMapFloat:
+	case kMapLastSet:
 		ConfMan.set(mapping->key, text);
 		break;
 	case kMapPath:
 		ConfMan.setPath(mapping->key, Common::Path(text, Common::Path::kNativeSeparator));
-		break;
-	case kMapLastSet:
-		if (ConfMan.hasKey(mapping->key))
-			ConfMan.set(mapping->key, text);
-
 		break;
 	case kMapBool:
 		ConfMan.setBool(mapping->key, !scumm_stricmp(text, "true"));

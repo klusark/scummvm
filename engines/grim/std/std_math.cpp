@@ -332,7 +332,8 @@ float StdMath::arcTan4(float y, float x) {
 	if (_remastered)
 		return arcTan4Remastered(y, x);
 
-	if (x == 0.0 && y == 0.0)
+	// The game compares with the x87 status word, where a NaN is taken as equal to zero
+	if ((x == 0.0 || isnan(x)) && (y == 0.0 || isnan(y)))
 		return 0.0f;
 
 	float absY = (y >= 0.0) ? y : (float)(-(double)y);

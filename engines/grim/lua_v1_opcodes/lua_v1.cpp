@@ -641,12 +641,22 @@ void Lua_V1::FileFindFirst() {
 		return;
 	}
 
+	// A name without a dot is the extension of the pattern
 	Common::String searchString = extension;
+	if (!strchr(extension, '.'))
+		searchString = "*." + searchString;
+
 	if (searchString == "*.gsv") {
 		searchString = "grim##.gsv";
 	}
-	Common::SaveFileManager *saveFileMan = g_system->getSavefileManager();
-	g_grim->_listFiles = saveFileMan->listSavefiles(searchString);
+
+	// The saves are in the save manager, which is what the current folder stands for
+	lua_Object dirObj = lua_getparam(2);
+	if (lua_isstring(dirObj) && !strcmp(lua_getstring(dirObj), ".")) {
+		Common::SaveFileManager *saveFileMan = g_system->getSavefileManager();
+		g_grim->_listFiles = saveFileMan->listSavefiles(searchString);
+	}
+
 	Common::sort(g_grim->_listFiles.begin(), g_grim->_listFiles.end());
 	g_grim->_listFilesIter = g_grim->_listFiles.begin();
 

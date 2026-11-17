@@ -89,16 +89,16 @@ void CMatrix::toEuler(CVector *eulerDegrees) {
 		sine = 1.0f;
 	}
 
-	double pitch = asin(sine);
+	double pitch = asin((double)sine);
 
 	eulerDegrees->_y = (float)pitch;
 
 	if (fabs(cos(pitch)) <= kGimbalLimit) {
-		eulerDegrees->_x = (float)atan2(_m[3], _m[4]);
+		eulerDegrees->_x = (float)atan2((double)_m[3], (double)_m[4]);
 		eulerDegrees->_z = 0.0f;
 	} else {
-		eulerDegrees->_x = (float)atan2(_m[5], _m[8]);
-		eulerDegrees->_z = (float)atan2(_m[1], _m[0]);
+		eulerDegrees->_x = (float)atan2((double)_m[5], (double)_m[8]);
+		eulerDegrees->_z = (float)atan2((double)_m[1], (double)_m[0]);
 	}
 
 	double factor = (double)kHalfTurnDegrees / kPi;
