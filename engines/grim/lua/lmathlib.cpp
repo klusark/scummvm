@@ -16,11 +16,10 @@
 
 namespace Grim {
 
-#define FROMRAD(a) ((a) * (180.0 / (float)M_PI))
-#define TORAD(a)    ((a) * ((float)M_PI / 180.0))
-
-#define REMASTERED_FROMRAD 57.29577951308232
-#define REMASTERED_TORAD   0.0174532925199433
+// 180 / pi, this is the exact number the game expects
+#define FROMRAD 57.29577951308232
+// pi / 180, this is the exact number the game expects
+#define TORAD   0.0174532925199433
 
 static void math_abs() {
 	float d = luaL_check_number(1);
@@ -30,45 +29,30 @@ static void math_abs() {
 }
 
 static void math_sin() {
-	if (luaIsRemastered)
-		lua_pushnumber(sin((double)luaL_check_number(1) * REMASTERED_TORAD));
-	else
-		lua_pushnumber(sin(TORAD(luaL_check_number(1))));
+	lua_pushnumber(sin((double)luaL_check_number(1) * TORAD));
 }
 
 static void math_cos() {
-	if (luaIsRemastered)
-		lua_pushnumber(cos((double)luaL_check_number(1) * REMASTERED_TORAD));
-	else
-		lua_pushnumber(cos(TORAD(luaL_check_number(1))));
+	lua_pushnumber(cos((double)luaL_check_number(1) * TORAD));
 }
 
 static void math_tan() {
-	if (luaIsRemastered)
-		lua_pushnumber(tan((double)luaL_check_number(1) * REMASTERED_TORAD));
-	else
-		lua_pushnumber(tan(TORAD(luaL_check_number(1))));
+	lua_pushnumber(tan((double)luaL_check_number(1) * TORAD));
 }
 
 static void math_asin() {
-	if (luaIsRemastered)
-		lua_pushnumber(asin((double)luaL_check_number(1)) * REMASTERED_FROMRAD);
-	else
-		lua_pushnumber(FROMRAD(asin(luaL_check_number(1))));
+	lua_pushnumber(asin((double)luaL_check_number(1)) * FROMRAD);
 }
 
 static void math_acos() {
-	if (luaIsRemastered)
-		lua_pushnumber(acos((double)luaL_check_number(1)) * REMASTERED_FROMRAD);
-	else
-		lua_pushnumber(FROMRAD(acos(luaL_check_number(1))));
+	lua_pushnumber(acos((double)luaL_check_number(1)) * FROMRAD);
 }
 
 static void math_atan() {
 	if (luaIsRemastered)
-		lua_pushnumber(atan((double)luaL_check_number(1)) * REMASTERED_FROMRAD);
+		lua_pushnumber(atan((double)luaL_check_number(1)) * FROMRAD);
 	else
-		lua_pushnumber(FROMRAD(atan(luaL_check_number(1))));
+		lua_pushnumber(atan2((double)luaL_check_number(1), 1.0) * FROMRAD);
 }
 
 static void math_atan2() {
@@ -76,9 +60,12 @@ static void math_atan2() {
 		double x = luaL_check_number(2);
 		double y = luaL_check_number(1);
 
-		lua_pushnumber(atan2(y, x) * REMASTERED_FROMRAD);
+		lua_pushnumber(atan2(y, x) * FROMRAD);
 	} else {
-		lua_pushnumber(FROMRAD(atan2(luaL_check_number(1), luaL_check_number(2))));
+		double y = luaL_check_number(1);
+		double x = luaL_check_number(2);
+
+		lua_pushnumber(atan2(y, x) * FROMRAD);
 	}
 }
 
@@ -147,17 +134,11 @@ static void math_exp() {
 }
 
 static void math_deg() {
-	if (luaIsRemastered)
-		lua_pushnumber((double)luaL_check_number(1) * REMASTERED_FROMRAD);
-	else
-		lua_pushnumber(luaL_check_number(1) * (180.0 / (float)M_PI));
+	lua_pushnumber((double)luaL_check_number(1) * FROMRAD);
 }
 
 static void math_rad() {
-	if (luaIsRemastered)
-		lua_pushnumber((double)luaL_check_number(1) * REMASTERED_TORAD);
-	else
-		lua_pushnumber(luaL_check_number(1) * ((float)M_PI / 180.0));
+	lua_pushnumber((double)luaL_check_number(1) * TORAD);
 }
 
 static void math_min() {

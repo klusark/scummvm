@@ -461,8 +461,9 @@ static void str_format() {
 			case 's':
 				{
 					const char *s = luaL_check_string(arg);
-					buff = luaL_openspace(strlen(s));
-					snprintf(buff, strlen(s), form, s);
+					int32 size = (int32)strlen(s) + 1000;
+					buff = luaL_openspace(size);
+					snprintf(buff, size, form, s);
 					break;
 				}
 			case 'c':
