@@ -17,6 +17,9 @@
 #include "common/savefile.h"
 #include "common/fs.h"
 #include "common/system.h"
+#include "common/config-manager.h"
+#include "common/fs.h"
+#include "common/memstream.h"
 #include "common/util.h"
 
 #include "engines/grim/lua/lauxlib.h"
@@ -54,7 +57,23 @@ enum {
 static int32 lastFileId = 0;
 Common::HashMap<int32, LuaFile *> *files;
 
-LuaFile::LuaFile() : _in(nullptr), _out(nullptr), _stdin(false), _stdout(false), _stderr(false) {
+LuaFile::LuaFile() : _in(nullptr), _out(nullptr), _stdin(false), _stdout(false), _stderr(false), _crlf(false) {
+}
+
+int32 lua_translateTextMode(byte *buffer, int32 size) {
+	int32 length = 0;
+
+	for (int32 i = 0; i < size; i++) {
+		if (buffer[i] == 0x1A)
+			break;
+
+		if (buffer[i] == '\r' && i + 1 < size && buffer[i + 1] == '\n')
+			continue;
+
+		buffer[length++] = buffer[i];
+	}
+
+	return length;
 }
 
 LuaFile::~LuaFile() {
@@ -93,7 +112,19 @@ uint32 LuaFile::write(const char *buf, uint32 len) {
 	} else if (_stderr) {
 		return fwrite(buf, len, 1, stderr);
 	} else if (_out) {
-		return _out->write(buf, len);
+		if (!_crlf)
+			return _out->write(buf, len);
+
+		Common::String text;
+
+		for (uint32 i = 0; i < len; i++) {
+			if (buf[i] == '\n')
+				text += '\r';
+
+			text += buf[i];
+		}
+
+		return (_out->write(text.c_str(), text.size()) == text.size()) ? len : 0;
 	} else
 		assert(0);
 	return 0;
@@ -106,6 +137,21 @@ void LuaFile::seek(int32 pos, int whence) {
 		_in->seek(pos, whence);
 	} else
 		assert(0);
+}
+
+// The files of the scripts of the '98 edition are opened in text mode
+static bool isTextModeGame() {
+	return !luaIsEmi && !g_grim->isRemastered();
+}
+
+static Common::SeekableReadStream *makeTextModeStream(Common::SeekableReadStream *stream) {
+	int32 size = (int32)stream->size();
+	byte *buffer = (byte *)malloc(size);
+
+	stream->read(buffer, size);
+	delete stream;
+
+	return new Common::MemoryReadStream(buffer, lua_translateTextMode(buffer, size), DisposeAfterUse::YES);
 }
 
 static int32 gettag(int32 i) {
@@ -232,11 +278,17 @@ static void io_readfrom() {
 					inFile = lua->openBundleStream(s);
 			} else {
 				inFile = g_grim->openStreamFile(s);
+
+				if (!inFile) {
+					Common::FSDirectory gameDirectory(ConfMan.getPath("path"));
+
+					inFile = gameDirectory.createReadStreamForMember(Common::Path(s, '/'));
+				}
 			}
 		}
 		if (inFile) {
 			LuaFile *current = new LuaFile();
-			current->_in = inFile;
+			current->_in = isTextModeGame() ? makeTextModeStream(inFile) : inFile;
 			current->_filename = s;
 			setreturn(addfile(current), FINPUT);
 		} else {
@@ -278,6 +330,7 @@ static void io_writeto() {
 		}
 		current = new LuaFile();
 		current->_out = outFile;
+		current->_crlf = isTextModeGame();
 		current->_filename = s;
 		setreturn(addfile(current), FOUTPUT);
 	}
@@ -305,6 +358,7 @@ static void io_appendto() {
 		outFile->write(buf, size);
 		LuaFile *current = new LuaFile();
 		current->_out = outFile;
+		current->_crlf = isTextModeGame();
 		current->_filename = s;
 		setreturn(addfile(current), FOUTPUT);
 	}

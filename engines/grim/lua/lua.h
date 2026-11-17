@@ -46,6 +46,7 @@ public:
 	Common::SeekableReadStream *_in;
 	Common::WriteStream *_out;
 	bool _stdin, _stdout, _stderr;
+	bool _crlf;
 
 public:
 	LuaFile();
@@ -57,6 +58,12 @@ public:
 	uint32 write(const char *buf, uint32 len);
 	void seek(int32 pos, int whence = 0);
 };
+
+/**
+ * Turns the bytes of a file into what the C library gives for a file opened in text mode: a carriage return
+ * before a line feed is dropped and a Ctrl-Z ends the file. Returns the new size.
+ */
+int32 lua_translateTextMode(byte *buffer, int32 size);
 
 typedef int SaveRestoreAccess(void *buffer, int size);
 typedef int32 (*lua_SaveRestoreUserHFunction)(int32 tag, int32 item, SaveRestoreAccess *saveFunc);

@@ -213,6 +213,11 @@ int LuaBase::dofile(const char *filename) {
 	int32 size = stream->size();
 	char *buffer = new char[size];
 	stream->read(buffer, size);
+
+	// A script that is not compiled is a text file
+	if (!g_grim->isRemastered() && size > 0 && buffer[0] != 0x1B)
+		size = lua_translateTextMode((byte *)buffer, size);
+
 	int result = lua_dobuffer(const_cast<char *>(buffer), size, const_cast<char *>(filename));
 	delete stream;
 	delete[] buffer;
