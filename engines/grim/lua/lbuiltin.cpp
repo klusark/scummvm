@@ -118,6 +118,10 @@ static void internaldostring() {
 
 static const char *to_string(lua_Object obj) {
 	char *buff = luaL_openspace(30);
+
+	if (obj == LUA_NOOBJECT)
+		lua_error("internal error");
+
 	TObject *o = luaA_Address(obj);
 
 	switch (ttype(o)) {
@@ -166,9 +170,7 @@ static const char *to_string(lua_Object obj) {
 	case LUA_T_NIL:
 		return "nil";
 	default:
-#ifdef LUA_DEBUG
-		LUA_INTERNALERROR("internal error");
-#endif
+		lua_error("internal error");
 		return nullptr;
 	}
 }
@@ -529,11 +531,14 @@ static struct luaL_reg int_funcs[] = {
 	{ "pause_scripts", pause_scripts },
 	{ "unpause_scripts", unpause_scripts },
 	{ "find_script", find_script },
-	{ "sleep_for", sleep_for },
 	{ "break_here", break_here },
+	{ "dofile", luaI_dofile }
+};
+
+static struct luaL_reg int_funcs_emi[] = {
 	{ "pause_script", pause_script },
 	{ "unpause_script", unpause_script },
-	{ "dofile", luaI_dofile }
+	{ "sleep_for", sleep_for }
 };
 
 static struct luaL_reg int_funcs_remastered[] = {
@@ -580,10 +585,14 @@ void luaB_predefine() {
 	luaS_newfixedstring(tableEM);
 	luaS_newfixedstring(memEM);
 
-	if (luaIsRemastered)
+	if (luaIsRemastered) {
 		luaL_openlib(int_funcs_remastered, ARRAYSIZE(int_funcs_remastered));
-	else
+	} else {
 		luaL_openlib(int_funcs, ARRAYSIZE(int_funcs));
+
+		if (luaIsEmi)
+			luaL_openlib(int_funcs_emi, ARRAYSIZE(int_funcs_emi));
+	}
 	lua_pushstring(LUA_VERSION);
 	lua_setglobal("_VERSION");
 }

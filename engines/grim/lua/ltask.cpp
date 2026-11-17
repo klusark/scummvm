@@ -384,7 +384,7 @@ static void find_script_v2() {
 	lua_pushnumber(state->paused ? 1.0f : 0.0f);
 }
 
-static void find_script_remastered() {
+static void find_script_grim() {
 	lua_Object paramObj = lua_getparam(1);
 
 	if (paramObj == LUA_NOOBJECT)
@@ -429,67 +429,12 @@ static void find_script_remastered() {
 }
 
 void find_script() {
-	if (luaIsRemastered) {
-		find_script_remastered();
-		return;
-	}
-
 	if (luaIsEmi) {
 		find_script_v2();
 		return;
 	}
 
-	lua_Object paramObj = lua_getparam(1);
-	lua_Type type = paramObj == LUA_NOOBJECT ? LUA_T_NIL : ttype(Address(paramObj));
-
-	if (type != LUA_T_CPROTO && type != LUA_T_PROTO && type != LUA_T_TASK && type != LUA_T_NIL)
-		lua_error("Bad argument to find_script");
-
-	if (type == LUA_T_NIL) {
-		ttype(lua_state->stack.top) = LUA_T_TASK;
-		nvalue(lua_state->stack.top) = lua_state->id;
-		incr_top;
-		lua_pushnumber(1.0f);
-		return;
-	}
-
-	if (type == LUA_T_TASK) {
-		uint32 task = (uint32)nvalue(Address(paramObj));
-		LState *state;
-		for (state = lua_rootState->next; state != nullptr; state = state->next) {
-			if (state->id == task) {
-				lua_pushobject(paramObj);
-				lua_pushnumber(1.0f);
-				return;
-			}
-		}
-	} else if (type == LUA_T_PROTO || type == LUA_T_CPROTO) {
-		int task = -1, countTasks = 0;
-		bool match;
-		LState *state;
-		for (state = lua_rootState->next; state != nullptr; state = state->next) {
-			if (type == LUA_T_PROTO) {
-				match = (state->taskFunc.ttype == type && tfvalue(&state->taskFunc) == tfvalue(Address(paramObj)));
-			} else {
-				match = (state->taskFunc.ttype == type && fvalue(&state->taskFunc) == fvalue(Address(paramObj)));
-			}
-			if (match) {
-				task = state->id;
-				countTasks++;
-			}
-		}
-		if (countTasks) {
-			assert(task != -1);
-			ttype(lua_state->stack.top) = LUA_T_TASK;
-			nvalue(lua_state->stack.top) = (float)task;
-			incr_top;
-			lua_pushnumber((float)countTasks);
-			return;
-		}
-	}
-
-	lua_pushnil();
-	lua_pushnumber(0.0f);
+	find_script_grim();
 }
 
 void pause_script() {
