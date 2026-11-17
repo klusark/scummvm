@@ -678,9 +678,11 @@ void Lua_V1::SetCameraPosition() {
 		return;
 	}
 
+	// The classic exe reads the first parameter three times
+	bool remastered = g_grim->isRemastered();
 	lua_Object xObj = lua_getparam(1);
-	lua_Object yObj = lua_getparam(2);
-	lua_Object zObj = lua_getparam(3);
+	lua_Object yObj = lua_getparam(remastered ? 2 : 1);
+	lua_Object zObj = lua_getparam(remastered ? 3 : 1);
 
 	if (!lua_isnumber(xObj) || !lua_isnumber(yObj) || !lua_isnumber(zObj))
 		lua_pushnil();
@@ -701,9 +703,11 @@ void Lua_V1::SetCameraInterest() {
 		return;
 	}
 
+	// The classic exe reads the first parameter three times
+	bool remastered = g_grim->isRemastered();
 	lua_Object xObj = lua_getparam(1);
-	lua_Object yObj = lua_getparam(2);
-	lua_Object zObj = lua_getparam(3);
+	lua_Object yObj = lua_getparam(remastered ? 2 : 1);
+	lua_Object zObj = lua_getparam(remastered ? 3 : 1);
 
 	if (!lua_isnumber(xObj) || !lua_isnumber(yObj) || !lua_isnumber(zObj))
 		lua_pushnil();

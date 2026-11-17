@@ -284,7 +284,8 @@ init:
 					const char *res;
 					if (s1) {
 						res = match(s1, p, cap);
-						return res;
+						if (res)
+							return res;
 					}
 					p = ep + 1;
 					goto init;
@@ -294,7 +295,8 @@ init:
 					const char *res;
 					if (s1) {
 						res = match(s1, ep + 1, cap);
-						return res;
+						if (res)
+							return res;
 					}
 					p = ep + 1;
 					goto init;
