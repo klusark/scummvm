@@ -859,9 +859,6 @@ void Blocky16::decode(byte *dst, const byte *src, int flags) {
 #endif
 		break;
 	case 1:
-		if (!_remasterFixes)
-			error("blocky16: not implemented decode1 proc");
-
 		upscaleFrame(_curBuf, gfx_data, _width, _height, nullptr);
 		break;
 	case 2:
@@ -892,9 +889,6 @@ void Blocky16::decode(byte *dst, const byte *src, int flags) {
 			break;
 		}
 	case 7:
-		if (!_remasterFixes)
-			error("blocky16: not implemented decode7 proc");
-
 		upscaleFrame(_curBuf, gfx_data, _width, _height, src + 40);
 		break;
 	case 8:
