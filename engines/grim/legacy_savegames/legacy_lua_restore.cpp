@@ -395,6 +395,7 @@ static void restoreState() {
 		tempHash->nhash = readLESint32();
 		tempHash->nuse = readLESint32();
 		tempHash->htag = readLESint32();
+		tempHash->serial = luaH_newSerial();
 		tempHash->node = hashnodecreate(tempHash->nhash);
 		luaO_insertlist(prevHash, (GCnode *)tempHash);
 		prevHash = (GCnode *)tempHash;

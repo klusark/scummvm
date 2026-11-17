@@ -22,6 +22,11 @@ namespace Grim {
 #define REHASH_LIMIT            0.70    // avoid more than this % full
 #define TagDefault              LUA_T_ARRAY;
 
+uint32 luaH_newSerial() {
+	static uint32 serial = 0;
+	return ++serial;
+}
+
 static intptr hashindex(TObject *ref) {
 	intptr h;
 
@@ -34,10 +39,11 @@ static intptr hashindex(TObject *ref) {
 		h = (intptr)ref->value.ud.id;
 		break;
 	case LUA_T_STRING:
-		h = (intptr)tsvalue(ref);
+		// By content, not by address
+		h = (intptr)tsvalue(ref)->hash;
 		break;
 	case LUA_T_ARRAY:
-		h = (intptr)avalue(ref);
+		h = (intptr)avalue(ref)->serial;
 		break;
 	case LUA_T_PROTO:
 		h = (intptr)tfvalue(ref);
@@ -108,6 +114,7 @@ Hash *luaH_new(int32 nhash) {
 	nhash(t) = nhash;
 	nuse(t) = 0;
 	t->htag = TagDefault;
+	t->serial = luaH_newSerial();
 	luaO_insertlist(&roottable, (GCnode *)t);
 	nblocks += gcsize(nhash);
 	return t;

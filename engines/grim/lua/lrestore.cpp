@@ -200,6 +200,7 @@ static Hash *luaH_load(SaveRestoreAccess *restoreFunc) {
 	hash->nhash = loadInt32(restoreFunc);
 	hash->nuse = loadInt32(restoreFunc);
 	hash->htag = loadInt32(restoreFunc);
+	hash->serial = luaH_newSerial();
 	hash->node = hashnodecreate(hash->nhash);
 	luaO_insertlist(&roottable, (GCnode *)hash);
 
