@@ -620,6 +620,14 @@ void GfxOpenGLS::getScreenBoundingBox(const EMIModel *model, int *x1, int *y1, i
 
 	Math::Matrix4 modelMatrix = _currentActor->getFinalMatrix();
 	Math::Matrix4 mvpMatrix = _mvpMatrix * modelMatrix;
+	if (_currentActor->isInOverworld()) {
+		// startActorDraw draws these without the camera and with their own projection
+		Math::Matrix4 projMatrix = _overworldProjMatrix;
+		projMatrix.transpose();
+		Math::Matrix4 invertZ;
+		invertZ(2, 2) = -1.0f;
+		mvpMatrix = projMatrix * invertZ * modelMatrix;
+	}
 
 	double top = 1000;
 	double right = -1000;
