@@ -819,9 +819,9 @@ void CNode::lookAt(const CVector &target) {
 
 	_eulerDeg._z = 0.0f;
 
-	float yaw = (float)(atan2(unit._x, unit._z) * factor);
+	float yaw = (float)(atan2((double)unit._x, (double)unit._z) * factor);
 
-	_eulerDeg._x = (float)(-asin(unit._y) * factor);
+	_eulerDeg._x = (float)(-asin((double)unit._y) * factor);
 	_eulerDeg._y = yaw;
 	_nodeFlags = (_nodeFlags & ~(kEulerValid | kQuaternionValid | kLocalSet)) | kEulerValid | kLocalSet;
 	updateLocalState();

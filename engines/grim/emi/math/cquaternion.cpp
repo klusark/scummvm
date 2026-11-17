@@ -99,7 +99,7 @@ CQuaternion *CQuaternion::slerp(const CQuaternion &other, float t, CQuaternion *
 		scaleThis = 1.0 - t;
 		scaleOther = t;
 	} else {
-		double angleWide = acos(cosine);
+		double angleWide = acos((double)cosine);
 		float angle = (float)angleWide;
 		float sine = (float)sin(angleWide);
 

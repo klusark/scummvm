@@ -132,7 +132,7 @@ float CLight::evaluate(const float *lightTransform, const float *position, const
 			return kNoLight;
 
 		float angleCosine = (float)(unitZ * axisZ + (double)unitY * axisY + (double)axisX * unitX);
-		float angle = (float)acos(angleCosine);
+		float angle = (float)acos((double)angleCosine);
 
 		if (angle > _penumbraAngle)
 			return kNoLight;
