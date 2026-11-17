@@ -25,6 +25,7 @@
 #include "common/system.h"
 #include "common/util.h"
 
+#include "engines/grim/simclock.h"
 #include "engines/grim/movie/smush_anim.h"
 #include "engines/grim/movie/smush_sound.h"
 #include "engines/grim/movie/smush_timer.h"
@@ -439,16 +440,16 @@ void SmushDemoPlayer::audioFill() {
 
 int SmushDemoPlayer::audioGetTime() {
 	if (!_useDriver)
-		return g_system->getMillis();
+		return grimMillis();
 
 	if (_audioStartFrame || _frame <= 2)
 		return _driver->sndDrivGetTime(&_audio);
 
 	_audioClockLast = _driver->sndDrivGetTime(&_audio);
 	if (!_audioClockBase)
-		_audioClockBase = g_system->getMillis() - 1000 * _frame / _fps;
+		_audioClockBase = grimMillis() - 1000 * _frame / _fps;
 
-	return _audioClockLast - _audioClockBase + g_system->getMillis();
+	return _audioClockLast - _audioClockBase + grimMillis();
 }
 
 int SmushDemoPlayer::getFramesDue() {
@@ -539,7 +540,7 @@ int SmushDemoPlayer::open(const Common::String &name, int offset) {
 	_audioStartFrame = 0;
 	_audioClockBase = 0;
 	_startTime = 0;
-	_lastUpdate = g_system->getMillis();
+	_lastUpdate = grimMillis();
 	_frameSource = nullptr;
 	_frameWidth = 0;
 	_frameHeight = 0;
@@ -578,7 +579,7 @@ int SmushDemoPlayer::update(int *frameDecoded, int *finished, int *paletteChange
 		audioFill();
 	}
 
-	uint32 time = g_system->getMillis();
+	uint32 time = grimMillis();
 	if (time - _lastUpdate > 200)
 		late = true;
 

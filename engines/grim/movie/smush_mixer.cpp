@@ -24,6 +24,7 @@
 #include "common/system.h"
 #include "common/util.h"
 
+#include "engines/grim/simclock.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/movie/smush_mixer.h"
 #include "engines/grim/movie/smush_sound.h"
@@ -531,7 +532,7 @@ int SmushDemoDriver::sndDrivOpen(int rate, int channels, int bits, SmushDemoAudi
 	_written = 0;
 	_wrapCount = 0;
 	_lastPosition = 0;
-	_lastMeasure = g_system->getMillis();
+	_lastMeasure = grimMillis();
 	_lastTime = 0;
 	_lastReturned = 0;
 	_waiting = 1;
@@ -569,7 +570,7 @@ int SmushDemoDriver::sndDrivGetTime(SmushDemoAudio *audio) {
 		position = _playPosition;
 	}
 
-	uint32 time = g_system->getMillis();
+	uint32 time = grimMillis();
 	int result;
 
 	if (position != _lastPosition) {
@@ -615,7 +616,7 @@ int SmushDemoDriver::sndDrivPause(SmushDemoAudio *audio) {
 
 int SmushDemoDriver::sndDrivResume(SmushDemoAudio *audio) {
 	_paused = 0;
-	_lastMeasure = g_system->getMillis();
+	_lastMeasure = grimMillis();
 
 	Common::StackLock lock(_mutex);
 	_playing = true;
@@ -679,7 +680,7 @@ void SmushDemoDriver::sndDrivFill(SmushDemoAudio *audio) {
 			}
 
 			_waiting = 0;
-			_lastMeasure = g_system->getMillis();
+			_lastMeasure = grimMillis();
 		}
 	}
 }

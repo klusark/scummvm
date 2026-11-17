@@ -24,6 +24,7 @@
 
 #include "gui/debugger.h"
 
+#include "engines/grim/simclock.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/imuse/imuse_engine.h"
 #include "engines/grim/imuse/imuse_defs.h"
@@ -159,11 +160,11 @@ IMuse::IMuse(int sampleRate, Audio::Mixer *mixer, Common::Mutex *mutex, bool low
 
 	// The remastered calls the heartbeat every 16 ms, but its counters still advance by 20 ms each time
 	int timerPeriodUsec = _remastered ? IMUSE_REMASTERED_TIMER_PERIOD_USEC : 1000000 / _callbackFps;
-	g_system->getTimerManager()->installTimerProc(timer_handler, timerPeriodUsec, this, "IMuse");
+	grimInstallTimer(timer_handler, timerPeriodUsec, this, "IMuse");
 }
 
 IMuse::~IMuse() {
-	g_system->getTimerManager()->removeTimerProc(timer_handler);
+	grimRemoveTimer(timer_handler);
 	imTerminateScript();
 
 	soundsTerminateProcessing();
@@ -194,7 +195,7 @@ IMuse::~IMuse() {
 }
 
 void IMuse::soundsShutdown() {
-	g_system->getTimerManager()->removeTimerProc(timer_handler);
+	grimRemoveTimer(timer_handler);
 
 	imStopAllSounds();
 	imRefreshScript();
@@ -233,7 +234,7 @@ void IMuse::soundsStartup() {
 
 	int timerPeriodUsec = _remastered ? IMUSE_REMASTERED_TIMER_PERIOD_USEC : 1000000 / _callbackFps;
 
-	g_system->getTimerManager()->installTimerProc(timer_handler, timerPeriodUsec, this, "IMuse");
+	grimInstallTimer(timer_handler, timerPeriodUsec, this, "IMuse");
 
 	soundsAllocateBuffer(IMUSE_BUFFER_MUSIC, 440000, 44000, 352000);
 	soundsAllocateBuffer(IMUSE_BUFFER_SPEECH, 88000, 44000, 88000);

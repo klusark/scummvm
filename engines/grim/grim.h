@@ -129,6 +129,7 @@ struct GrimVideoDevice {
 class GrimEngine : public Engine, public SysStruct {
 	friend class Lua_V1;
 	friend class LuaBase;
+	friend class SputResource;
 	friend class LegacyImporter;
 
 protected:
@@ -285,6 +286,30 @@ protected:
 
 	Common::Mutex _imuseMutex;
 	unsigned _speedLimitMs;
+
+	// Scripted test runs (autorun.cpp)
+	void autorunInit();
+	void autorunBeginFrame();
+	void autorunEndFrame();
+	void autorunGameLoaded();
+	/** Runs the script given with --autorun, as a game script */
+	void runAutorun();
+	void pollRemoteLua();
+	uint32 simFrameMs() const;
+	static void autorunBusyFrame();
+	bool _autorunPending = false;
+	bool _autorunLoaded = false;
+	uint32 _remotePoll = 0;
+	/** With --sim-fps the clock advances by a fixed time per frame instead of real time (0 = real time) */
+	unsigned _simFps = 0;
+	unsigned _simMs = 0;
+	unsigned _simFrame = 0;
+	/** With --sim-fps: only one frame in this many is drawn (1 = every frame) */
+	unsigned _simRenderEvery = 1;
+	bool _simSkipRender = false;
+	int _simLastMode = 0;
+	unsigned _simFpsReports = 0;
+	void *_simLastRoom = nullptr;
 	bool _showFps;
 
 	uint32 _gameFlags;

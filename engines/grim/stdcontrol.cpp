@@ -25,6 +25,7 @@
 #include "common/util.h"
 #include "graphics/cursorman.h"
 
+#include "engines/grim/simclock.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/remastered/hdcanvas.h"
 #include "engines/grim/stdcontrol.h"
@@ -154,7 +155,7 @@ int StdControl::close() {
 }
 
 void StdControl::flush() {
-	_curReadTime = g_system->getMillis();
+	_curReadTime = grimMillis();
 
 	if (_remastered)
 		return;
@@ -209,7 +210,7 @@ void StdControl::readControls() {
 		return;
 
 	_controlsIdle = 1;
-	_curReadTime = g_system->getMillis();
+	_curReadTime = grimMillis();
 
 	if (_curReadTime != _lastReadTime) {
 		uint delta = (uint)_curReadTime - (uint)_lastReadTime;

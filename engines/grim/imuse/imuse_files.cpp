@@ -23,6 +23,7 @@
 #include "common/stream.h"
 #include "common/system.h"
 
+#include "engines/grim/simclock.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/movie/codecs/vima.h"
 #include "engines/grim/imuse/imuse_engine.h"
@@ -932,7 +933,7 @@ int IMuse::cacheGetSoundId(const char *soundName) {
 
 		sound = &_soundCache[loadSlot];
 		Common::strlcpy(sound->soundFilename, soundName, sizeof(sound->soundFilename));
-		sound->tsOfAllocation = g_system->getMillis();
+		sound->tsOfAllocation = grimMillis();
 		allocated = true;
 	} else {
 		if (soundKey == 10000)
@@ -1022,7 +1023,7 @@ int IMuse::cacheGetSoundId(const char *soundName) {
 		return 0;
 	}
 
-	sound->tsOfAllocation = g_system->getMillis();
+	sound->tsOfAllocation = grimMillis();
 
 	if (!_demo) {
 		char lipsyncFilename[32];
@@ -1103,7 +1104,7 @@ int IMuse::cacheGetSoundId(const char *soundName) {
 int IMuse::cachePurgeOldestStoppedSound() {
 	int foundSlot = -1;
 	int emptySlot = -1;
-	uint32 oldestTimestamp = g_system->getMillis();
+	uint32 oldestTimestamp = grimMillis();
 	int numSlots = _demo ? 16 : IMUSE_MAX_CACHED_SOUNDS;
 
 	for (int slot = numSlots - 1; slot >= 0; slot--) {
@@ -1487,7 +1488,7 @@ void IMuse::allocateProcessedSound(int luaSoundId) {
 			sound->flag = 1;
 		}
 
-		sound->tsOfAllocation = g_system->getMillis();
+		sound->tsOfAllocation = grimMillis();
 	}
 }
 

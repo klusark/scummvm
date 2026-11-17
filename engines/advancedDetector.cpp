@@ -1168,7 +1168,8 @@ Common::Error AdvancedMetaEngineBase::createInstance(OSystem *syst, Engine **eng
 			&& !Engine::warnUserAboutUnsupportedGame())
 		return Common::kUserCanceled;
 
-	if (gameDescriptor.gameSupportLevel == kTestingGame)
+	// (a scripted test run, --autorun, has nobody to answer the dialog)
+	if (gameDescriptor.gameSupportLevel == kTestingGame && !ConfMan.hasKey("autorun"))
 		Engine::warnUserAboutTestingMode();
 
 	if (gameDescriptor.gameSupportLevel == kWarningGame

@@ -49,6 +49,7 @@
 #include "engines/grim/sputroom.h"
 #include "engines/grim/movie/sputsmush.h"
 #include "engines/grim/text/sputtext.h"
+#include "engines/grim/simclock.h"
 #include "engines/grim/sputtime.h"
 #include "engines/grim/std/std_3d.h"
 #include "engines/grim/std/std_math.h"
@@ -2069,7 +2070,7 @@ void Lua_V1::TEST() {
 }
 
 void Lua_V1::GetTickCount() {
-	lua_pushnumber((float)g_system->getMillis());
+	lua_pushnumber((float)grimMillis());
 }
 
 void Lua_V1::ActorVoiceIs3D() {

@@ -21,6 +21,7 @@
 
 #include "common/system.h"
 
+#include "engines/grim/simclock.h"
 #include "engines/grim/sputtime.h"
 
 namespace Grim {
@@ -42,7 +43,7 @@ float SputTime::getFrameTimeFlex() const {
 }
 
 uint SputTime::advance() {
-	uint time = g_system->getMillis();
+	uint time = grimMillis();
 	uint frameTime;
 
 	if (time >= _lastRealTime)
@@ -78,7 +79,7 @@ uint SputTime::advanceManual(uint ticks) {
 
 	_gameTime = (int)((uint)_gameTime + frameTime);
 	_frameTimeFlex = (float)((double)frameTime * 0.001f);
-	_lastRealTime = g_system->getMillis();
+	_lastRealTime = grimMillis();
 
 	return _lastRealTime;
 }
@@ -87,7 +88,7 @@ uint SputTime::reset() {
 	_gameTime = 0;
 	_frameTime = 0;
 	_frameTimeFlex = 0.0f;
-	_lastRealTime = g_system->getMillis();
+	_lastRealTime = grimMillis();
 
 	return _lastRealTime;
 }

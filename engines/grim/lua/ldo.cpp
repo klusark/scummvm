@@ -125,6 +125,10 @@ void luaD_callHook(StkId base, TProtoFunc *tf, int32 isreturn) {
 	}
 }
 
+uint32 g_luaBusyLimit = 0;
+uint32 g_luaBusyCalls = 0;
+void (*g_luaBusyHook)() = nullptr;
+
 /*
 ** Call a C function.
 ** Cstack.num is the number of arguments; Cstack.lua2C points to the
@@ -140,6 +144,10 @@ static StkId callC(lua_CFunction f, StkId base) {
 	CS->base = base + numarg;  // == top - stack
 	if (lua_callhook)
 		luaD_callHook(base, nullptr, 0);
+	if (g_luaBusyLimit && ++g_luaBusyCalls >= g_luaBusyLimit) {
+		g_luaBusyCalls = 0;
+		g_luaBusyHook();
+	}
 	lua_state->callLevelCounter++;
 	(*f)();  // do the actual call
 	lua_state->callLevelCounter--;

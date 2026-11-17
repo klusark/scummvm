@@ -383,6 +383,7 @@ MODULE_OBJS := \
 	update/lang_filter.o \
 	update/update.o \
 	debug.o \
+	autorun.o \
 	grim.o \
 	grim_save_remastered.o \
 	inputdialog.o \
@@ -397,6 +398,7 @@ MODULE_OBJS := \
 	sputroom.o \
 	sputroom_save_remastered.o \
 	sputroom_sections.o \
+	simclock.o \
 	sputtime.o \
 	stdcontrol.o \
 	puck.o \

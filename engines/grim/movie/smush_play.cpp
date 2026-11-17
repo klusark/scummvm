@@ -28,6 +28,7 @@
 
 #include "graphics/surface.h"
 
+#include "engines/grim/simclock.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/movie/codecs/smush_decoder.h"
 #include "engines/grim/movie/smush_animator.h"
@@ -117,7 +118,7 @@ int SmushPlay::sysStartup() {
 		}
 	}
 
-	g_system->getTimerManager()->installTimerProc(&timerCallback, 10000, this, "smushPlay");
+	grimInstallTimer(&timerCallback, 10000, this, "smushPlay");
 	_timerInstalled = 1;
 	_started = 1;
 
@@ -129,7 +130,7 @@ void SmushPlay::sysShutdown() {
 		return;
 
 	if (_timerInstalled) {
-		g_system->getTimerManager()->removeTimerProc(&timerCallback);
+		grimRemoveTimer(&timerCallback);
 		_timerInstalled = 0;
 	}
 

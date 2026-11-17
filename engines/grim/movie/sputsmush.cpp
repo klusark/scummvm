@@ -34,6 +34,7 @@
 #include "audio/mixer.h"
 #include "video/theora_decoder.h"
 
+#include "engines/grim/simclock.h"
 #include "engines/grim/movie/theoraconverter.h"
 #include "engines/grim/remastered/hdcanvas.h"
 #endif
@@ -236,7 +237,7 @@ int SputSmush::periodic() {
 	}
 
 	_smushPlay->sysConfigureColorLookup(0);
-	_lastPeriodicTime = g_system->getMillis();
+	_lastPeriodicTime = grimMillis();
 
 	if (remastered) {
 		if (updateResult)
@@ -347,7 +348,7 @@ int SputSmush::startMovie(const char *name, int looping, int x, int y) {
 		_curMovieFile[sizeof(_curMovieFile) - 1] = '\0';
 	}
 
-	_startTime = g_system->getMillis();
+	_startTime = grimMillis();
 
 	return 0;
 }
@@ -773,7 +774,7 @@ bool SputSmush::videoAudioDone() {
 	if (!_videoClip->endOfVideo())
 		return false;
 
-	uint32 now = g_system->getMillis();
+	uint32 now = grimMillis();
 
 	if (!_videoEnded) {
 		_videoEnded = true;

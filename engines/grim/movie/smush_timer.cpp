@@ -21,6 +21,7 @@
 
 #include "common/system.h"
 
+#include "engines/grim/simclock.h"
 #include "engines/grim/movie/smush_timer.h"
 
 namespace Grim {
@@ -42,7 +43,7 @@ int SmushTimer::moduleStartup() {
 			_timers[i].callback = nullptr;
 
 		_sysTickIncrement = 19886;
-		_timerThreadLastTime = g_system->getMillis();
+		_timerThreadLastTime = grimMillis();
 	}
 
 	return 0;
@@ -57,7 +58,7 @@ void SmushTimer::timerThread() {
 		return;
 
 	// The host timer exists only after the first movie, don't replay the idle time as ticks
-	uint32 now = g_system->getMillis();
+	uint32 now = grimMillis();
 	if (now - _timerThreadLastTime > 1000)
 		_timerThreadLastTime = now;
 

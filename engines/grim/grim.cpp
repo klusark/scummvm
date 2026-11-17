@@ -96,6 +96,7 @@
 #include "engines/grim/movie/sputsmush.h"
 #include "engines/grim/movie/sputsmush_demo.h"
 #include "engines/grim/text/sputtext.h"
+#include "engines/grim/simclock.h"
 #include "engines/grim/sputtime.h"
 #include "engines/grim/std/std_3d.h"
 #include "engines/grim/std/std_3d_config.h"
@@ -138,6 +139,7 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 	ConfMan.registerDefault("emi_ps2_tank_controls", false);
 
 	_showFps = ConfMan.getBool("show_fps");
+	autorunInit();
 
 	_mixer->setVolumeForSoundType(Audio::Mixer::kPlainSoundType, isRemastered() ? Audio::Mixer::kMaxMixerVolume : 192);
 	_mixer->setVolumeForSoundType(Audio::Mixer::kSFXSoundType, ConfMan.getInt("sfx_volume"));
@@ -541,7 +543,9 @@ Common::Error GrimEngine::runGrime() {
 		uint32 startTime = g_system->getMillis();
 
 		pumpEvents();
+		autorunBeginFrame();
 		grimMain();
+		autorunEndFrame();
 
 		uint32 endTime = g_system->getMillis();
 
@@ -1074,6 +1078,8 @@ void GrimEngine::grimMain() {
 		_displayChangePending = 0;
 	}
 
+	// (a frame of a simulated run that is not shown is rendered all the same: what the scripts are told is in view
+	// (GetVisibleThings) comes from the rendering)
 	loop(1, _firstFrameFlag);
 	_firstFrameFlag = 0;
 	_grimFrameCount++;
@@ -1088,7 +1094,14 @@ void GrimEngine::grimMain() {
 
 		_grimLastFpsFrame = _grimFrameCount;
 		_grimFps = (double)numFrames * 1000.0 / (double)elapsed;
+		// (counted in real time, the log shows how fast a simulated run goes)
+		if (_simFps && ++_simFpsReports % 10 == 0)
+			warning("FPS %7.2f (real time), simulated clock %u ms", _grimFps, g_simMillis);
 	}
+
+	// (a frame of a simulated run that is not shown)
+	if (_simSkipRender)
+		return;
 
 	if (_showFps) {
 		Common::String text = Common::String::format("%02.3f", _grimFps);
@@ -2071,6 +2084,7 @@ void GrimEngine::restoreEpilogue() {
 
 	_luaV1->dofile("patch05.bin");
 	_libJustLoaded = 1;
+	autorunGameLoaded();
 	_sputRender->allowLoadImage(1);
 
 	StdRect rect = { 0, 0, 640, 480 };
@@ -3152,7 +3166,7 @@ void GrimEngine::addKeyboardEvent(uint offset, int data) {
 
 		event->offset = offset;
 		event->data = data;
-		event->timeStamp = (int)g_system->getMillis();
+		event->timeStamp = (int)grimMillis();
 		input->numKeyboardEvents++;
 	} else {
 		input->keyboardOverflow = 1;
@@ -3169,7 +3183,7 @@ void GrimEngine::addMouseButtonEvent(uint offset, int data) {
 
 		event->offset = offset;
 		event->data = data;
-		event->timeStamp = (int)g_system->getMillis();
+		event->timeStamp = (int)grimMillis();
 		input->numMouseEvents++;
 	} else {
 		input->mouseOverflow = 1;
