@@ -70,10 +70,13 @@ bool GfxBase::isShadowModeActive() {
 	return _shadowModeActive;
 }
 
-void GfxBase::setupLights(Common::List<Light *> &lightsList) {
+void GfxBase::setupLights(Common::List<Light *> &lightsList, const Math::Vector3d &center, float radius) {
 	int lightId = 0;
 	for (Light *l : lightsList) {
-		if (l->_enabled) {
+		// Skip the spot lights that can't reach the actor. They wouldn't light
+		// it anyway, and the fixed-function lighting of macOS on Apple Silicon
+		// turns the whole actor black when it is behind a spot light.
+		if (l->_enabled && l->canReach(center, radius)) {
 			setupLight(l, lightId);
 			lightId++;
 		}

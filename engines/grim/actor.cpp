@@ -1783,7 +1783,20 @@ void Actor::draw() {
 	// FIXME: if isAttached(), factor in the joint rotation as well.
 	const Math::Vector3d &absPos = getWorldPos();
 	if (!_costumeStack.empty()) {
-		g_grim->getCurrSet()->setupLights(absPos, _inOverworld);
+		// A bounding sphere around the actor, for any rotation around the z
+		// axis, with some room for the animations.
+		Math::Vector3d lightCenter = absPos;
+		float lightRadius = -1.0f;
+		if (g_grim->getGameType() == GType_GRIM) {
+			Model *model = _costumeStack.back()->getModel();
+			if (model) {
+				Math::Vector3d offset = model->_insertOffset + model->_center;
+				lightCenter.z() += offset.z() * _scale;
+				float offsetXY = sqrtf(offset.x() * offset.x() + offset.y() * offset.y());
+				lightRadius = (model->_bboxSize.getMagnitude() * 0.5f + offsetXY) * _scale * 1.25f;
+			}
+		}
+		g_grim->getCurrSet()->setupLights(absPos, _inOverworld, lightCenter, lightRadius);
 		if (g_grim->getGameType() == GType_GRIM) {
 			Costume *costume = _costumeStack.back();
 			drawCostume(costume);

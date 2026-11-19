@@ -71,7 +71,7 @@ public:
 	void drawBitmaps(ObjectState::Position stage);
 	void setupCamera();
 
-	void setupLights(const Math::Vector3d &pos, bool inOverworld);
+	void setupLights(const Math::Vector3d &pos, bool inOverworld, const Math::Vector3d &center, float radius);
 
 	void setSoundPosition(const char *soundName, const Math::Vector3d &pos);
 	void setSoundPosition(const char *soundName, const Math::Vector3d &pos, int minVol, int maxVol, float maxDist, float radius);
@@ -219,6 +219,8 @@ struct Light {
 	void setIntensity(float intensity);
 	void setUmbra(float angle);
 	void setPenumbra(float angle);
+	// Whether the light can reach any point of the given sphere.
+	bool canReach(const Math::Vector3d &center, float radius) const;
 
 	enum LightType {
 		Omni = 1,

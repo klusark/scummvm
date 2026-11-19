@@ -140,7 +140,11 @@ public:
 
 	virtual void enableLights() = 0;
 	virtual void disableLights() = 0;
-	virtual void setupLights(Common::List<Light *> &lightsList);
+	/**
+	 * Set up the enabled lights for drawing an actor whose bounding sphere is
+	 * given by center and radius. A negative radius means no bounding sphere.
+	 */
+	virtual void setupLights(Common::List<Light *> &lightsList, const Math::Vector3d &center, float radius);
 
 	virtual void createTexture(Texture *texture, const uint8 *data, const CMap *cmap, bool clamp) = 0;
 	virtual void selectTexture(const Texture *texture) = 0;

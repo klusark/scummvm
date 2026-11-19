@@ -577,6 +577,27 @@ void Light::setPenumbra(float angle) {
 	_cospenumbraangle = cosf(angle * (float)M_PI / 180.0f);
 }
 
+bool Light::canReach(const Math::Vector3d &center, float radius) const {
+	// Only spot lights of Grim are culled. EMI stores its spot angles in a
+	// different way, and a cone of 90 degrees or more reaches behind the light.
+	if (_type != Spot || radius < 0.0f || _penumbraangle >= 90.0f ||
+			g_grim->getGameType() != GType_GRIM)
+		return true;
+
+	Math::Vector3d toCenter = center - _pos;
+	float dist = toCenter.getMagnitude();
+	float dirLength = _dir.getMagnitude();
+	if (dist <= radius || dirLength == 0.0f)
+		return true;
+
+	// The sphere is outside the cone when the angle between the cone axis and
+	// the centre, minus the angle the sphere covers, is wider than the cone.
+	float cosAxis = CLIP(toCenter.dotProduct(_dir) / (dist * dirLength), -1.0f, 1.0f);
+	float axisAngle = acosf(cosAxis) * 180.0f / (float)M_PI;
+	float sphereAngle = asinf(radius / dist) * 180.0f / (float)M_PI;
+	return axisAngle - sphereAngle <= _penumbraangle;
+}
+
 void Light::setIntensity(float intensity) {
 	_intensity = intensity;
 	if (g_grim->getGameType() == GType_MONKEY4) {
@@ -833,7 +854,7 @@ public:
 	Math::Vector3d _pos;
 };
 
-void Set::setupLights(const Math::Vector3d &pos, bool inOverworld) {
+void Set::setupLights(const Math::Vector3d &pos, bool inOverworld, const Math::Vector3d &center, float radius) {
 	if (g_grim->getGameType() == GType_MONKEY4 && !g_driver->supportsShaders()) {
 		// If shaders are not available, we do lighting in software for EMI.
 		g_driver->disableLights();
@@ -850,7 +871,7 @@ void Set::setupLights(const Math::Vector3d &pos, bool inOverworld) {
 	Common::List<Light *> &lightsList = inOverworld ? _overworldLightsList : _lightsList;
 	Common::sort(lightsList.begin(), lightsList.end(), sorter);
 
-	g_driver->setupLights(lightsList);
+	g_driver->setupLights(lightsList, center, radius);
 }
 
 void Set::setSetup(int num) {
