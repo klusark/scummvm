@@ -987,21 +987,12 @@ void GfxOpenGL::setupLight(Light *light, int lightId) {
 		lightDir[1] = light->_dir.y();
 		lightDir[2] = light->_dir.z();
 		spot_exp = 2.0f;
+		// GL only accepts a cutoff in [0, 90] or 180. Anything else is
+		// rejected and the light keeps its previous cutoff.
 		cutoff = light->_penumbraangle;
+		if (cutoff > 90.0f)
+			cutoff = 180.0f;
 		q_attenuation = 0.0f;
-	}
-
-	// The light colour is usually far above 1.0. Some drivers (e.g. macOS)
-	// clamp it, so move the excess into the attenuation factors instead.
-	// Directional lights ignore attenuation, so they just saturate.
-	GLfloat c_attenuation = 1.0f;
-	GLfloat scale = MAX(MAX(lightColor[0], lightColor[1]), lightColor[2]);
-	if (scale > 1.0f) {
-		lightColor[0] /= scale;
-		lightColor[1] /= scale;
-		lightColor[2] /= scale;
-		c_attenuation /= scale;
-		q_attenuation /= scale;
 	}
 
 	glLightfv(GL_LIGHT0 + lightId, GL_DIFFUSE, lightColor);
@@ -1009,7 +1000,6 @@ void GfxOpenGL::setupLight(Light *light, int lightId) {
 	glLightfv(GL_LIGHT0 + lightId, GL_SPOT_DIRECTION, lightDir);
 	glLightf(GL_LIGHT0 + lightId, GL_SPOT_EXPONENT, spot_exp);
 	glLightf(GL_LIGHT0 + lightId, GL_SPOT_CUTOFF, cutoff);
-	glLightf(GL_LIGHT0 + lightId, GL_CONSTANT_ATTENUATION, c_attenuation);
 	glLightf(GL_LIGHT0 + lightId, GL_QUADRATIC_ATTENUATION, q_attenuation);
 }
 
