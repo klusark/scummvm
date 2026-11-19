@@ -991,11 +991,25 @@ void GfxOpenGL::setupLight(Light *light, int lightId) {
 		q_attenuation = 0.0f;
 	}
 
+	// The light colour is usually far above 1.0. Some drivers (e.g. macOS)
+	// clamp it, so move the excess into the attenuation factors instead.
+	// Directional lights ignore attenuation, so they just saturate.
+	GLfloat c_attenuation = 1.0f;
+	GLfloat scale = MAX(MAX(lightColor[0], lightColor[1]), lightColor[2]);
+	if (scale > 1.0f) {
+		lightColor[0] /= scale;
+		lightColor[1] /= scale;
+		lightColor[2] /= scale;
+		c_attenuation /= scale;
+		q_attenuation /= scale;
+	}
+
 	glLightfv(GL_LIGHT0 + lightId, GL_DIFFUSE, lightColor);
 	glLightfv(GL_LIGHT0 + lightId, GL_POSITION, lightPos);
 	glLightfv(GL_LIGHT0 + lightId, GL_SPOT_DIRECTION, lightDir);
 	glLightf(GL_LIGHT0 + lightId, GL_SPOT_EXPONENT, spot_exp);
 	glLightf(GL_LIGHT0 + lightId, GL_SPOT_CUTOFF, cutoff);
+	glLightf(GL_LIGHT0 + lightId, GL_CONSTANT_ATTENUATION, c_attenuation);
 	glLightf(GL_LIGHT0 + lightId, GL_QUADRATIC_ATTENUATION, q_attenuation);
 }
 
