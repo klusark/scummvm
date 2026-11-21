@@ -163,6 +163,29 @@ void TextObject::invalidate() {
 	}
 }
 
+// The width of the widest line when the text is wrapped at a width of 0: every
+// word gets a line of its own, and the extra spaces of a run of spaces lead the
+// word after them.
+template <typename S>
+static int getWidestWord(const S &msg, const Font *font) {
+	int widest = 0;
+	int width = 0;
+	bool inWord = false;
+	for (uint i = 0; i < msg.size(); i++) {
+		const typename S::value_type c = msg[i];
+		if (c == '\n' || c == '\r' || (c == ' ' && inWord)) {
+			widest = MAX(widest, width);
+			width = 0;
+			inWord = false;
+			continue;
+		}
+		if (c != ' ')
+			inWord = true;
+		width += font->getCharKernedWidth(c);
+	}
+	return MAX(widest, width);
+}
+
 template <typename S>
 void TextObject::setupTextReal(S msg, Common::String (*convert)(const S &s)) {
 	S message;
@@ -190,7 +213,16 @@ void TextObject::setupTextReal(S msg, Common::String (*convert)(const S &s)) {
 
 	// If the speaker is too close to the edge of the screen we have to make
 	// some room for the subtitles.
-	if (_isSpeech) {
+	if (_isSpeech && g_grim->getGameType() == GType_MONKEY4) {
+		// EMI measures the text before its x is set, at x = 0, where every word
+		// is a line of its own, and keeps half of the widest word 40 pixels
+		// inside the screen.
+		const int halfWidth = getWidestWord(msg, _font) / 2;
+		if (_x - halfWidth < 40)
+			_x = halfWidth + 40;
+		if (_x + halfWidth > SCREEN_WIDTH - 40)
+			_x = SCREEN_WIDTH - halfWidth - 40;
+	} else if (_isSpeech) {
 		if (_x < SCREEN_MARGIN) {
 			_x = SCREEN_MARGIN;
 		} else if (SCREEN_WIDTH - _x < SCREEN_MARGIN) {
