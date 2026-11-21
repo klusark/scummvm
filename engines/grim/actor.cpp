@@ -1274,9 +1274,15 @@ void Actor::sayLine(const char *msgId, bool background, float x, float y, int vo
 		if (m == GrimEngine::TextOnly || g_grim->getMode() == GrimEngine::SmushMode || (g_grim->getGameType() == GType_GRIM && !started)) {
 			textObject->setDuration(500 + msg.size() * 15 * (11 - g_grim->getTextSpeed()));
 		}
+		bool hasExplicitTop = false;
+		int explicitTop = 0;
 		if (g_grim->getGameType() == GType_MONKEY4 && (x != -1 || y != -1)) {
+			// EMI scales y by the screen width as well, and uses it as the top of
+			// the text instead of its bottom.
+			_mustPlaceText = false;
 			textObject->setX(320 * (x + 1));
-			textObject->setY(240 * (y + 1));
+			hasExplicitTop = true;
+			explicitTop = (int)(320 * (y + 1));
 		} else if (g_grim->getMode() == GrimEngine::SmushMode) {
 			textObject->setX(640 / 2);
 			textObject->setY(456);
@@ -1292,6 +1298,12 @@ void Actor::sayLine(const char *msgId, bool background, float x, float y, int vo
 			}
 		}
 		textObject->setText(msgId, _mustPlaceText);
+		if (hasExplicitTop) {
+			// Speech text is laid out from its bottom, so move it down by its
+			// height now that it is known.
+			textObject->setY(explicitTop + textObject->getBitmapHeight());
+			textObject->reset();
+		}
 		if (g_grim->getMode() != GrimEngine::SmushMode)
 			_sayLineText = textObject->getId();
 	}

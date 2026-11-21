@@ -305,8 +305,17 @@ void TextObject::setupTextReal(S msg, Common::String (*convert)(const S &s)) {
 	// printed further down the screen.
 	const int SCREEN_TOP_MARGIN = _font->getKernedHeight();
 	if (_isSpeech) {
-		_y -= _numberLines * _font->getKernedHeight();
-		if (_y < SCREEN_TOP_MARGIN) {
+		const int height = _numberLines * _font->getKernedHeight();
+		_y -= height;
+		if (g_grim->getGameType() == GType_MONKEY4) {
+			// EMI keeps the text 25 pixels inside the top and the bottom of the
+			// screen.
+			const int SCREEN_HEIGHT = _height ? _height : 480;
+			if (_y < 25)
+				_y = 25;
+			if (_y + height > SCREEN_HEIGHT - 25)
+				_y = SCREEN_HEIGHT - height - 25;
+		} else if (_y < SCREEN_TOP_MARGIN) {
 			_y = SCREEN_TOP_MARGIN;
 		}
 	}
