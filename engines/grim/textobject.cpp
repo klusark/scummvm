@@ -49,7 +49,7 @@ void TextObjectCommon::setLayer(int layer) {
 
 TextObject::TextObject() :
 		TextObjectCommon(), _numberLines(1), _textID(""), _elapsedTime(0),
-		_maxLineWidth(0), _lines(nullptr), _userData(nullptr), _created(false),
+		_maxLineWidth(0), _posX(0), _posY(0), _lines(nullptr), _userData(nullptr), _created(false),
 		_blastDraw(false), _isSpeech(false), _stackLevel(0) {
 }
 
@@ -124,6 +124,11 @@ bool TextObject::restoreState(SaveGame *state) {
 		g_grim->invalidateTextObjectsSortOrder();
 	}
 
+	// Older savegames have the position of a speech text after its layout
+	// moved it up by its height.
+	if (_isSpeech && _font && state->saveMinorVersion() < 31)
+		_y += _numberLines * _font->getKernedHeight();
+
 	setupText();
 	_created = false;
 	_userData = nullptr;
@@ -190,6 +195,9 @@ template <typename S>
 void TextObject::setupTextReal(S msg, Common::String (*convert)(const S &s)) {
 	S message;
 
+	_posX = _x;
+	_posY = _y;
+
 	// remove spaces (NULL_TEXT) from the end of the string,
 	// while this helps make the string unique it screws up
 	// text justification
@@ -218,15 +226,15 @@ void TextObject::setupTextReal(S msg, Common::String (*convert)(const S &s)) {
 		// is a line of its own, and keeps half of the widest word 40 pixels
 		// inside the screen.
 		const int halfWidth = getWidestWord(msg, _font) / 2;
-		if (_x - halfWidth < 40)
-			_x = halfWidth + 40;
-		if (_x + halfWidth > SCREEN_WIDTH - 40)
-			_x = SCREEN_WIDTH - halfWidth - 40;
+		if (_posX - halfWidth < 40)
+			_posX = halfWidth + 40;
+		if (_posX + halfWidth > SCREEN_WIDTH - 40)
+			_posX = SCREEN_WIDTH - halfWidth - 40;
 	} else if (_isSpeech) {
-		if (_x < SCREEN_MARGIN) {
-			_x = SCREEN_MARGIN;
-		} else if (SCREEN_WIDTH - _x < SCREEN_MARGIN) {
-			_x = SCREEN_WIDTH - SCREEN_MARGIN;
+		if (_posX < SCREEN_MARGIN) {
+			_posX = SCREEN_MARGIN;
+		} else if (SCREEN_WIDTH - _posX < SCREEN_MARGIN) {
+			_posX = SCREEN_WIDTH - SCREEN_MARGIN;
 		}
 	}
 
@@ -235,11 +243,11 @@ void TextObject::setupTextReal(S msg, Common::String (*convert)(const S &s)) {
 	// with GrimE.
 	int maxWidth = 0;
 	if (_justify == CENTER) {
-		maxWidth = 2 * MIN(_x, SCREEN_WIDTH - _x);
+		maxWidth = 2 * MIN(_posX, SCREEN_WIDTH - _posX);
 	} else if (_justify == LJUSTIFY) {
-		maxWidth = SCREEN_WIDTH - _x;
+		maxWidth = SCREEN_WIDTH - _posX;
 	} else if (_justify == RJUSTIFY) {
-		maxWidth = _x;
+		maxWidth = _posX;
 	}
 
 	// We break the message to lines not longer than maxWidth
@@ -306,17 +314,17 @@ void TextObject::setupTextReal(S msg, Common::String (*convert)(const S &s)) {
 	const int SCREEN_TOP_MARGIN = _font->getKernedHeight();
 	if (_isSpeech) {
 		const int height = _numberLines * _font->getKernedHeight();
-		_y -= height;
+		_posY -= height;
 		if (g_grim->getGameType() == GType_MONKEY4) {
 			// EMI keeps the text 25 pixels inside the top and the bottom of the
 			// screen.
 			const int SCREEN_HEIGHT = _height ? _height : 480;
-			if (_y < 25)
-				_y = 25;
-			if (_y + height > SCREEN_HEIGHT - 25)
-				_y = SCREEN_HEIGHT - height - 25;
-		} else if (_y < SCREEN_TOP_MARGIN) {
-			_y = SCREEN_TOP_MARGIN;
+			if (_posY < 25)
+				_posY = 25;
+			if (_posY + height > SCREEN_HEIGHT - 25)
+				_posY = SCREEN_HEIGHT - height - 25;
+		} else if (_posY < SCREEN_TOP_MARGIN) {
+			_posY = SCREEN_TOP_MARGIN;
 		}
 	}
 
@@ -380,13 +388,13 @@ void TextObject::setupText() {
 }
 
 int TextObject::getLineX(int line) const {
-	int x = _x;
+	int x = _posX;
 	if (line >= _numberLines)
 		return 0;
 	if (_justify == CENTER)
-		x = _x - (_font->getKernedStringLength(_lines[line]) / 2);
+		x = _posX - (_font->getKernedStringLength(_lines[line]) / 2);
 	else if (_justify == RJUSTIFY)
-		x = _x - getBitmapWidth();
+		x = _posX - getBitmapWidth();
 
 	if (x < 0)
 		x = 0;
@@ -394,22 +402,22 @@ int TextObject::getLineX(int line) const {
 }
 
 int TextObject::getLineY(int line) const {
-	int y = _y;
+	int y = _posY;
 
 	if (g_grim->getGameType() == GType_GRIM) {
 		if (_blastDraw) { // special case for Grim for menu text draw, issue #1083
-			y = _y + 5;
+			y = _posY + 5;
 		} else {
 /*			if (_font->getKernedHeight() == 21) // talk_font,verb_font
-				y = _y - 6;
+				y = _posY - 6;
 			else if (_font->getKernedHeight() == 26) // special_font
-				y = _y - 12;
+				y = _posY - 12;
 			else */if (_font->getKernedHeight() == 13) // computer_font
-				y = _y - 6;/*
+				y = _posY - 6;/*
 			else if (_font->getKernedHeight() == 19) // pt_font
-				y = _y - 9;*/
+				y = _posY - 9;*/
 			else
-				y = _y;
+				y = _posY;
 		}
 	}
 

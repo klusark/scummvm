@@ -142,6 +142,10 @@ protected:
 	int _elapsedTime;
 	int _maxLineWidth;
 
+	// Where the text is drawn. _x and _y keep the position the text was given,
+	// which the layout of a speech text moves.
+	int _posX, _posY;
+
 	bool _blastDraw;
 	bool _isSpeech;
 	bool _created;
