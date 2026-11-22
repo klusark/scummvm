@@ -622,8 +622,11 @@ void Actor::walkTo(const Math::Vector3d &p) {
 			Common::List<Sector *> sectors;
 			for (int i = 0; i < currSet->getSectorCount(); ++i) {
 				Sector *s = currSet->getSectorBase(i);
-				int type = s->getType();
-				if ((type == Sector::WalkType || type == Sector::HotType || type == Sector::FunnelType) && s->isVisible()) {
+				// Paths only go through sectors with the walk bit: walk and
+				// funnel sectors, and EMI's 0x1200 stair sectors. Hot sectors
+				// (Grim's chernobyl sectors, Lucre's cheat boxes) are not
+				// walkable: an actor routed through one leaves the floor.
+				if ((s->getType() & Sector::WalkType) && s->isVisible()) {
 					sectors.push_back(s);
 				}
 			}
@@ -2052,12 +2055,19 @@ Math::Vector3d Actor::getTangentPos(const Math::Vector3d &pos, const Math::Vecto
 	if (pos.getDistanceTo(dest) < Math::epsilon) {
 		return dest;
 	}
+	// The floor is the x-y plane in Grim, the x-z plane in EMI (y is
+	// the height there: the point must stay at the floor's height).
+	const bool emi = g_grim->getGameType() == GType_MONKEY4;
+	// In EMI an actor colliding as a box is not walked around.
+	if (emi && _collisionMode != CollisionSphere) {
+		return dest;
+	}
 	Math::Vector3d p;
 	float size;
 	if (!getSphereInfo(size, p))
 		return dest;
-	Math::Vector2d p1(pos.x(), pos.y());
-	Math::Vector2d p2(dest.x(), dest.y());
+	Math::Vector2d p1(pos.x(), emi ? pos.z() : pos.y());
+	Math::Vector2d p2(dest.x(), emi ? dest.z() : dest.y());
 	if (p1.getDistanceTo(p2) < Math::epsilon) {
 		return dest;
 	}
@@ -2065,7 +2075,7 @@ Math::Vector3d Actor::getTangentPos(const Math::Vector3d &pos, const Math::Vecto
 
 	// TODO: collision with Box
 //	if (_collisionMode == CollisionSphere) {
-	Math::Vector2d center(p.x(), p.y());
+	Math::Vector2d center(p.x(), emi ? p.z() : p.y());
 
 	Math::Vector2d inter;
 	float distance = segment.getLine().getDistanceTo(center, &inter);
@@ -2076,6 +2086,8 @@ Math::Vector3d Actor::getTangentPos(const Math::Vector3d &pos, const Math::Vecto
 		v *= size;
 		v += center;
 
+		if (emi)
+			return Math::Vector3d(v.getX(), dest.y(), v.getY());
 		return Math::Vector3d(v.getX(), v.getY(), dest.z());
 	}
 //	} else {

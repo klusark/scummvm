@@ -361,7 +361,7 @@ Common::List<Math::Line3d> Sector::getBridgesTo(Sector *sector) const {
 
 	Math::Vector3d *sectorVertices = sector->getVertices();
 	for (int i = 0; i < sector->getNumVertices(); i++) {
-		Math::Vector3d pos, edge, delta_b1, delta_b2;
+		Math::Vector3d edge, delta_b1, delta_b2;
 		Math::Line3d line(sectorVertices[i], sectorVertices[i + 1]);
 		it = bridges.begin();
 		while (it != bridges.end()) {
@@ -371,21 +371,25 @@ Common::List<Math::Line3d> Sector::getBridgesTo(Sector *sector) const {
 			delta_b2 = bridge.end() - line.begin();
 			Math::Vector3d cross_b1 = Math::Vector3d::crossProduct(edge, delta_b1);
 			Math::Vector3d cross_b2 = Math::Vector3d::crossProduct(edge, delta_b2);
-			bool b1_out = cross_b1.dotProduct(_normal) < -1e-7;
-			bool b2_out = cross_b2.dotProduct(_normal) < -1e-7;
-
-			bool useXZ = (g_grim->getGameType() == GType_MONKEY4);
+			float side_b1 = cross_b1.dotProduct(_normal);
+			float side_b2 = cross_b2.dotProduct(_normal);
+			bool b1_out = side_b1 < -1e-7;
+			bool b2_out = side_b2 < -1e-7;
 
 			if (b1_out && b2_out) {
 				// Both points are outside.
 				it = bridges.erase(it);
 				continue;
-			} else if (b1_out) {
-				if (bridge.intersectLine2d(line, &pos, useXZ)) {
+			} else if (b1_out || b2_out) {
+				// Cut the bridge where it crosses the line through the edge.
+				// It must be cut even when it crosses that line beyond the
+				// ends of the edge: otherwise the part outside the sector is
+				// kept, and sectors that do not touch get a bridge.
+				float t = CLIP(side_b1 / (side_b1 - side_b2), 0.f, 1.f);
+				Math::Vector3d pos = bridge.begin() + (bridge.end() - bridge.begin()) * t;
+				if (b1_out) {
 					bridge = Math::Line3d(pos, bridge.end());
-				}
-			} else if (b2_out) {
-				if (bridge.intersectLine2d(line, &pos, useXZ)) {
+				} else {
 					bridge = Math::Line3d(bridge.begin(), pos);
 				}
 			}
