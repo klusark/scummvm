@@ -331,6 +331,29 @@ bool Sector::isPointInSector(const Math::Vector3d &point) const {
 			return false;
 	}
 
+	if (g_grim->getGameType() == GType_MONKEY4) {
+		// EMI tests the outline as it is seen from above (x/z), without the sector's normal:
+		// the point must not be outside any edge. footstep_dock in gpt.setb lists its first
+		// vertex twice, which leaves it without a normal, and it must still cover only its
+		// outline (bug #11789: dock footsteps all over Jambalaya's beach).
+		const Math::Vector3d *prev = &_vertices[_numVertices - 1];
+		for (int i = 0; i < _numVertices; i++) {
+			const Math::Vector3d *cur = &_vertices[i];
+			float dx = prev->x() - cur->x();
+			float dz = prev->z() - cur->z();
+			float lengthSquared = dx * dx + dz * dz;
+			// An edge without length from above tests nothing (the original divides 0 by 0
+			// there, which compares as not outside).
+			if (lengthSquared != 0) {
+				float side = ((cur->z() - point.z()) * dx - (cur->x() - point.x()) * dz) / lengthSquared;
+				if (side < -1e-5f)
+					return false;
+			}
+			prev = cur;
+		}
+		return true;
+	}
+
 	// On the plane, so check if it is inside the polygon.
 	for (int i = 0; i < _numVertices; i++) {
 		Math::Vector3d edge = _vertices[i + 1] - _vertices[i];
