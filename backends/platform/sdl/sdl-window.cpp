@@ -353,7 +353,10 @@ float SdlWindow::getDpiScalingFactor() const {
 
 float SdlWindow::getSdlDpiScalingFactor() const {
 #if SDL_VERSION_ATLEAST(3, 0, 0)
-	return SDL_GetWindowDisplayScale(getSDLWindow());
+	// Ratio of drawable pixels to window coordinates. SDL_GetWindowDisplayScale
+	// also includes the desktop content scale (e.g. 150% on Windows), which
+	// does not apply to mouse or window coordinates.
+	return SDL_GetWindowPixelDensity(getSDLWindow());
 #elif SDL_VERSION_ATLEAST(2, 0, 0)
 	int windowWidth, windowHeight;
 	SDL_GetWindowSize(getSDLWindow(), &windowWidth, &windowHeight);

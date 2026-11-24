@@ -26,6 +26,10 @@
 
 #include "backends/platform/sdl/sdl-window.h"
 
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
 class SdlWindow_Win32 final : public SdlWindow {
 public:
 	void setupIcon() override;

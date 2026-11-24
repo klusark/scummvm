@@ -51,6 +51,9 @@ void SdlWindow_Win32::setupIcon() {
 }
 
 HWND SdlWindow_Win32::getHwnd() {
+#if SDL_VERSION_ATLEAST(3, 0, 0)
+	return (HWND)SDL_GetPointerProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+#else
 	SDL_SysWMinfo wminfo;
 	if (getSDLWMInformation(&wminfo)) {
 #if SDL_VERSION_ATLEAST(2, 0, 0)
@@ -59,6 +62,7 @@ HWND SdlWindow_Win32::getHwnd() {
 		return wminfo.window;
 #endif
 	}
+#endif
 	return nullptr;
 }
 
