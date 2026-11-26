@@ -26,6 +26,7 @@
 #include "engines/grim/actor.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/costume.h"
+#include "engines/grim/coords.h"
 #include "engines/grim/lipsync.h"
 #include "engines/grim/movie/movie.h"
 #include "engines/grim/sound.h"
@@ -533,18 +534,12 @@ void Actor::setPos(const Math::Vector3d &position) {
 }
 
 void Actor::calculateOrientation(const Math::Vector3d &pos, Math::Angle *pitch, Math::Angle *yaw, Math::Angle *roll) {
+	// The orientation is computed in Grim space for both games
 	Math::Vector3d actorForward(0.f, 1.f, 0.f);
 	Math::Vector3d actorUp(0.f, 0.f, 1.f);
 	Math::Vector3d lookVector = pos - _pos;
 	lookVector.normalize();
-
-	// EMI: Y is up-down, actors use an X-Z plane for movement
-	if (g_grim->getGameType() == GType_MONKEY4) {
-		float temp = lookVector.z();
-		lookVector.x() = -lookVector.x();
-		lookVector.z() = lookVector.y();
-		lookVector.y() = temp;
-	}
+	lookVector = convertToGrimSpace(lookVector);
 
 	Math::Vector3d up = actorUp;
 	if (_puckOrient) {
@@ -694,12 +689,11 @@ void Actor::walkTo(const Math::Vector3d &p) {
 					while (!bridges.empty()) {
 						Math::Line3d bridge = bridges.back();
 						Math::Vector3d pos;
-						const bool useXZ = (g_grim->getGameType() == GType_MONKEY4);
 
 						// Prefer points on the straight line from this node towards
 						// the destination. Otherwise pick the middle point of a bridge
 						// that is closest to the destination.
-						if (!bridge.intersectLine2d(l, &pos, useXZ)) {
+						if (!intersectOnGround(bridge, l, &pos)) {
 							pos = bridge.middle();
 						} else {
 							best = pos;
@@ -826,15 +820,7 @@ void Actor::walkForward() {
 	_walking = false;
 
 	if (!_followBoxes) {
-		Math::Vector3d forwardVec(-_moveYaw.getSine(),
-		                           _moveYaw.getCosine(), 0);
-
-		// EMI: Y is up-down, actors use an X-Z plane for movement
-		if (g_grim->getGameType() == GType_MONKEY4) {
-			forwardVec.x() = -forwardVec.x();
-			forwardVec.z() = forwardVec.y();
-			forwardVec.y() = 0;
-		}
+		Math::Vector3d forwardVec = getForwardVector(_moveYaw);
 
 		_pos += forwardVec * dist;
 		_walkedCur = true;
@@ -854,15 +840,7 @@ void Actor::walkForward() {
 
 		g_grim->getCurrSet()->findClosestSector(_pos, &currSector, &_pos);
 		if (!currSector) { // Shouldn't happen...
-			Math::Vector3d forwardVec(-_moveYaw.getSine(),
-			                           _moveYaw.getCosine(), 0);
-
-			// EMI: Y is up-down, actors use an X-Z plane for movement
-			if (g_grim->getGameType() == GType_MONKEY4) {
-				forwardVec.x() = -forwardVec.x();
-				forwardVec.z() = forwardVec.y();
-				forwardVec.y() = 0;
-			}
+			Math::Vector3d forwardVec = getForwardVector(_moveYaw);
 
 			if (backwards)
 				forwardVec = -forwardVec;
@@ -876,25 +854,7 @@ void Actor::walkForward() {
 		float oldDist = dist;
 		while (currSector) {
 			prevSector = currSector;
-			Math::Vector3d forwardVec;
-			const Math::Vector3d &normal = currSector->getNormal();
-			if (g_grim->getGameType() == GType_GRIM) {
-				Math::Angle ax = Math::Vector2d(normal.x(), normal.z()).getAngle();
-				Math::Angle ay = Math::Vector2d(normal.y(), normal.z()).getAngle();
-
-				float z1 = -_moveYaw.getCosine() * ay.getCosine();
-				float z2 = _moveYaw.getSine() * ax.getCosine();
-				forwardVec = Math::Vector3d(-_moveYaw.getSine() * ax.getSine(),
-				                             _moveYaw.getCosine() * ay.getSine(), z1 + z2);
-			} else {
-				Math::Angle ax = Math::Vector2d(normal.x(), normal.y()).getAngle();
-				Math::Angle az = Math::Vector2d(normal.z(), normal.y()).getAngle();
-
-				float y1 = _moveYaw.getCosine() * az.getCosine();
-				float y2 = _moveYaw.getSine() * ax.getCosine();
-				forwardVec = Math::Vector3d(-_moveYaw.getSine() * ax.getSine(), y1 + y2,
-				                            -_moveYaw.getCosine() * az.getSine());
-			}
+			Math::Vector3d forwardVec = getForwardVectorOnPlane(_moveYaw, currSector->getNormal());
 
 			if (backwards)
 				forwardVec = -forwardVec;
@@ -938,11 +898,7 @@ void Actor::walkForward() {
 			return;
 
 		ei.angleWithEdge += (float)1.0f;
-
-		if (g_grim->getGameType() == GType_MONKEY4) {
-			ei.angleWithEdge = -ei.angleWithEdge;
-		}
-		turnTo(0, _moveYaw + ei.angleWithEdge * turnDir, 0, true);
+		turnTo(0, _moveYaw + ei.angleWithEdge * (turnDir * getTurnSign()), 0, true);
 
 		if (oldDist <= dist + 0.001f) {
 			// If we didn't move at all, keep trying a couple more times
@@ -964,9 +920,9 @@ Math::Vector3d Actor::getSimplePuckVector() const {
 				break;
 			a = Actor::getPool().getObject(a->_attachedActor);
 		}
-		return Math::Vector3d(yaw.getSine(), 0, yaw.getCosine());
+		return getForwardVector(yaw);
 	} else {
-		return Math::Vector3d(-_yaw.getSine(), _yaw.getCosine(), 0);
+		return getForwardVector(_yaw);
 	}
 }
 
@@ -1113,10 +1069,7 @@ void Actor::stopAllChores(bool ignoreLoopingChores) {
 
 void Actor::turn(int dir) {
 	_walking = false;
-	float delta = g_grim->getPerSecond(_turnRate) * dir * _timeScale;
-	if (g_grim->getGameType() == GType_MONKEY4) {
-		delta = -delta;
-	}
+	float delta = g_grim->getPerSecond(_turnRate) * dir * _timeScale * getTurnSign();
 	_moveYaw = _moveYaw + delta;
 	_turning = true;
 	_turnRateMultiplier = 5.f;
@@ -1126,28 +1079,14 @@ void Actor::turn(int dir) {
 Math::Angle Actor::getYawTo(const Actor *a) const {
 	Math::Vector3d forwardVec = getSimplePuckVector();
 	Math::Vector3d delta = a->getWorldPos() - getWorldPos();
-
-	if (g_grim->getGameType() == GType_MONKEY4) {
-		delta.y() = 0;
-	} else {
-		delta.z() = 0;
-	}
+	flattenToGround(delta);
 	if (delta.getMagnitude() < Math::epsilon)
 		return Math::Angle(0);
 	return Math::Vector3d::angle(forwardVec, delta);
 }
 
 Math::Angle Actor::getYawTo(const Math::Vector3d &p) const {
-	Math::Vector3d dpos = p - _pos;
-
-	if (g_grim->getGameType() == GType_MONKEY4) {
-		dpos.y() = dpos.z();
-		dpos.x() = -dpos.x();
-	}
-	if (dpos.x() == 0 && dpos.y() == 0)
-		return 0;
-	else
-		return Math::Angle::arcTangent2(-dpos.x(), dpos.y());
+	return getYawFromDirection(p - _pos);
 }
 
 void Actor::sayLine(const char *msgId, bool background, float x, float y, int volume, int pan) {
@@ -1585,10 +1524,7 @@ void Actor::update(uint frameTime) {
 
 	if (_turning) {
 		float turnAmt = g_grim->getPerSecond(_turnRate) * _turnRateMultiplier * _timeScale;
-		_currTurnDir = animTurn(turnAmt, _moveYaw, &_yaw);
-		if (g_grim->getGameType() == GType_MONKEY4) {
-			_currTurnDir = -_currTurnDir;
-		}
+		_currTurnDir = animTurn(turnAmt, _moveYaw, &_yaw) * (int)getTurnSign();
 		int p = animTurn(turnAmt, _movePitch, &_pitch);
 		int r = animTurn(turnAmt, _moveRoll, &_roll);
 		if (_currTurnDir == 0 && p == 0 && r == 0) {
@@ -2387,7 +2323,8 @@ const Math::Matrix4 Actor::getFinalMatrix() const {
 	// so the additional scaling can be omitted.
 
 	// Finish with this actor's rotation
-	Math::Matrix4 rotMat(getRoll(), getYaw(), getPitch(), Math::EO_ZYX);
+	Math::Matrix4 rotMat;
+	buildFromYawPitchRoll(rotMat, getYaw(), getPitch(), getRoll());
 	m = m * rotMat;
 	return  m;
 }
@@ -2413,7 +2350,7 @@ Math::Quaternion Actor::getRotationQuat() const {
 		const Math::Matrix4 m = getFinalMatrix();
 		return Math::Quaternion(m).inverse();
 	} else {
-		return Math::Quaternion::fromEuler(_yaw, _pitch, _roll, Math::EO_ZXY).inverse();
+		return quatFromYawPitchRoll(_yaw, _pitch, _roll).inverse();
 	}
 }
 
@@ -2574,7 +2511,7 @@ void Actor::attachToActor(Actor *parent, const char *joint) {
 	}
 
 	// Get the final rotation Euler coordinates
-	newRot.getEuler(&_roll, &_yaw, &_pitch, Math::EO_ZYX);
+	getYawPitchRoll(newRot, &_yaw, &_pitch, &_roll);
 
 	// Convert position into the parent actor's local space.
 	_pos = _pos - parentMatrix.getPosition();
@@ -2605,7 +2542,7 @@ void Actor::detach() {
 	// Position and rotate the actor in relation to the world coords
 	setPos(getWorldPos());
 	Math::Quaternion q = getRotationQuat();
-	q.inverse().getEuler(&_roll, &_yaw, &_pitch, Math::EO_ZYX);
+	getYawPitchRoll(q.inverse(), &_yaw, &_pitch, &_roll);
 
 	// Remove the attached actor
 	_attachedActor = 0;

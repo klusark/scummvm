@@ -24,6 +24,7 @@
 #include "engines/grim/debug.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/sector.h"
+#include "engines/grim/coords.h"
 #include "engines/grim/textsplit.h"
 #include "engines/grim/savegame.h"
 #include "engines/grim/set.h"
@@ -374,18 +375,16 @@ Common::List<Math::Line3d> Sector::getBridgesTo(Sector *sector) const {
 			bool b1_out = cross_b1.dotProduct(_normal) < -1e-7;
 			bool b2_out = cross_b2.dotProduct(_normal) < -1e-7;
 
-			bool useXZ = (g_grim->getGameType() == GType_MONKEY4);
-
 			if (b1_out && b2_out) {
 				// Both points are outside.
 				it = bridges.erase(it);
 				continue;
 			} else if (b1_out) {
-				if (bridge.intersectLine2d(line, &pos, useXZ)) {
+				if (intersectOnGround(bridge, line, &pos)) {
 					bridge = Math::Line3d(pos, bridge.end());
 				}
 			} else if (b2_out) {
-				if (bridge.intersectLine2d(line, &pos, useXZ)) {
+				if (intersectOnGround(bridge, line, &pos)) {
 					bridge = Math::Line3d(bridge.begin(), pos);
 				}
 			}
@@ -395,30 +394,23 @@ Common::List<Math::Line3d> Sector::getBridgesTo(Sector *sector) const {
 	}
 
 	// All the bridges should be at the same height on both sectors.
+	// EMI: Set pac contains sectors which are not parallel to any
+	// other sector or share any edge. Since one sector isn't
+	// a plane, finding the intersections in 3D would be complicated.
+	//
+	// Checking for bridges using a projection in 2D and having a height
+	// threshold to avoid that characters jump from lower to higher floors
+	// seems to be a good compromise.
+	//
+	// The value of at least 0.1 was chosen to fix a path finding issue
+	// in set pac when guybrush tried to reach the pile of rocks.
+	const float maxHeightDiff = isYUp() ? 0.1f : 0.01f;
 	it = bridges.begin();
 	while (it != bridges.end()) {
-		if (g_grim->getGameType() == GType_MONKEY4) {
-			// Set pac contains sectors which are not parallel to any
-			// other sector or share any edge. Since one sector isn't
-			// a plane, finding the intersections in 3D would be complicated.
-			//
-			// Checking for bridges using a projection in 2D and having a height
-			// threshold to avoid that characters jump from lower to higher floors
-			// seems to be a good compromise.
-			//
-			// The value of at least 0.1 was chosen to fix a path finding issue
-			// in set pac when guybrush tried to reach the pile of rocks.
-			if (fabs(getProjectionToPlane(it->begin()).y() - sector->getProjectionToPlane(it->begin()).y()) > 0.1f ||
-			    fabs(getProjectionToPlane(it->end()).y() - sector->getProjectionToPlane(it->end()).y()) > 0.1f) {
-				it = bridges.erase(it);
-				continue;
-			}
-		} else {
-			if (fabs(getProjectionToPlane(it->begin()).z() - sector->getProjectionToPlane(it->begin()).z()) > 0.01f ||
-			    fabs(getProjectionToPlane(it->end()).z() - sector->getProjectionToPlane(it->end()).z()) > 0.01f) {
-				it = bridges.erase(it);
-				continue;
-			}
+		if (fabs(getHeight(getProjectionToPlane(it->begin())) - getHeight(sector->getProjectionToPlane(it->begin()))) > maxHeightDiff ||
+		    fabs(getHeight(getProjectionToPlane(it->end())) - getHeight(sector->getProjectionToPlane(it->end()))) > maxHeightDiff) {
+			it = bridges.erase(it);
+			continue;
 		}
 		++it;
 	}

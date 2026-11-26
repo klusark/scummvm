@@ -24,6 +24,7 @@
 #include "engines/grim/emi/lua_v2.h"
 #include "engines/grim/lua/lua.h"
 #include "engines/grim/actor.h"
+#include "engines/grim/coords.h"
 #include "engines/grim/debug.h"
 #include "engines/grim/grim.h"
 #include "engines/grim/costume.h"
@@ -1039,12 +1040,12 @@ void Lua_V2::WalkActorVector() {
 	setup->_rot.transform(&cameraVector, false);
 
 	// find the angle the camera direction is around the unit circle
-	Math::Angle cameraYaw = Math::Angle::arcTangent2(cameraVector.x(), cameraVector.z());
+	Math::Angle cameraYaw = getYawFromDirection(cameraVector);
 
 	// Handle the turning
 	Math::Vector3d adjustVector(moveHoriz, 0, moveVert);
 	// find the angle the adjust vector is around the unit circle
-	Math::Angle adjustYaw = Math::Angle::arcTangent2(adjustVector.x(), adjustVector.z());
+	Math::Angle adjustYaw = getYawFromDirection(adjustVector);
 
 	Math::Angle yaw = cameraYaw + adjustYaw;
 

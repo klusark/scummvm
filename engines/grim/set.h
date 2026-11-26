@@ -132,7 +132,9 @@ public:
 		void saveState(SaveGame *savedState) const;
 		bool restoreState(SaveGame *savedState);
 
-		void getRotation(float *x, float *y, float *z);
+		float getPitch() const;
+		float getYaw() const;
+		float getRoll() const;
 		Math::Matrix4 getRotation() { return _rot; }
 		void setPitch(Math::Angle p);
 		void setYaw(Math::Angle y);
