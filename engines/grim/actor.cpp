@@ -68,6 +68,167 @@ static int animTurn(float turnAmt, const Math::Angle &dest, Math::Angle *cur) {
 	return 0;
 }
 
+static Math::Vector3d getSectorExit(Sector *sector, const Math::Vector3d &from, const Math::Vector3d &to) {
+	const float edgeMargin = 1e-5f;
+	Math::Vector3d *vertices = sector->getVertices();
+	Math::Vector3d normal = sector->getNormal();
+	Math::Vector3d exit = to;
+	for (int i = 0; i < sector->getNumVertices(); i++) {
+		Math::Vector3d edge = vertices[i + 1] - vertices[i];
+		Math::Vector3d delta = exit - vertices[i];
+		float side = Math::Vector3d::crossProduct(edge, delta).dotProduct(normal);
+		if (side >= -edgeMargin)
+			continue;
+		Math::Vector3d move = exit - from;
+		float moveSide = Math::Vector3d::crossProduct(edge, move).dotProduct(normal);
+		if (fabsf(moveSide) <= edgeMargin)
+			continue;
+		exit -= move * (side / moveSide);
+	}
+	return sector->getProjectionToPlane(exit);
+}
+
+struct PlannerState {
+	const Common::List<Sector *> *sectors;
+	Common::List<Sector *> inactive;
+	Common::Array<Math::Vector3d> path;
+	Math::Vector3d to;
+};
+
+struct PlannerExit {
+	Math::Vector3d pos;
+	float dist;
+};
+
+static bool isPlannerActive(const PlannerState &state, Sector *sector) {
+	return Common::find(state.inactive.begin(), state.inactive.end(), sector) == state.inactive.end();
+}
+
+static void setPlannerActive(PlannerState &state, Sector *sector, bool active) {
+	state.inactive.remove(sector);
+	if (!active)
+		state.inactive.push_back(sector);
+}
+
+static Sector *findPlannerSector(const PlannerState &state, const Math::Vector3d &pos) {
+	for (Sector *s : *state.sectors) {
+		if (!(s->getType() & Sector::WalkType))
+			continue;
+		if (!isPlannerActive(state, s))
+			continue;
+		if (s->isPointInSector(pos))
+			return s;
+	}
+	return nullptr;
+}
+
+static Common::Array<PlannerExit> findPlannerExits(const PlannerState &state, Sector *sector) {
+	Common::Array<PlannerExit> exits;
+	for (Sector *s : *state.sectors) {
+		if (s == sector)
+			continue;
+		if (!(s->getType() & Sector::WalkType))
+			continue;
+		if (!isPlannerActive(state, s))
+			continue;
+		Math::Vector3d *vertices = s->getVertices();
+		for (int i = 0; i < s->getNumVertices(); i++) {
+			if (!sector->isPointInSector(vertices[i]))
+				continue;
+			bool found = false;
+			for (const PlannerExit &e : exits) {
+				if (e.pos == vertices[i])
+					found = true;
+			}
+			if (found)
+				continue;
+			PlannerExit e;
+			e.pos = vertices[i];
+			e.dist = (state.to - vertices[i]).getSquareMagnitude();
+			uint j = exits.size();
+			while (j > 0 && exits[j - 1].dist > e.dist)
+				j--;
+			exits.insert_at(j, e);
+		}
+	}
+	return exits;
+}
+
+static bool findPortalPoint(Sector *sectorA, Sector *sectorB, const Math::Vector3d &to, Math::Vector3d *portal) {
+	float best = -1.f;
+	Sector *planes[2] = { sectorA, sectorB };
+	for (int k = 0; k < 2; k++) {
+		Sector *s = planes[k];
+		Sector *other = planes[1 - k];
+		Math::Vector3d *vertices = s->getVertices();
+		for (int i = 0; i < s->getNumVertices(); i++) {
+			if (!other->isPointInSector(vertices[i]))
+				continue;
+			float dist = (vertices[i] - to).getSquareMagnitude();
+			if (best < 0.f || dist < best) {
+				best = dist;
+				*portal = vertices[i];
+			}
+		}
+	}
+	return best >= 0.f;
+}
+
+static bool findPlannerPath(PlannerState &state, Sector *sector, const Math::Vector3d &from) {
+	const uint maxPathPoints = 29;
+	const float minStep = 1e-4f;
+	if (state.path.size() + 1 > maxPathPoints) {
+		setPlannerActive(state, sector, false);
+		return true;
+	}
+	if (!sector)
+		sector = findPlannerSector(state, from);
+	if (!sector)
+		return false;
+	state.path.push_back(from);
+	uint count = state.path.size();
+	if (sector->isPointInSector(state.to))
+		return true;
+	Math::Vector3d exit = getSectorExit(sector, from, state.to);
+	setPlannerActive(state, sector, false);
+	Sector *next = nullptr;
+	if ((exit - from).getSquareMagnitude() > minStep)
+		next = findPlannerSector(state, exit);
+	if (next) {
+		if (findPlannerPath(state, next, exit))
+			return true;
+		setPlannerActive(state, next, false);
+	}
+	Common::Array<PlannerExit> exits = findPlannerExits(state, sector);
+	for (const PlannerExit &e : exits) {
+		Sector *planeB = findPlannerSector(state, e.pos);
+		if (!planeB)
+			continue;
+		state.path.resize(count);
+		Math::Vector3d portal;
+		if (!findPortalPoint(sector, planeB, state.to, &portal))
+			continue;
+		if (findPlannerPath(state, planeB, portal))
+			return true;
+	}
+	setPlannerActive(state, sector, true);
+	if (next)
+		setPlannerActive(state, next, true);
+	return false;
+}
+
+static bool findOriginalPath(const Common::List<Sector *> &sectors, const Math::Vector3d &from, const Math::Vector3d &to,
+							 Common::List<Math::Vector3d> *path) {
+	PlannerState state;
+	state.sectors = &sectors;
+	state.to = to;
+	if (!findPlannerPath(state, nullptr, from))
+		return false;
+	for (uint i = 1; i < state.path.size(); i++)
+		path->push_front(state.path[i]);
+	return true;
+}
+
 bool Actor::_isTalkingBackground = false;
 
 void Actor::saveStaticState(SaveGame *state) {
@@ -711,7 +872,10 @@ void Actor::walkTo(const Math::Vector3d &p) {
 				}
 			}
 
-			do {
+			if (g_grim->getGameType() == GType_GRIM)
+				pathFound = findOriginalPath(sectors, _pos, _destPos, &_path);
+
+			while (!pathFound && !openList.empty()) {
 				PathNode *node = nullptr;
 				float cost = -1.f;
 				for (Common::List<PathNode *>::iterator j = openList.begin(); j != openList.end(); ++j) {
@@ -815,7 +979,7 @@ void Actor::walkTo(const Math::Vector3d &p) {
 						openList.push_back(n);
 					}
 				}
-			} while (!openList.empty());
+			}
 
 			for (Common::List<PathNode *>::iterator j = closedList.begin(); j != closedList.end(); ++j) {
 				delete *j;
