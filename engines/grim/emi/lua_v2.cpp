@@ -414,6 +414,8 @@ void Lua_V2::PopText() {
 	g_emi->popText();
 }
 
+static const Sector::SectorType kAnySectorType = (Sector::SectorType)0xFFFF;
+
 void Lua_V2::GetSectorName() {
 	lua_Object xObj = lua_getparam(1);
 	lua_Object yObj = lua_getparam(2);
@@ -430,9 +432,11 @@ void Lua_V2::GetSectorName() {
 
 	Math::Vector3d pos(x, y, z);
 	Set *set = g_grim->getCurrSet();
-	Sector *sector = set->findPointSector(pos, Sector::NoneType);
+	Sector *sector = set->findPointSector(pos, kAnySectorType);
 	if (sector) {
 		lua_pushstring(sector->getName().c_str());
+	} else {
+		lua_pushnil();
 	}
 }
 
