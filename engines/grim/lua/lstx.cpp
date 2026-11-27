@@ -974,7 +974,7 @@ int yyparse() {
 	so that they stay on the same level as the state stack.
 	The wasted elements are never initialized.  */
 
-	yyssp = yyss - 1;
+	yyssp = yyss;
 	yyvsp = yyvs;
 
 	/* Push a new state, which is found in  yystate  .  */
@@ -1475,7 +1475,7 @@ yyerrdefault:  /* current state does not do anything special for the error token
 
 yyerrpop:   /* pop the current state because it cannot handle the error token */
 
-	if (yyssp == yyss)
+	if (yyssp == yyss + 1)
 		YYABORT;
 	yyvsp--;
 	yystate = *--yyssp;
