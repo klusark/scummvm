@@ -43,14 +43,14 @@ struct SmushTimerSlot {
 	void *context;
 	int reentrant;
 	int accumulator;
-	int extSync;
+	uint32 extSync;
 };
 
 class SmushTimer {
 
 private:
 	SmushTimerSlot _timers[SYS_MAX_TIMERS + 1];
-	int _sysGlobalTimer;
+	uint32 _sysGlobalTimer;
 	int _sysTickIncrement;
 	uint32 _timerThreadLastTime;
 	int _sysInitCount;
