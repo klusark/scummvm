@@ -30,6 +30,10 @@
 
 namespace Grim {
 
+static int16 readSample(const int16 *buf) {
+	return (int16)READ_UINT16(buf);
+}
+
 // The demo's mixer keeps all of its tables in a single block (sizes in int16 units):
 // 17 volume tables for 8 bit sources (256 entries each), 17 volume tables for 16 bit
 // sources (4096 entries each) and the soft clipping table (indexes from -16384 to 16383)
@@ -230,10 +234,10 @@ void IMuseInternalMixer::mix16ToStereo(const int16 *srcBuf, int32 inFrameCount, 
 	switch (ratio) {
 	case 0x8000:
 		for (int i = 0; i < inFrameCount - 1; i++) {
-			interpolated = (srcBuf[0] + srcBuf[2]) >> 1;
+			interpolated = (readSample(&srcBuf[0]) + readSample(&srcBuf[2])) >> 1;
 
-			mixBufCurCell[0] += srcBuf[0] * leftAmp;
-			mixBufCurCell[1] += srcBuf[0] * rightAmp;
+			mixBufCurCell[0] += readSample(&srcBuf[0]) * leftAmp;
+			mixBufCurCell[1] += readSample(&srcBuf[0]) * rightAmp;
 			mixBufCurCell[2] += interpolated * leftAmp;
 			mixBufCurCell[3] += interpolated * rightAmp;
 
@@ -241,15 +245,15 @@ void IMuseInternalMixer::mix16ToStereo(const int16 *srcBuf, int32 inFrameCount, 
 			mixBufCurCell += 4;
 		}
 
-		mixBufCurCell[0] += srcBuf[0] * leftAmp;
-		mixBufCurCell[1] += srcBuf[0] * rightAmp;
-		mixBufCurCell[2] += srcBuf[0] * leftAmp;
-		mixBufCurCell[3] += srcBuf[0] * rightAmp;
+		mixBufCurCell[0] += readSample(&srcBuf[0]) * leftAmp;
+		mixBufCurCell[1] += readSample(&srcBuf[0]) * rightAmp;
+		mixBufCurCell[2] += readSample(&srcBuf[0]) * leftAmp;
+		mixBufCurCell[3] += readSample(&srcBuf[0]) * rightAmp;
 		break;
 	case 0x10000:
 		for (uint32 i = 0; i < feedSize; i++) {
-			mixBufCurCell[0] += srcBuf[0] * leftAmp;
-			mixBufCurCell[1] += srcBuf[0] * rightAmp;
+			mixBufCurCell[0] += readSample(&srcBuf[0]) * leftAmp;
+			mixBufCurCell[1] += readSample(&srcBuf[0]) * rightAmp;
 
 			srcBuf++;
 			mixBufCurCell += 2;
@@ -257,8 +261,8 @@ void IMuseInternalMixer::mix16ToStereo(const int16 *srcBuf, int32 inFrameCount, 
 		break;
 	case 0x20000:
 		for (uint32 i = 0; i < feedSize; i++) {
-			mixBufCurCell[0] += srcBuf[0] * leftAmp;
-			mixBufCurCell[1] += srcBuf[0] * rightAmp;
+			mixBufCurCell[0] += readSample(&srcBuf[0]) * leftAmp;
+			mixBufCurCell[1] += readSample(&srcBuf[0]) * rightAmp;
 
 			srcBuf += 2;
 			mixBufCurCell += 2;
@@ -266,8 +270,8 @@ void IMuseInternalMixer::mix16ToStereo(const int16 *srcBuf, int32 inFrameCount, 
 		break;
 	default:
 		for (uint32 i = 0; i < feedSize; i++) {
-			mixBufCurCell[0] += srcBuf[0] * leftAmp;
-			mixBufCurCell[1] += srcBuf[0] * rightAmp;
+			mixBufCurCell[0] += readSample(&srcBuf[0]) * leftAmp;
+			mixBufCurCell[1] += readSample(&srcBuf[0]) * rightAmp;
 
 			mixBufCurCell += 2;
 			position += ratio;
@@ -287,8 +291,8 @@ void IMuseInternalMixer::mix16ToStereoSwap(const int16 *srcBuf, int32 inFrameCou
 	switch (ratio) {
 	case 0x8000:
 		for (int i = 0; i < inFrameCount - 1; i++) {
-			sample = (int16)SWAP_BYTES_16(srcBuf[0]);
-			interpolated = (sample + (int16)SWAP_BYTES_16(srcBuf[2])) >> 1;
+			sample = (int16)SWAP_BYTES_16(readSample(&srcBuf[0]));
+			interpolated = (sample + (int16)SWAP_BYTES_16(readSample(&srcBuf[2]))) >> 1;
 
 			mixBufCurCell[0] += sample * leftAmp;
 			mixBufCurCell[1] += sample * rightAmp;
@@ -299,7 +303,7 @@ void IMuseInternalMixer::mix16ToStereoSwap(const int16 *srcBuf, int32 inFrameCou
 			mixBufCurCell += 4;
 		}
 
-		sample = (int16)SWAP_BYTES_16(srcBuf[0]);
+		sample = (int16)SWAP_BYTES_16(readSample(&srcBuf[0]));
 		mixBufCurCell[0] += sample * leftAmp;
 		mixBufCurCell[1] += sample * rightAmp;
 		mixBufCurCell[2] += sample * leftAmp;
@@ -307,7 +311,7 @@ void IMuseInternalMixer::mix16ToStereoSwap(const int16 *srcBuf, int32 inFrameCou
 		break;
 	case 0x10000:
 		for (uint32 i = 0; i < feedSize; i++) {
-			sample = (int16)SWAP_BYTES_16(srcBuf[0]);
+			sample = (int16)SWAP_BYTES_16(readSample(&srcBuf[0]));
 			mixBufCurCell[0] += sample * leftAmp;
 			mixBufCurCell[1] += sample * rightAmp;
 
@@ -317,7 +321,7 @@ void IMuseInternalMixer::mix16ToStereoSwap(const int16 *srcBuf, int32 inFrameCou
 		break;
 	case 0x20000:
 		for (uint32 i = 0; i < feedSize; i++) {
-			sample = (int16)SWAP_BYTES_16(srcBuf[0]);
+			sample = (int16)SWAP_BYTES_16(readSample(&srcBuf[0]));
 			mixBufCurCell[0] += sample * leftAmp;
 			mixBufCurCell[1] += sample * rightAmp;
 
@@ -327,7 +331,7 @@ void IMuseInternalMixer::mix16ToStereoSwap(const int16 *srcBuf, int32 inFrameCou
 		break;
 	default:
 		for (uint32 i = 0; i < feedSize; i++) {
-			sample = (int16)SWAP_BYTES_16(srcBuf[0]);
+			sample = (int16)SWAP_BYTES_16(readSample(&srcBuf[0]));
 			mixBufCurCell[0] += sample * leftAmp;
 			mixBufCurCell[1] += sample * rightAmp;
 
@@ -417,29 +421,29 @@ void IMuseInternalMixer::mix16(const int16 *srcBuf, int32 inFrameCount, uint32 f
 	switch (ratio) {
 	case 0x8000:
 		for (int i = 0; i < inFrameCount - 1; i++) {
-			mixBufCurCell[0] += srcBuf[0] * volume;
-			mixBufCurCell[1] += srcBuf[1] * volume;
-			mixBufCurCell[2] += volume * ((srcBuf[0] + srcBuf[2]) >> 1);
-			mixBufCurCell[3] += volume * ((srcBuf[1] + srcBuf[3]) >> 1);
+			mixBufCurCell[0] += readSample(&srcBuf[0]) * volume;
+			mixBufCurCell[1] += readSample(&srcBuf[1]) * volume;
+			mixBufCurCell[2] += volume * ((readSample(&srcBuf[0]) + readSample(&srcBuf[2])) >> 1);
+			mixBufCurCell[3] += volume * ((readSample(&srcBuf[1]) + readSample(&srcBuf[3])) >> 1);
 
 			srcBuf += 2;
 			mixBufCurCell += 4;
 		}
 
-		mixBufCurCell[0] += srcBuf[0] * volume;
-		mixBufCurCell[1] += srcBuf[1] * volume;
-		mixBufCurCell[2] += srcBuf[0] * volume;
-		mixBufCurCell[3] += srcBuf[1] * volume;
+		mixBufCurCell[0] += readSample(&srcBuf[0]) * volume;
+		mixBufCurCell[1] += readSample(&srcBuf[1]) * volume;
+		mixBufCurCell[2] += readSample(&srcBuf[0]) * volume;
+		mixBufCurCell[3] += readSample(&srcBuf[1]) * volume;
 		break;
 	case 0x10000:
 		for (uint32 i = 0; i < 2 * feedSize; i++) {
-			mixBufCurCell[i] += srcBuf[i] * volume;
+			mixBufCurCell[i] += readSample(&srcBuf[i]) * volume;
 		}
 		break;
 	case 0x20000:
 		for (uint32 i = 0; i < feedSize; i++) {
-			mixBufCurCell[0] += srcBuf[0] * volume;
-			mixBufCurCell[1] += srcBuf[1] * volume;
+			mixBufCurCell[0] += readSample(&srcBuf[0]) * volume;
+			mixBufCurCell[1] += readSample(&srcBuf[1]) * volume;
 
 			srcBuf += 4;
 			mixBufCurCell += 2;
@@ -447,8 +451,8 @@ void IMuseInternalMixer::mix16(const int16 *srcBuf, int32 inFrameCount, uint32 f
 		break;
 	default:
 		for (uint32 i = 0; i < feedSize; i++) {
-			mixBufCurCell[0] += srcBuf[0] * volume;
-			mixBufCurCell[1] += srcBuf[1] * volume;
+			mixBufCurCell[0] += readSample(&srcBuf[0]) * volume;
+			mixBufCurCell[1] += readSample(&srcBuf[1]) * volume;
 
 			mixBufCurCell += 2;
 			position += 2 * ratio;
@@ -468,20 +472,20 @@ void IMuseInternalMixer::mix16Swap(const int16 *srcBuf, int32 inFrameCount, uint
 	switch (ratio) {
 	case 0x8000:
 		for (int i = 0; i < inFrameCount - 1; i++) {
-			left = (int16)SWAP_BYTES_16(srcBuf[0]);
-			right = (int16)SWAP_BYTES_16(srcBuf[1]);
+			left = (int16)SWAP_BYTES_16(readSample(&srcBuf[0]));
+			right = (int16)SWAP_BYTES_16(readSample(&srcBuf[1]));
 
 			mixBufCurCell[0] += left * volume;
 			mixBufCurCell[1] += right * volume;
-			mixBufCurCell[2] += volume * ((left + (int16)SWAP_BYTES_16(srcBuf[2])) >> 1);
-			mixBufCurCell[3] += volume * ((right + (int16)SWAP_BYTES_16(srcBuf[3])) >> 1);
+			mixBufCurCell[2] += volume * ((left + (int16)SWAP_BYTES_16(readSample(&srcBuf[2]))) >> 1);
+			mixBufCurCell[3] += volume * ((right + (int16)SWAP_BYTES_16(readSample(&srcBuf[3]))) >> 1);
 
 			srcBuf += 2;
 			mixBufCurCell += 4;
 		}
 
-		left = (int16)SWAP_BYTES_16(srcBuf[0]);
-		right = (int16)SWAP_BYTES_16(srcBuf[1]);
+		left = (int16)SWAP_BYTES_16(readSample(&srcBuf[0]));
+		right = (int16)SWAP_BYTES_16(readSample(&srcBuf[1]));
 		mixBufCurCell[0] += left * volume;
 		mixBufCurCell[1] += right * volume;
 		mixBufCurCell[2] += left * volume;
@@ -489,13 +493,13 @@ void IMuseInternalMixer::mix16Swap(const int16 *srcBuf, int32 inFrameCount, uint
 		break;
 	case 0x10000:
 		for (uint32 i = 0; i < 2 * feedSize; i++) {
-			mixBufCurCell[i] += (int16)SWAP_BYTES_16(srcBuf[i]) * volume;
+			mixBufCurCell[i] += (int16)SWAP_BYTES_16(readSample(&srcBuf[i])) * volume;
 		}
 		break;
 	case 0x20000:
 		for (uint32 i = 0; i < feedSize; i++) {
-			mixBufCurCell[0] += (int16)SWAP_BYTES_16(srcBuf[0]) * volume;
-			mixBufCurCell[1] += (int16)SWAP_BYTES_16(srcBuf[1]) * volume;
+			mixBufCurCell[0] += (int16)SWAP_BYTES_16(readSample(&srcBuf[0])) * volume;
+			mixBufCurCell[1] += (int16)SWAP_BYTES_16(readSample(&srcBuf[1])) * volume;
 
 			srcBuf += 4;
 			mixBufCurCell += 2;
@@ -503,8 +507,8 @@ void IMuseInternalMixer::mix16Swap(const int16 *srcBuf, int32 inFrameCount, uint
 		break;
 	default:
 		for (uint32 i = 0; i < feedSize; i++) {
-			mixBufCurCell[0] += (int16)SWAP_BYTES_16(srcBuf[0]) * volume;
-			mixBufCurCell[1] += (int16)SWAP_BYTES_16(srcBuf[1]) * volume;
+			mixBufCurCell[0] += (int16)SWAP_BYTES_16(readSample(&srcBuf[0])) * volume;
+			mixBufCurCell[1] += (int16)SWAP_BYTES_16(readSample(&srcBuf[1])) * volume;
 
 			mixBufCurCell += 2;
 			position += 2 * ratio;
