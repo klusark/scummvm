@@ -321,7 +321,25 @@ float Sector::distanceToPoint(const Math::Vector3d &point) const {
 	return dist;
 }
 
+static const float kEdgeMargin = 1e-5f;
+
+static bool isInsideEdgesXZ(const Math::Vector3d *vertices, int numVertices, const Math::Vector3d &point) {
+	for (int i = 0; i < numVertices; i++) {
+		Math::Vector3d edge = vertices[i] - vertices[i + 1];
+		Math::Vector3d delta = vertices[i + 1] - point;
+		edge.y() = 0;
+		delta.y() = 0;
+		float side = Math::Vector3d::crossProduct(delta, edge).y() / edge.getSquareMagnitude();
+		if (side < -kEdgeMargin)
+			return false;
+	}
+	return true;
+}
+
 bool Sector::isPointInSector(const Math::Vector3d &point) const {
+	if (g_grim->getGameType() == GType_MONKEY4 && _normal.getSquareMagnitude() == 0.f)
+		return isInsideEdgesXZ(_vertices, _numVertices, point);
+
 	// Calculate the distance of the point from the plane of the sector.
 	// Return false if it isn't within a margin.
 	if (_height < 9000.f) { // No need to check when height is 9999.
