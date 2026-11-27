@@ -205,6 +205,7 @@ EMISound::~EMISound() {
 	g_system->getTimerManager()->removeTimerProc(timerHandler);
 	freePlayingSounds();
 	freeLoadedSounds();
+	flushStack();
 	delete _musicTrack;
 	delete[] _musicTable;
 }
@@ -517,8 +518,10 @@ void EMISound::setMusicState(int stateId) {
 			}
 			_musicTrack->fadeOut();
 			_playingTracks.push_back(_musicTrack);
-			_musicTrack = nullptr;
+		} else {
+			delete _musicTrack;
 		}
+		_musicTrack = nullptr;
 	}
 
 	bool fadeMusicIn = false;
