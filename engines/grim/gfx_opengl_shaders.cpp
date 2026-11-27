@@ -385,10 +385,13 @@ void GfxOpenGLS::setupShaders() {
 
 	if (!isEMI) {
 		_irisProgram = _primitiveProgram->clone();
+	}
 
+	if (!isEMI || g_grim->getGamePlatform() == Common::kPlatformPS2) {
 		_dimProgram = OpenGL::Shader::fromFiles("grim_dim", commonAttributes);
 		_dimRegionProgram = _dimProgram->clone();
-	} else {
+	}
+	if (isEMI) {
 		_dimPlaneProgram = OpenGL::Shader::fromFiles("emi_dimplane", primAttributes);
 	}
 
@@ -1225,7 +1228,7 @@ void GfxOpenGLS::createBitmap(BitmapData *bitmap) {
 		OpenGL::Shader *shader = _backgroundProgram->clone();
 		bitmap->_userData = shader;
 
-		if (g_grim->getGameType() == GType_MONKEY4) {
+		if (g_grim->getGameType() == GType_MONKEY4 && bitmap->_texc) {
 			GLuint vbo = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, bitmap->_numCoords * 4 * sizeof(float), bitmap->_texc, GL_STATIC_DRAW);
 			shader->enableVertexAttribute("position", vbo, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
 			shader->enableVertexAttribute("texcoord", vbo, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 2*sizeof(float));
@@ -1341,7 +1344,7 @@ void GfxOpenGLS::destroyBitmap(BitmapData *bitmap) {
 		bitmap->_texIds = nullptr;
 	}
 	OpenGL::Shader *shader = (OpenGL::Shader *)bitmap->_userData;
-	if (g_grim->getGameType() == GType_MONKEY4) {
+	if (g_grim->getGameType() == GType_MONKEY4 && bitmap->_texc) {
 		glDeleteBuffers(1, &shader->getAttributeAt(0)._vbo);
 	}
 	delete shader;
