@@ -1940,6 +1940,7 @@ void GfxOpenGLS::destroyEMIModel(EMIModel *model) {
 		OpenGL::Shader::freeBuffer(mud->_colorMapVBO);
 
 		delete mud->_shader;
+		delete mud->_shaderLights;
 		delete mud;
 	}
 
@@ -2012,7 +2013,10 @@ void GfxOpenGLS::destroyMesh(const Mesh *mesh) {
 	if (!mud)
 		return;
 
+	OpenGL::Shader::freeBuffer(mud->_meshInfoVBO);
+
 	delete mud->_shader;
+	delete mud->_shaderLights;
 	delete mud;
 }
 
