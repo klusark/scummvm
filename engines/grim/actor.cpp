@@ -48,6 +48,63 @@ Shadow::Shadow() :
 		active(false), dontNegate(false), userData(nullptr) {
 }
 
+static const float kSectorExitNudge = 0.01f;
+
+static Sector *findUnvisitedWalkSector(Set *set, const Math::Vector3d &pos, const Common::Array<Sector *> &visited) {
+	for (int i = 0; i < set->getSectorCount(); ++i) {
+		Sector *sector = set->getSectorBase(i);
+		if (!(sector->getType() & Sector::WalkType) || !sector->isVisible())
+			continue;
+		if (Common::find(visited.begin(), visited.end(), sector) != visited.end())
+			continue;
+		if (sector->isPointInSector(pos))
+			return sector;
+	}
+	return nullptr;
+}
+
+static bool canWalkStraight(Set *set, const Math::Vector3d &from, const Math::Vector3d &to) {
+	Common::Array<Sector *> visited;
+	Sector *sector = findUnvisitedWalkSector(set, from, visited);
+	Math::Vector3d pos = from;
+	while (sector) {
+		if (sector->isPointInSector(to))
+			return true;
+		visited.push_back(sector);
+		Math::Vector3d dir = to - pos;
+		dir.normalize();
+		Sector::ExitInfo ei;
+		sector->getExitInfo(pos, dir, &ei);
+		pos = ei.exitPoint;
+		sector = findUnvisitedWalkSector(set, pos, visited);
+		if (!sector)
+			sector = findUnvisitedWalkSector(set, pos + dir * kSectorExitNudge, visited);
+	}
+	return false;
+}
+
+static void smoothPath(Set *set, const Math::Vector3d &start, Common::List<Math::Vector3d> &path) {
+	Common::Array<Math::Vector3d> points;
+	points.push_back(start);
+	for (Common::List<Math::Vector3d>::const_iterator i = path.reverse_begin(); i != path.end(); --i)
+		points.push_back(*i);
+
+	path.clear();
+	uint anchor = 0;
+	uint next = 1;
+	while (next < points.size()) {
+		uint last = next;
+		while (next < points.size() && canWalkStraight(set, points[anchor], points[next])) {
+			last = next;
+			++next;
+		}
+		if (last == next)
+			++next;
+		path.push_front(points[last]);
+		anchor = last;
+	}
+}
+
 static int animTurn(float turnAmt, const Math::Angle &dest, Math::Angle *cur) {
 	Math::Angle d = dest - *cur;
 	d.normalize(-180);
@@ -751,6 +808,8 @@ void Actor::walkTo(const Math::Vector3d &p) {
 		}
 
 		_path.push_front(_destPos);
+		if (g_grim->getGameType() == GType_MONKEY4 && _followBoxes)
+			smoothPath(g_grim->getCurrSet(), _pos, _path);
 	}
 }
 
